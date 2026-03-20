@@ -18,6 +18,27 @@ python3 scripts/extract_ocr.py /path/to/file.jpg --format lines
 python3 scripts/extract_ocr.py /path/to/file.jpg --output ./ocr.txt
 ```
 
+## Install shell commands
+
+Install convenient wrappers into `~/.local/bin`:
+
+```bash
+./scripts/install_commands.sh
+```
+
+This creates:
+- `ocr`: generic OCR wrapper
+- `ocr-chat`: OCR wrapper with `--chat-clean` enabled
+
+Examples:
+
+```bash
+ocr ./scan.jpg
+ocr ./scan.jpg --format json
+ocr-chat ./chat-screenshot.jpg
+ocr-chat ./chat-screenshot.jpg --output ./chat.txt
+```
+
 ## Chat screenshot mode
 
 Use this when OCRing Telegram, Signal, Discord, LINE, WhatsApp, or similar chat screenshots:

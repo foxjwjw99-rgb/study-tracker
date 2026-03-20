@@ -65,14 +65,25 @@ def build_parser() -> argparse.ArgumentParser:
 def run_quietly(fn):
     stdout_buffer = io.StringIO()
     stderr_buffer = io.StringIO()
+    stdout_fd = os.dup(1)
+    stderr_fd = os.dup(2)
+    devnull = os.open(os.devnull, os.O_WRONLY)
     try:
         with contextlib.redirect_stdout(stdout_buffer), contextlib.redirect_stderr(stderr_buffer):
+            os.dup2(devnull, 1)
+            os.dup2(devnull, 2)
             return fn()
     except Exception:
         captured = stderr_buffer.getvalue().strip()
         if captured:
             print(captured, file=sys.stderr)
         raise
+    finally:
+        os.dup2(stdout_fd, 1)
+        os.dup2(stderr_fd, 2)
+        os.close(stdout_fd)
+        os.close(stderr_fd)
+        os.close(devnull)
 
 
 def load_ocr(lang: str):
