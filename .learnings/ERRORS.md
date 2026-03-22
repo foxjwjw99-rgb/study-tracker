@@ -1,28 +1,36 @@
-## [ERR-20260320-001] openclaw config unset nvidia models
+## [ERR-20260322-001] second-brain npm/tailwind setup
 
-**Logged**: 2026-03-20T18:46:05.474102+00:00
-**Priority**: medium
-**Status**: pending
+**Logged**: 2026-03-22T12:06:30Z
+**Priority**: high
+**Status**: resolved
 **Area**: config
 
 ### Summary
-Unsetting `models.providers.nvidia.models` failed because the OpenClaw config schema requires that field to remain an array.
+Next.js app initially failed to install and build due to npm registry connectivity issues and Tailwind v4 PostCSS configuration mismatch.
 
 ### Error
-```
-Error: Config validation failed: models.providers.nvidia.models: Invalid input: expected array, received undefined
+```text
+npm http fetch GET https://registry.npmjs.org/react attempt 1 failed with ECONNREFUSED
+Error: It looks like you're trying to use `tailwindcss` directly as a PostCSS plugin.
 ```
 
 ### Context
-- Command attempted: `openclaw config unset models.providers.nvidia.models`
-- Goal: remove duplicate NVIDIA model entry shown once as raw provider id and once as configured custom provider id
-- Environment: OpenClaw 2026.3.13 local config at `/Users/huli/.openclaw/openclaw.json`
+- Command attempted: `npm install`, `npm run dev`
+- Environment could not reach `registry.npmjs.org`
+- Installed latest Tailwind, but project used older PostCSS config style
 
 ### Suggested Fix
-Instead of unsetting the field, set it to an empty array (`[]`) or replace the array contents with the desired non-duplicate entries.
+- Use `--registry=https://registry.npmmirror.com` when npmjs is unreachable
+- Install `@tailwindcss/postcss`
+- Update `postcss.config.js` to use `@tailwindcss/postcss`
+- Add tsconfig path alias for `@/*`
 
 ### Metadata
 - Reproducible: yes
-- Related Files: /Users/huli/.openclaw/openclaw.json
+- Related Files: second-brain/postcss.config.js, second-brain/tsconfig.json, second-brain/package.json
+
+### Resolution
+- **Resolved**: 2026-03-22T12:06:30Z
+- **Notes**: Switched npm registry to npmmirror, installed `@tailwindcss/postcss`, updated PostCSS config, added tsconfig alias, restarted Next dev server.
 
 ---
