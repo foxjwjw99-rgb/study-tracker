@@ -1,7 +1,7 @@
 'use client'
 
-import { useEffect, useState } from 'react'
-import { Command as CommandIcon } from 'lucide-react'
+import { useEffect, useMemo, useState } from 'react'
+import { Command as CommandIcon, Search } from 'lucide-react'
 import { Note } from '@/lib/types'
 
 interface CommandPaletteProps {
@@ -27,72 +27,76 @@ export default function CommandPalette({
   const [query, setQuery] = useState('')
   const [selectedIndex, setSelectedIndex] = useState(0)
 
-  const filtered = query
-    ? notes.filter(note =>
-        note.title.toLowerCase().includes(query.toLowerCase()) ||
-        note.content.toLowerCase().includes(query.toLowerCase())
-      )
-    : notes.slice(0, 10)
+  const filtered = useMemo(() => {
+    if (!query) return notes.slice(0, 10)
+
+    return notes.filter(note =>
+      note.title.toLowerCase().includes(query.toLowerCase()) ||
+      note.content.toLowerCase().includes(query.toLowerCase())
+    )
+  }, [notes, query])
 
   useEffect(() => {
-    if (!isOpen) return
+    if (!isOpen) {
+      setQuery('')
+      setSelectedIndex(0)
+      return
+    }
 
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
         onClose()
-      } else if (e.key === 'ArrowDown') {
+      } else if (e.key === 'ArrowDown' && filtered.length > 0) {
         e.preventDefault()
         setSelectedIndex((i) => (i + 1) % filtered.length)
-      } else if (e.key === 'ArrowUp') {
+      } else if (e.key === 'ArrowUp' && filtered.length > 0) {
         e.preventDefault()
         setSelectedIndex((i) => (i - 1 + filtered.length) % filtered.length)
       } else if (e.key === 'Enter' && filtered.length > 0) {
         e.preventDefault()
         onSelectNote(filtered[selectedIndex])
-        setQuery('')
         onClose()
       }
     }
 
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [isOpen, filtered, selectedIndex, onClose, onSelectNote])
+  }, [filtered, isOpen, onClose, onSelectNote, selectedIndex])
 
   if (!isOpen) return null
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-start justify-center pt-20"
-      onClick={onClose}
-    >
+    <div className="fixed inset-0 z-50 flex items-start justify-center bg-slate-950/20 px-4 pt-[12vh] backdrop-blur-sm" onClick={onClose}>
       <div
-        className="w-full max-w-lg bg-white rounded-lg shadow-lg border border-slate-200"
+        className="w-full max-w-2xl overflow-hidden rounded-[28px] border border-white/70 bg-white shadow-[0_30px_80px_rgba(15,23,42,0.25)]"
         onClick={(e) => e.stopPropagation()}
       >
-        {/* Input */}
-        <div className="p-4 border-b border-slate-200 flex items-center gap-3">
-          <CommandIcon className="w-5 h-5 text-slate-400 flex-shrink-0" />
+        <div className="flex items-center gap-3 border-b border-slate-200 px-5 py-4">
+          <div className="rounded-2xl bg-slate-100 p-2 text-slate-500">
+            <Search className="h-4 w-4" />
+          </div>
           <input
             autoFocus
             type="text"
-            placeholder="搜尋筆記..."
+            placeholder="快速搜尋任何筆記或記憶..."
             value={query}
             onChange={(e) => {
               setQuery(e.target.value)
               setSelectedIndex(0)
             }}
-            className="flex-1 bg-transparent text-slate-900 placeholder-slate-400 outline-none"
+            className="flex-1 bg-transparent text-[15px] text-slate-900 outline-none placeholder:text-slate-400"
           />
-          <kbd className="px-2 py-1 text-xs font-semibold text-slate-400 bg-slate-100 rounded">
-            ESC
-          </kbd>
+          <div className="hidden items-center gap-2 sm:flex">
+            <kbd className="rounded-lg border border-slate-200 bg-slate-50 px-2 py-1 text-xs font-medium text-slate-500">↑↓</kbd>
+            <kbd className="rounded-lg border border-slate-200 bg-slate-50 px-2 py-1 text-xs font-medium text-slate-500">Enter</kbd>
+            <kbd className="rounded-lg border border-slate-200 bg-slate-50 px-2 py-1 text-xs font-medium text-slate-500">Esc</kbd>
+          </div>
         </div>
 
-        {/* Results */}
-        <div className="max-h-96 overflow-y-auto">
+        <div className="max-h-[420px] overflow-y-auto p-3">
           {filtered.length === 0 ? (
-            <div className="p-8 text-center text-slate-500">
-              找不到符合的筆記
+            <div className="rounded-3xl bg-slate-50 px-6 py-12 text-center text-sm text-slate-500">
+              找不到符合的內容
             </div>
           ) : (
             filtered.map((note, index) => (
@@ -100,25 +104,36 @@ export default function CommandPalette({
                 key={note.id}
                 onClick={() => {
                   onSelectNote(note)
-                  setQuery('')
                   onClose()
                 }}
-                className={`w-full text-left p-4 border-b border-slate-100 last:border-b-0 transition-colors ${
+                className={[
+                  'mb-2 w-full rounded-2xl border px-4 py-3 text-left transition last:mb-0',
                   index === selectedIndex
-                    ? 'bg-blue-50'
-                    : 'hover:bg-slate-50'
-                }`}
+                    ? 'border-slate-900 bg-slate-900 text-white shadow-lg'
+                    : 'border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50',
+                ].join(' ')}
               >
                 <div className="flex items-start gap-3">
-                  <span className="text-lg flex-shrink-0">
+                  <div className={[
+                    'flex h-10 w-10 items-center justify-center rounded-2xl text-base',
+                    index === selectedIndex ? 'bg-white/10' : 'bg-slate-100',
+                  ].join(' ')}>
                     {TYPE_ICONS[note.type]}
-                  </span>
-                  <div className="flex-1 min-w-0">
-                    <p className="font-semibold text-slate-900 truncate">
-                      {note.title}
-                    </p>
-                    <p className="text-sm text-slate-600 truncate">
-                      {note.content.substring(0, 80)}...
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center justify-between gap-3">
+                      <p className={index === selectedIndex ? 'truncate font-semibold text-white' : 'truncate font-semibold text-slate-900'}>
+                        {note.title}
+                      </p>
+                      <div className={index === selectedIndex ? 'text-slate-300' : 'text-slate-400'}>
+                        <CommandIcon className="h-4 w-4" />
+                      </div>
+                    </div>
+                    <p className={[
+                      'mt-1 truncate text-sm',
+                      index === selectedIndex ? 'text-slate-300' : 'text-slate-500',
+                    ].join(' ')}>
+                      {note.content.replace(/\s+/g, ' ').trim() || '沒有內容'}
                     </p>
                   </div>
                 </div>

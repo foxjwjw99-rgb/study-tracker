@@ -18,9 +18,41 @@ const TYPES = [
 const DATES = [
   { value: 'all', label: '所有時間' },
   { value: 'today', label: '今天' },
-  { value: 'week', label: '本週' },
-  { value: 'month', label: '本月' },
+  { value: 'week', label: '近 7 天' },
+  { value: 'month', label: '近 30 天' },
 ]
+
+function FilterGroup({
+  items,
+  value,
+  onChange,
+}: {
+  items: { value: string; label: string }[]
+  value: string
+  onChange: (next: string) => void
+}) {
+  return (
+    <div className="flex flex-wrap gap-2">
+      {items.map((item) => {
+        const active = value === item.value
+        return (
+          <button
+            key={item.value}
+            onClick={() => onChange(item.value)}
+            className={[
+              'rounded-full px-3.5 py-2 text-sm font-medium transition',
+              active
+                ? 'bg-slate-900 text-white shadow-sm'
+                : 'bg-slate-100 text-slate-600 hover:bg-slate-200 hover:text-slate-900',
+            ].join(' ')}
+          >
+            {item.label}
+          </button>
+        )
+      })}
+    </div>
+  )
+}
 
 export default function FilterBar({
   selectedType,
@@ -29,39 +61,19 @@ export default function FilterBar({
   onDateChange,
 }: FilterBarProps) {
   return (
-    <div className="px-6 py-3 bg-white border-t border-slate-200 flex gap-6">
-      {/* Type Filter */}
-      <div className="flex gap-2">
-        {TYPES.map((type) => (
-          <button
-            key={type.value}
-            onClick={() => onTypeChange(type.value)}
-            className={`px-3 py-1 rounded-full text-sm font-medium transition-colors ${
-              selectedType === type.value
-                ? 'bg-blue-500 text-white'
-                : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
-            }`}
-          >
-            {type.label}
-          </button>
-        ))}
+    <div className="space-y-3">
+      <div>
+        <p className="mb-2 text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">
+          類型
+        </p>
+        <FilterGroup items={TYPES} value={selectedType} onChange={onTypeChange} />
       </div>
 
-      {/* Date Filter */}
-      <div className="flex gap-2">
-        {DATES.map((date) => (
-          <button
-            key={date.value}
-            onClick={() => onDateChange(date.value)}
-            className={`px-3 py-1 rounded-full text-sm font-medium transition-colors ${
-              selectedDate === date.value
-                ? 'bg-slate-900 text-white'
-                : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
-            }`}
-          >
-            {date.label}
-          </button>
-        ))}
+      <div>
+        <p className="mb-2 text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">
+          日期
+        </p>
+        <FilterGroup items={DATES} value={selectedDate} onChange={onDateChange} />
       </div>
     </div>
   )
