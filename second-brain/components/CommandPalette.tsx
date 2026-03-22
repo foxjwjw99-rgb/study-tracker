@@ -32,7 +32,9 @@ export default function CommandPalette({
 
     return notes.filter(note =>
       note.title.toLowerCase().includes(query.toLowerCase()) ||
-      note.content.toLowerCase().includes(query.toLowerCase())
+      note.content.toLowerCase().includes(query.toLowerCase()) ||
+      note.source?.toLowerCase().includes(query.toLowerCase()) ||
+      note.tags?.some(tag => tag.toLowerCase().includes(query.toLowerCase()))
     )
   }, [notes, query])
 
@@ -78,7 +80,7 @@ export default function CommandPalette({
           <input
             autoFocus
             type="text"
-            placeholder="快速搜尋任何筆記或記憶..."
+            placeholder="快速搜尋任何筆記、記憶或對話..."
             value={query}
             onChange={(e) => {
               setQuery(e.target.value)
@@ -133,7 +135,7 @@ export default function CommandPalette({
                       'mt-1 truncate text-sm',
                       index === selectedIndex ? 'text-slate-300' : 'text-slate-500',
                     ].join(' ')}>
-                      {note.content.replace(/\s+/g, ' ').trim() || '沒有內容'}
+                      {(note.excerpt || note.content.replace(/\s+/g, ' ').trim()) || '沒有內容'}
                     </p>
                   </div>
                 </div>

@@ -23,7 +23,7 @@ export default function NotesList({ notes, selectedId, onSelect }: NotesListProp
     <div className="space-y-3">
       {notes.map((note) => {
         const meta = TYPE_META[note.type]
-        const preview = note.content.replace(/\s+/g, ' ').trim()
+        const preview = note.excerpt || note.content.replace(/\s+/g, ' ').trim()
 
         return (
           <button
@@ -80,13 +80,20 @@ export default function NotesList({ notes, selectedId, onSelect }: NotesListProp
               </div>
             </div>
 
-            <div className="mt-4 flex items-center justify-between">
-              <time className={clsx('text-xs font-medium', selectedId === note.id ? 'text-slate-400' : 'text-slate-400')}>
-                {formatDistanceToNow(new Date(note.date), { locale: zhTW, addSuffix: true })}
-              </time>
+            <div className="mt-4 flex items-center justify-between gap-3">
+              <div className="flex min-w-0 items-center gap-3">
+                <time className={clsx('text-xs font-medium', selectedId === note.id ? 'text-slate-400' : 'text-slate-400')}>
+                  {formatDistanceToNow(new Date(note.date), { locale: zhTW, addSuffix: true })}
+                </time>
+                {note.meta?.messageCount ? (
+                  <span className={clsx('text-xs', selectedId === note.id ? 'text-slate-400' : 'text-slate-400')}>
+                    {note.meta.messageCount} 則訊息
+                  </span>
+                ) : null}
+              </div>
               <span
                 className={clsx(
-                  'text-xs transition',
+                  'shrink-0 text-xs transition',
                   selectedId === note.id ? 'text-slate-300' : 'text-slate-300 group-hover:text-slate-500'
                 )}
               >

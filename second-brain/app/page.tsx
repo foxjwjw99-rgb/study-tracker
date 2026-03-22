@@ -1,13 +1,16 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
   Brain,
   Command,
   FileText,
   MessageSquareText,
+  RefreshCw,
   Sparkles,
 } from 'lucide-react'
+import { formatDistanceToNow } from 'date-fns'
+import { zhTW } from 'date-fns/locale'
 import SearchBar from '@/components/SearchBar'
 import FilterBar from '@/components/FilterBar'
 import NotesList from '@/components/NotesList'
@@ -30,25 +33,36 @@ export default function Home() {
   const [selectedDate, setSelectedDate] = useState<string>('all')
   const [showCommandPalette, setShowCommandPalette] = useState(false)
   const [loading, setLoading] = useState(true)
+  const [refreshing, setRefreshing] = useState(false)
+  const [lastUpdatedAt, setLastUpdatedAt] = useState<Date | null>(null)
+
+  const loadNotes = useCallback(async (initial = false) => {
+    try {
+      if (initial) {
+        setLoading(true)
+      } else {
+        setRefreshing(true)
+      }
+
+      const response = await fetch('/api/notes', { cache: 'no-store' })
+      const data: Note[] = await response.json()
+      setNotes(data)
+      setLastUpdatedAt(new Date())
+      setSelectedNote(current => {
+        if (!current) return data[0] ?? null
+        return data.find(note => note.id === current.id) ?? data[0] ?? null
+      })
+    } catch (error) {
+      console.error('Failed to fetch notes:', error)
+    } finally {
+      setLoading(false)
+      setRefreshing(false)
+    }
+  }, [])
 
   useEffect(() => {
-    const fetchNotes = async () => {
-      try {
-        const response = await fetch('/api/notes')
-        const data = await response.json()
-        setNotes(data)
-        if (data.length > 0) {
-          setSelectedNote(data[0])
-        }
-      } catch (error) {
-        console.error('Failed to fetch notes:', error)
-      } finally {
-        setLoading(false)
-      }
-    }
-
-    fetchNotes()
-  }, [])
+    loadNotes(true)
+  }, [loadNotes])
 
   const filteredNotes = useMemo(() => {
     let filtered = notes
@@ -58,6 +72,7 @@ export default function Home() {
       filtered = filtered.filter(note =>
         note.title.toLowerCase().includes(query) ||
         note.content.toLowerCase().includes(query) ||
+        note.source?.toLowerCase().includes(query) ||
         note.tags?.some(tag => tag.toLowerCase().includes(query))
       )
     }
@@ -154,17 +169,26 @@ export default function Home() {
                   第二大腦
                 </h1>
                 <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-600 sm:text-base">
-                  把筆記、記憶和對話收進同一個乾淨介面。搜尋快、篩選快、讀起來也舒服。
+                  把筆記、記憶和對話收進同一個乾淨介面。現在也會直接讀 OpenClaw 本機對話紀錄。
                 </p>
               </div>
 
-              <div className="flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-500 shadow-sm">
-                <Command className="h-4 w-4" />
-                <span>按</span>
-                <kbd className="rounded-md border border-slate-200 bg-slate-50 px-2 py-1 font-medium text-slate-700">
-                  Cmd + K
-                </kbd>
-                <span>全域搜尋</span>
+              <div className="flex flex-wrap items-center gap-2">
+                <div className="flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-500 shadow-sm">
+                  <Command className="h-4 w-4" />
+                  <span>按</span>
+                  <kbd className="rounded-md border border-slate-200 bg-slate-50 px-2 py-1 font-medium text-slate-700">
+                    Cmd + K
+                  </kbd>
+                  <span>全域搜尋</span>
+                </div>
+                <button
+                  onClick={() => loadNotes(false)}
+                  className="inline-flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-600 shadow-sm transition hover:bg-slate-50"
+                >
+                  <RefreshCw className={`h-4 w-4 ${refreshing ? 'animate-spin' : ''}`} />
+                  重新整理
+                </button>
               </div>
             </div>
 
@@ -212,8 +236,13 @@ export default function Home() {
               <div className="mt-4 rounded-3xl border border-slate-200 bg-gradient-to-br from-slate-900 to-slate-800 p-4 text-slate-100 shadow-sm">
                 <p className="text-sm font-medium">搜尋小提醒</p>
                 <p className="mt-2 text-sm leading-6 text-slate-300">
-                  用上面的搜尋欄做即時過濾，用 Cmd+K 快速跳到任何一則內容。
+                  搜尋會一起掃標題、內容、標籤與來源。Cmd+K 則適合快速跳到任何一筆資料。
                 </p>
+                {lastUpdatedAt && (
+                  <p className="mt-3 text-xs text-slate-400">
+                    上次同步 {formatDistanceToNow(lastUpdatedAt, { locale: zhTW, addSuffix: true })}
+                  </p>
+                )}
               </div>
             </aside>
 
@@ -223,7 +252,7 @@ export default function Home() {
                   <div>
                     <h2 className="text-lg font-semibold text-slate-950">內容列表</h2>
                     <p className="mt-1 text-sm text-slate-500">
-                      {loading ? '整理中…' : `目前顯示 ${filteredNotes.length} 筆`}
+                      {loading ? '整理中…' : `目前顯示 ${filteredNotes.length} / ${notes.length} 筆`}
                     </p>
                   </div>
                 </div>

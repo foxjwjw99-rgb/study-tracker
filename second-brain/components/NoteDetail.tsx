@@ -39,8 +39,24 @@ export default function NoteDetail({ note }: NoteDetailProps) {
 
         <div className="mt-4 flex flex-wrap items-center gap-3 text-sm text-slate-500">
           <span>{format(new Date(note.date), 'PPP p', { locale: zhTW })}</span>
-          <span className="text-slate-300">•</span>
-          <span>{note.content.length.toLocaleString()} 字元</span>
+          {note.meta?.messageCount ? (
+            <>
+              <span className="text-slate-300">•</span>
+              <span>{note.meta.messageCount} 則訊息</span>
+            </>
+          ) : null}
+          {note.meta?.wordCount ? (
+            <>
+              <span className="text-slate-300">•</span>
+              <span>{note.meta.wordCount.toLocaleString()} 字</span>
+            </>
+          ) : null}
+          {note.meta?.characterCount ? (
+            <>
+              <span className="text-slate-300">•</span>
+              <span>{note.meta.characterCount.toLocaleString()} 字元</span>
+            </>
+          ) : null}
         </div>
       </div>
 
