@@ -171,6 +171,7 @@ model Question {
   options               String      // Stored as JSON string e.g. '["A", "B", "C", "D"]'
   answer                Int         // Index of the correct option
   explanation           String?
+  image_url             String?
   visibility            String      @default("private") // private / study_group
   shared_study_group_id String?
   shared_study_group    StudyGroup? @relation(fields: [shared_study_group_id], references: [id], onDelete: SetNull)

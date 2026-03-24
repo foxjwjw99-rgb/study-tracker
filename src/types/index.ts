@@ -435,6 +435,7 @@ export type PracticeQuestionItem = {
   options: string[]
   answer: number
   explanation: string | null
+  image_url?: string | null
   visibility?: QuestionVisibility
   shared_study_group_id?: string | null
   shared_study_group_name?: string | null

@@ -156,6 +156,7 @@ export async function getPracticeQuestions(
         options,
         answer: question.answer,
         explanation: question.explanation,
+        image_url: question.image_url,
         visibility: question.visibility === "study_group" ? "study_group" : "private",
         shared_study_group_id: question.shared_study_group_id,
         shared_study_group_name: question.shared_study_group?.name ?? null,
