@@ -265,7 +265,7 @@ export function ImportClient({ studyGroups }: ImportClientProps) {
             <textarea
               value={inputText}
               onChange={(event) => setInputText(event.target.value)}
-              placeholder={`[\n  {\n    "subject": "數學",\n    "topic": "代數",\n    "question": "2 + 2 等於多少？",\n    "options": ["3", "4", "5", "6"],\n    "answer": 1\n  }\n]`}
+              placeholder={`[\n  {\n    "subject": "數學",\n    "topic": "代數",\n    "question": "2 + 2 等於多少？",\n    "options": ["3", "4", "5", "6"],\n    "answer": 1,\n    "explanation": "選填解析",\n    "image": "選填，貼入 base64 或圖片 URL"\n  }\n]`}
               className="min-h-[220px] w-full rounded-md border bg-transparent px-3 py-2 text-sm shadow-xs outline-none transition placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50"
               spellCheck={false}
             />
