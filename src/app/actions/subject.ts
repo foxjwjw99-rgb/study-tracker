@@ -1,0 +1,172 @@
+"use server"
+
+import { revalidatePath } from "next/cache"
+
+import prisma from "@/lib/prisma"
+import {
+  assertOwnedRecord,
+  getCurrentUserOrThrow,
+  OWNERSHIP_ERROR_MESSAGE,
+} from "@/lib/current-user"
+
+import type { ActionResult, Subject, SubjectDeletionImpact } from "@/types"
+
+export async function updateExamDate(date: Date) {
+  const user = await getCurrentUserOrThrow()
+  await prisma.user.update({
+    where: { id: user.id },
+    data: { exam_date: date },
+  })
+  revalidatePath("/", "layout")
+}
+
+export async function getSubjects(): Promise<Subject[]> {
+  const user = await getCurrentUserOrThrow()
+  return prisma.subject.findMany({
+    where: { user_id: user.id },
+    orderBy: { created_at: "desc" },
+    select: {
+      id: true,
+      name: true,
+      target_score: true,
+    },
+  })
+}
+
+export async function createSubject(data: { name: string; target_score?: number | null }) {
+  const user = await getCurrentUserOrThrow()
+  const trimmedName = data.name.trim().replace(/\s+/g, " ")
+
+  if (!trimmedName) {
+    return {
+      success: false,
+      message: "請輸入有效的科目名稱。",
+    }
+  }
+
+  const existingSubject = await prisma.subject.findFirst({
+    where: {
+      user_id: user.id,
+      name: trimmedName,
+    }
+  })
+
+  if (existingSubject) {
+    return {
+      success: false,
+      message: "已經有同名的科目了。",
+    }
+  }
+
+  const subject = await prisma.subject.create({
+    data: {
+      name: trimmedName,
+      target_score: data.target_score ?? null,
+      user_id: user.id,
+    },
+  })
+  revalidatePath("/settings")
+  revalidatePath("/dashboard")
+  return subject
+}
+
+export async function getSubjectDeletionImpact(id: string): Promise<SubjectDeletionImpact> {
+  const user = await getCurrentUserOrThrow()
+  const subject = await prisma.subject.findFirst({
+    where: {
+      id,
+      user_id: user.id,
+    },
+    select: {
+      id: true,
+      name: true,
+    },
+  })
+
+  const ownedSubject = assertOwnedRecord(subject, OWNERSHIP_ERROR_MESSAGE)
+
+  const [
+    studyLogsCount,
+    practiceLogsCount,
+    wrongQuestionsCount,
+    reviewTasksCount,
+    questionsCount,
+    vocabularyWordsCount,
+  ] = await prisma.$transaction([
+    prisma.studyLog.count({ where: { subject_id: ownedSubject.id } }),
+    prisma.practiceLog.count({ where: { subject_id: ownedSubject.id } }),
+    prisma.wrongQuestion.count({ where: { subject_id: ownedSubject.id } }),
+    prisma.reviewTask.count({ where: { subject_id: ownedSubject.id } }),
+    prisma.question.count({ where: { subject_id: ownedSubject.id } }),
+    prisma.vocabularyWord.count({ where: { subject_id: ownedSubject.id } }),
+  ])
+
+  return {
+    subjectId: ownedSubject.id,
+    subjectName: ownedSubject.name,
+    studyLogsCount,
+    practiceLogsCount,
+    wrongQuestionsCount,
+    reviewTasksCount,
+    questionsCount,
+    vocabularyWordsCount,
+    totalCount:
+      studyLogsCount +
+      practiceLogsCount +
+      wrongQuestionsCount +
+      reviewTasksCount +
+      questionsCount +
+      vocabularyWordsCount,
+  }
+}
+
+export async function deleteSubject(id: string): Promise<ActionResult> {
+  const impact = await getSubjectDeletionImpact(id)
+
+  if (impact.totalCount > 0) {
+    return {
+      success: false,
+      message: "這個科目已有相關學習資料，請使用進階刪除確認影響範圍後再刪除。",
+    }
+  }
+
+  await prisma.subject.delete({
+    where: { id: impact.subjectId },
+  })
+
+  revalidatePath("/settings")
+  revalidatePath("/dashboard")
+
+  return {
+    success: true,
+    message: `已刪除科目 ${impact.subjectName}。`,
+  }
+}
+
+export async function deleteSubjectCascade(id: string): Promise<ActionResult> {
+  const user = await getCurrentUserOrThrow()
+  const impact = await getSubjectDeletionImpact(id)
+
+  await prisma.$transaction([
+    prisma.reviewTask.deleteMany({ where: { subject_id: impact.subjectId, user_id: user.id } }),
+    prisma.wrongQuestion.deleteMany({ where: { subject_id: impact.subjectId, user_id: user.id } }),
+    prisma.practiceLog.deleteMany({ where: { subject_id: impact.subjectId, user_id: user.id } }),
+    prisma.studyLog.deleteMany({ where: { subject_id: impact.subjectId, user_id: user.id } }),
+    prisma.question.deleteMany({ where: { subject_id: impact.subjectId, user_id: user.id } }),
+    prisma.vocabularyWord.deleteMany({ where: { subject_id: impact.subjectId, user_id: user.id } }),
+    prisma.subject.delete({ where: { id: impact.subjectId } }),
+  ])
+
+  revalidatePath("/settings")
+  revalidatePath("/dashboard")
+  revalidatePath("/study-log")
+  revalidatePath("/practice")
+  revalidatePath("/review")
+  revalidatePath("/vocabulary")
+  revalidatePath("/import")
+
+  return {
+    success: true,
+    message: `已刪除科目 ${impact.subjectName}，並清除相關資料。`,
+  }
+}

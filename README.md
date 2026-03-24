@@ -1,36 +1,167 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Study Tracker 學習追蹤系統
 
-## Getting Started
+這是一個使用 Next.js 開發的個人化學習追蹤系統，專注於記錄學習時間、追蹤學習成效、安排複習，並支援題庫 JSON 匯入與行動裝置使用。
 
-First, run the development server:
+## 專案用途
+
+Study Tracker 的核心目標：
+1. **紀錄與管理學習進度**：不只看大科目，也能往 topic / 單元層級追。
+2. **自動化錯題本與複習**：讓錯題、單字、排程複習串起來。
+3. **看出投入與成效**：幫助備考時找出弱點與高回報區塊。
+
+## 功能總覽
+
+- 📊 Dashboard：學習總覽、準備度、弱點分析
+- ⏱ Study Logs：手動 / 計時器紀錄讀書時間
+- 📝 Practice：題庫練習、即時批改與解析
+- 🔁 Review：錯題與單字的複習排程
+- 🎁 Rewards：依累積專注時間換抽獎機會
+- 📱 Mobile / PWA：方便手機上使用
+
+## 技術棧
+
+- **Framework**: Next.js 16
+- **ORM**: Prisma
+- **Database**: PostgreSQL
+- **UI**: React 19 + Tailwind CSS 4
+
+## 本機開發
+
+### 1. 安裝依賴
+
+```bash
+npm install
+```
+
+### 2. 建立環境變數
+
+複製 `.env.example` 成 `.env`，並填入你的 PostgreSQL 連線字串：
+
+```bash
+cp .env.example .env
+```
+
+### 3. 建立資料表與 Prisma Client
+
+```bash
+npm run db:migrate
+npm run db:generate
+```
+
+### 4. 啟動開發伺服器
 
 ```bash
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+## Zeabur 部署
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+推薦流程：**GitHub repo + Zeabur + PostgreSQL**。
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+### Zeabur 建議設定
 
-## Learn More
+- **Install Command**
+  ```bash
+  npm install
+  ```
+- **Build Command**
+  ```bash
+  npm run build
+  ```
+- **Start Command**
+  ```bash
+  npx prisma migrate deploy && npm run start
+  ```
 
-To learn more about Next.js, take a look at the following resources:
+### Zeabur 環境變數
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+至少需要：
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+```env
+DATABASE_URL="postgresql://user:password@host:5432/dbname?schema=public"
+```
 
-## Deploy on Vercel
+### 部署步驟
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+1. 將專案 push 到 GitHub
+2. 在 Zeabur 匯入該 repo
+3. 新增 PostgreSQL service
+4. 把 Zeabur 提供的連線字串填到 `DATABASE_URL`
+5. 重新部署
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+## 舊 SQLite 資料搬到 PostgreSQL
+
+如果你要保留目前 `prisma/dev.db` 的資料，可以用內建腳本搬遷。
+
+### 1. 先把 PostgreSQL schema 建好
+
+```bash
+npm run db:migrate:deploy
+```
+
+### 2. 先看來源資料筆數（不寫入）
+
+```bash
+npm run db:migrate:data -- --dry-run
+```
+
+### 3. 正式搬遷
+
+```bash
+SQLITE_PATH=prisma/dev.db npm run db:migrate:data
+```
+
+如果目標 PostgreSQL 已經有舊資料，想先清空再重灌：
+
+```bash
+SQLITE_PATH=prisma/dev.db npm run db:migrate:data -- --force-clear
+```
+
+### 搬遷前提
+
+- `.env` 裡的 `DATABASE_URL` 必須已經是 **PostgreSQL**
+- `SQLITE_PATH` 指向你的舊 SQLite 檔（預設就是 `prisma/dev.db`）
+- 建議先備份原本的 SQLite 檔案
+
+## Git 注意事項
+
+建議 commit：
+- `package.json`
+- `package-lock.json`
+- `prisma/schema.prisma`
+- `prisma/migrations/`
+- 原始碼與元件
+
+不要 commit：
+- `.env`
+- `prisma/dev.db`
+- 任何 `.db` / `.sqlite` 檔
+- 正式環境資料
+
+## JSON 匯入格式
+
+```json
+[
+  {
+    "subject": "歷史",
+    "topic": "台灣史",
+    "question": "請問...",
+    "options": ["A", "B", "C"],
+    "answer": 0,
+    "explanation": "因為...",
+    "external_id": "123"
+  }
+]
+```
+
+## 已知限制
+
+1. 複習規則目前仍偏固定級距，還不是完整自適應 SRS。
+2. 若要從舊 SQLite 正式搬到 PostgreSQL，需要另外做一次資料遷移。
+
+## Roadmap
+
+- [ ] 更成熟的 SRS 演算法
+- [ ] 題庫標籤與進階篩選
+- [ ] 更多題型
+- [ ] 更完整的行動端體驗
