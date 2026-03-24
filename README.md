@@ -60,6 +60,8 @@ npm run dev
 
 ### Zeabur 建議設定
 
+如果你是用 **GitHub App / framework auto-detect** 匯入：
+
 - **Install Command**
   ```bash
   npm install
@@ -72,6 +74,12 @@ npm run dev
   ```bash
   npx prisma migrate deploy && npm run start
   ```
+
+如果你是用 **arbitrary Git source** 匯入：
+
+- Zeabur 目前不會自動辨識 Next.js
+- 需要使用 repo 內的 `Dockerfile`
+- 直接用 Docker 模式部署即可
 
 ### Zeabur 環境變數
 
