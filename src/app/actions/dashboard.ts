@@ -145,11 +145,7 @@ export async function getDashboardData(): Promise<DashboardData> {
     }),
     prisma.studyLog.findMany({
       where: { user_id: user.id, study_date: { gte: startOf7DaysAgo, lte: endOfToday } },
-<<<<<<< claude/determined-euclid
-      select: { subject_id: true, duration_minutes: true, focus_score: true, study_type: true },
-=======
       select: { subject_id: true, topic: true, duration_minutes: true, focus_score: true, study_type: true },
->>>>>>> main
     }),
     prisma.wrongQuestion.findMany({
       where: { user_id: user.id, status: { not: "已掌握" } },
@@ -298,12 +294,14 @@ export async function getDashboardData(): Promise<DashboardData> {
 
   const subjectNameMap = new Map(subjects.map((subject) => [subject.id, subject.name]))
 
-<<<<<<< claude/determined-euclid
   // 原始分鐘（顯示用）
   const rawMinutes7dBySubject = new Map<string, number>()
-  for (const log of subjectStudyThisWeek) {
+  const recentStudyByTopic = new Map<string, number>()
+  for (const log of studyLogs7dRaw) {
     const mins = log.duration_minutes || 0
     rawMinutes7dBySubject.set(log.subject_id, (rawMinutes7dBySubject.get(log.subject_id) || 0) + mins)
+    const topicKey = makeTopicKey(log.subject_id, log.topic)
+    recentStudyByTopic.set(topicKey, (recentStudyByTopic.get(topicKey) || 0) + mins)
   }
 
   const subjectHours: SubjectHoursItem[] = Array.from(rawMinutes7dBySubject.entries()).map(
@@ -312,24 +310,6 @@ export async function getDashboardData(): Promise<DashboardData> {
       minutes,
     })
   )
-=======
-  // Aggregate study logs with focus_score and study_type weighting
-  const study7dBySubject = new Map<string, number>()
-  const recentStudyByTopic = new Map<string, number>()
-  const rawMinutesBySubject = new Map<string, number>()
-  for (const item of studyLogs7dRaw) {
-    const effective = getEffectiveMinutes(item)
-    study7dBySubject.set(item.subject_id, (study7dBySubject.get(item.subject_id) || 0) + effective)
-    rawMinutesBySubject.set(item.subject_id, (rawMinutesBySubject.get(item.subject_id) || 0) + item.duration_minutes)
-    const topicKey = makeTopicKey(item.subject_id, item.topic)
-    recentStudyByTopic.set(topicKey, (recentStudyByTopic.get(topicKey) || 0) + effective)
-  }
-
-  const subjectHours: SubjectHoursItem[] = Array.from(rawMinutesBySubject.entries()).map(([subjectId, minutes]) => ({
-    subject: subjectNameMap.get(subjectId) || "未知科目",
-    minutes,
-  }))
->>>>>>> main
 
   const nextReviewFocus: DashboardReviewFocusItem[] = nextReviewFocusRaw.map((r) => ({
     id: r.id,
@@ -338,16 +318,13 @@ export async function getDashboardData(): Promise<DashboardData> {
     reviewStage: r.review_stage,
     subject: r.subject,
   }))
-<<<<<<< claude/determined-euclid
 
   // 有效分鐘（評分用）：加入專注度與學習類型加權
   const study7dBySubject = new Map<string, number>()
-  for (const log of subjectStudyThisWeek) {
+  for (const log of studyLogs7dRaw) {
     const eff = (log.duration_minutes || 0) * focusMultiplier(log.focus_score) * studyTypeMultiplier(log.study_type)
     study7dBySubject.set(log.subject_id, (study7dBySubject.get(log.subject_id) || 0) + eff)
   }
-=======
->>>>>>> main
   const practice14dBySubject = new Map(
     subjectPractice14dRaw.map((item) => [
       item.subject_id,
