@@ -41,6 +41,7 @@ export default async function ImportPage() {
               <li><strong>answer</strong> 是正確選項的索引（從 0 開始，例如 1 代表第二個選項）。</li>
               <li>重複的題目（相同使用者 + 相同科目 + 相同題目內容）將會自動跳過。</li>
               <li>可選擇匯入為<strong>私人題庫</strong>，或直接分享到你所在的<strong>讀書房</strong>。</li>
+              <li><strong>請直接貼原始 JSON</strong>；不要貼 base64、不要額外加引號。</li>
             </ul>
           </div>
         </TabsContent>

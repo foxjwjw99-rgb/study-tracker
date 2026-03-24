@@ -201,7 +201,7 @@ export function ImportClient({ studyGroups }: ImportClientProps) {
         <CardHeader>
           <CardTitle>貼上或上傳題目 JSON</CardTitle>
           <CardDescription>
-            可直接貼上 JSON 陣列，或上傳 .json 檔案；送出前會先做格式驗證與預覽。
+            直接貼上原始 JSON 陣列，或上傳 .json 檔案即可；不需要轉成 base64，也不用額外包成文字格式。送出前會先做格式驗證與預覽。
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
