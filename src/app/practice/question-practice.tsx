@@ -359,6 +359,15 @@ export function QuestionPractice({ questionBank }: QuestionPracticeProps) {
                 </span>
               </div>
             </div>
+            {currentQuestion.image_url && (
+              <div>
+                <img
+                  src={currentQuestion.image_url}
+                  alt="題目圖片"
+                  className="max-w-full rounded-lg border"
+                />
+              </div>
+            )}
             <CardTitle className="text-lg leading-7">
               <MathText text={currentQuestion.question} className="leading-8" />
             </CardTitle>

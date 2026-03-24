@@ -1,9 +1,9 @@
 "use client"
 
-import { useMemo, useState } from "react"
+import { useRef, useMemo, useState } from "react"
 import { z } from "zod"
 import { toast } from "sonner"
-import { CheckCircle2, AlertCircle, Users, ClipboardPaste, FileJson, RefreshCcw } from "lucide-react"
+import { CheckCircle2, AlertCircle, Users, ClipboardPaste, FileJson, RefreshCcw, ImageIcon, Copy, ChevronDown, ChevronUp } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -74,6 +74,10 @@ export function ImportClient({ studyGroups }: ImportClientProps) {
   const [result, setResult] = useState<ImportResult | null>(null)
   const [visibility, setVisibility] = useState<QuestionVisibility>("private")
   const [sharedStudyGroupId, setSharedStudyGroupId] = useState<string>(studyGroups[0]?.id ?? "")
+  const [showImageTool, setShowImageTool] = useState(false)
+  const [imageBase64, setImageBase64] = useState<string | null>(null)
+  const [imagePreviewUrl, setImagePreviewUrl] = useState<string | null>(null)
+  const imageInputRef = useRef<HTMLInputElement>(null)
 
   const canShareToGroup = studyGroups.length > 0
   const selectedGroup = useMemo(
@@ -169,6 +173,26 @@ export function ImportClient({ studyGroups }: ImportClientProps) {
     } finally {
       setIsImporting(false)
     }
+  }
+
+  const handleImageSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0]
+    if (!file) return
+
+    const previewUrl = URL.createObjectURL(file)
+    setImagePreviewUrl(previewUrl)
+
+    const reader = new FileReader()
+    reader.onload = (e) => {
+      setImageBase64(e.target?.result as string)
+    }
+    reader.readAsDataURL(file)
+  }
+
+  const handleCopyBase64 = () => {
+    if (!imageBase64) return
+    navigator.clipboard.writeText(imageBase64)
+    toast.success("已複製到剪貼簿！")
   }
 
   return (
@@ -282,6 +306,51 @@ export function ImportClient({ studyGroups }: ImportClientProps) {
         </CardContent>
       </Card>
 
+      <Card>
+        <CardHeader className="cursor-pointer select-none" onClick={() => setShowImageTool((v) => !v)}>
+          <CardTitle className="flex items-center justify-between text-base">
+            <span className="flex items-center gap-2">
+              <ImageIcon className="h-4 w-4" />
+              圖片轉 base64 小工具
+            </span>
+            {showImageTool ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+          </CardTitle>
+          <CardDescription>將圖片轉成 base64 字串，複製後貼入 JSON 的 "image" 欄位即可。</CardDescription>
+        </CardHeader>
+        {showImageTool && (
+          <CardContent className="space-y-4">
+            <input
+              ref={imageInputRef}
+              type="file"
+              accept="image/*"
+              onChange={handleImageSelect}
+              className="block w-full text-sm text-slate-500 file:mr-4 file:rounded-md file:border-0 file:bg-primary/10 file:px-4 file:py-2 file:text-sm file:font-semibold file:text-primary hover:file:bg-primary/20"
+            />
+            {imagePreviewUrl && (
+              <div className="space-y-3">
+                <img src={imagePreviewUrl} alt="預覽" className="max-h-48 rounded-lg border object-contain" />
+                {imageBase64 && (
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between">
+                      <p className="text-sm text-muted-foreground">複製以下字串，貼入 JSON 的 <code className="rounded bg-muted px-1">"image"</code> 欄位：</p>
+                      <Button type="button" variant="outline" size="sm" onClick={handleCopyBase64}>
+                        <Copy className="mr-1 h-3 w-3" />
+                        複製
+                      </Button>
+                    </div>
+                    <textarea
+                      readOnly
+                      value={imageBase64}
+                      className="min-h-[80px] w-full rounded-md border bg-muted/50 px-3 py-2 text-xs font-mono"
+                    />
+                  </div>
+                )}
+              </div>
+            )}
+          </CardContent>
+        )}
+      </Card>
+
       {previewData && previewSummary ? (
         <Card>
           <CardHeader>
@@ -317,6 +386,7 @@ export function ImportClient({ studyGroups }: ImportClientProps) {
                     <TableHead>題目</TableHead>
                     <TableHead>選項</TableHead>
                     <TableHead>答案</TableHead>
+                    <TableHead>圖片</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -327,11 +397,18 @@ export function ImportClient({ studyGroups }: ImportClientProps) {
                       <TableCell className="max-w-[200px] truncate" title={q.question}>{q.question}</TableCell>
                       <TableCell>{q.options.length}</TableCell>
                       <TableCell>{q.answer}</TableCell>
+                      <TableCell>
+                        {q.image ? (
+                          <img src={q.image} alt="題目圖片" className="h-8 w-8 rounded object-cover" />
+                        ) : (
+                          <span className="text-muted-foreground">—</span>
+                        )}
+                      </TableCell>
                     </TableRow>
                   ))}
                   {previewData.length > 10 ? (
                     <TableRow>
-                      <TableCell colSpan={5} className="text-center text-muted-foreground">
+                      <TableCell colSpan={6} className="text-center text-muted-foreground">
                         ... 同時還有其他 {previewData.length - 10} 個題目
                       </TableCell>
                     </TableRow>

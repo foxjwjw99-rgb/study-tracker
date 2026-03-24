@@ -123,6 +123,7 @@ export async function importQuestions(
       options: JSON.stringify(q.options),
       answer: q.answer,
       explanation: q.explanation,
+      image_url: q.image ?? null,
       visibility: normalizedTarget.target.visibility,
       shared_study_group_id: normalizedTarget.target.shared_study_group_id ?? null,
     })
