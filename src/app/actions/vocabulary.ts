@@ -163,7 +163,7 @@ export async function importVocabularyWords(
       message: "匯入過程發生錯誤，請稍後再試。",
       validCount,
       duplicateCount,
-      errorCount: items.length,
+      errorCount: items.length - validCount - duplicateCount,
     }
   }
 

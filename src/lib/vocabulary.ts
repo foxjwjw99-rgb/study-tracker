@@ -138,12 +138,12 @@ function getEasyInterval(currentIntervalDays: number, easeFactor: number, review
   return Math.max(1, currentIntervalDays * easeFactor)
 }
 
-function getOkayInterval(currentIntervalDays: number, easeFactor: number, reviewCount: number) {
+function getOkayInterval(currentIntervalDays: number, _easeFactor: number, reviewCount: number) {
   if (reviewCount === 0 || currentIntervalDays <= 0) {
     return 1
   }
 
-  return Math.max(1, currentIntervalDays * easeFactor)
+  return Math.max(1, currentIntervalDays)
 }
 
 function getElapsedDays(lastReviewedAt: Date | null, now: Date, fallback: number) {

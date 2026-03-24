@@ -70,6 +70,9 @@ model StudyLog {
 
   created_at DateTime @default(now())
   updated_at DateTime @updatedAt
+
+  @@index([user_id, study_date])
+  @@index([user_id, subject_id, study_date])
 }
 
 model StudyGroup {
@@ -115,6 +118,9 @@ model PracticeLog {
 
   created_at DateTime @default(now())
   updated_at DateTime @updatedAt
+
+  @@index([user_id, practice_date])
+  @@index([user_id, subject_id, practice_date])
 }
 
 model WrongQuestion {
@@ -136,6 +142,8 @@ model WrongQuestion {
 
   created_at DateTime @default(now())
   updated_at DateTime @updatedAt
+
+  @@index([user_id, status])
 }
 
 model ReviewTask {
@@ -157,6 +165,8 @@ model ReviewTask {
 
   created_at DateTime @default(now())
   updated_at DateTime @updatedAt
+
+  @@index([user_id, review_date, completed])
 }
 
 model Question {

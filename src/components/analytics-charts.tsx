@@ -22,6 +22,13 @@ import type {
   VocabularyStatusDistributionItem,
 } from "@/types"
 
+const tooltipStyle = {
+  borderRadius: "18px",
+  border: "1px solid color-mix(in oklab, var(--color-border) 88%, transparent)",
+  background: "color-mix(in oklab, var(--color-card) 96%, white)",
+  boxShadow: "0 16px 40px rgba(76,95,140,0.12)",
+}
+
 const STATUS_COLORS: Record<string, string> = {
   NEW: "#94a3b8",
   LEARNING: "#f59e0b",
@@ -43,7 +50,7 @@ export function AccuracyChart({ data }: { data: AccuracyTrendPoint[] }) {
           domain={[0, 100]}
         />
         <Tooltip
-          contentStyle={{ borderRadius: "8px" }}
+          contentStyle={tooltipStyle}
           formatter={(value) => [`${Number(value ?? 0)}%`, "正確率"]}
         />
         <Line
@@ -65,7 +72,7 @@ export function VocabularyStatusChart({ data }: { data: VocabularyStatusDistribu
     <ResponsiveContainer width="100%" height="100%">
       <PieChart>
         <Tooltip
-          contentStyle={{ borderRadius: "8px" }}
+          contentStyle={tooltipStyle}
           formatter={(value) => [`${Number(value ?? 0)} 個`, "單字數"]}
         />
         <Legend verticalAlign="bottom" height={24} />
@@ -86,7 +93,7 @@ export function VocabularyTrendChart({ data }: { data: VocabularyDailyTrendPoint
         <CartesianGrid strokeDasharray="3 3" vertical={false} />
         <XAxis dataKey="date" stroke="#888888" fontSize={12} tickLine={false} axisLine={false} />
         <YAxis stroke="#888888" fontSize={12} tickLine={false} axisLine={false} allowDecimals={false} />
-        <Tooltip contentStyle={{ borderRadius: "8px" }} />
+        <Tooltip contentStyle={tooltipStyle} />
         <Legend verticalAlign="top" height={28} />
         <Bar dataKey="reviewedWords" name="複習單字數" radius={[8, 8, 0, 0]} fill="#6366f1" />
         <Bar dataKey="reviewCount" name="完成 review 次數" radius={[8, 8, 0, 0]} fill="#22c55e" />
