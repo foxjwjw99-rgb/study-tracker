@@ -156,7 +156,6 @@ export async function getStudyLeaderboardData(input?: {
     by: ["user_id"],
     where: {
       user_id: { in: memberUserIds },
-      source_type: "timer",
       study_date: {
         gte: range.start,
         lte: range.end,
