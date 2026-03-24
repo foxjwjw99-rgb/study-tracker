@@ -13,8 +13,6 @@ import {
 } from "lucide-react"
 
 import { getDashboardData } from "@/app/actions/dashboard"
-import { resolveCurrentUserContext } from "@/lib/current-user"
-import { ExamDateForm } from "@/app/settings/exam-date-form"
 import { TrendChart, SubjectChart } from "@/components/dashboard-charts"
 import {
   readinessLabel,
@@ -29,12 +27,14 @@ import {
 } from "@/lib/readiness"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import type {
+  DashboardOnboardingStep,
   DashboardPlanItem,
   DashboardReviewFocusItem,
   DashboardSubjectCoverageItem,
   DashboardSubjectReadinessItem,
   DashboardSubjectTopicSectionItem,
   DashboardTopicDetailItem,
+  DashboardVocabularyOverview,
   DashboardWeakAreaItem,
 } from "@/types"
 
@@ -233,6 +233,15 @@ export default async function DashboardPage() {
           </CardContent>
         </Card>
       </section>
+
+      {data.onboardingSteps.some((step) => !step.completed) ? (
+        <OnboardingChecklistSection steps={data.onboardingSteps} />
+      ) : null}
+
+      <VocabularyProgressSection
+        overview={data.vocabularyOverview}
+        subjectReadiness={data.subjectReadiness}
+      />
 
       <StreakMilestoneSection streakDays={data.streakDays} trendData={data.trendData} />
 
@@ -660,6 +669,194 @@ function PlanStep({ item, index }: { item: DashboardPlanItem; index: number }) {
         <ArrowRight className="mt-1 h-4 w-4 shrink-0 text-muted-foreground" />
       </div>
     </Link>
+  )
+}
+
+function OnboardingChecklistSection({ steps }: { steps: DashboardOnboardingStep[] }) {
+  const completedCount = steps.filter((step) => step.completed).length
+
+  return (
+    <section className="space-y-4">
+      <div className="space-y-1">
+        <h2 className="section-heading">新手起步</h2>
+        <p className="section-copy">不用自己想流程，照這個順序做，app 才會越來越懂你的讀書節奏。</p>
+      </div>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>開始前的四步驟</CardTitle>
+          <CardDescription>完成 {completedCount} / {steps.length} 步。先把骨架搭起來，後面的提醒才會準。</CardDescription>
+        </CardHeader>
+        <CardContent className="grid gap-3 lg:grid-cols-2">
+          {steps.map((step, index) => (
+            <Link
+              key={step.id}
+              href={step.href}
+              className="block rounded-2xl border border-border/70 bg-background/70 p-4 transition-all duration-200 hover:border-primary/30 hover:bg-background"
+            >
+              <div className="flex items-start gap-3">
+                <div className={`mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-semibold ${step.completed ? "bg-emerald-500/12 text-emerald-600" : "bg-amber-500/12 text-amber-700"}`}>
+                  {step.completed ? <CheckCircle2 className="h-4 w-4" /> : index + 1}
+                </div>
+                <div className="min-w-0 space-y-1">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <p className="text-sm font-medium text-foreground">{step.title}</p>
+                    <span className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${step.completed ? "bg-emerald-500/12 text-emerald-700" : "bg-amber-500/12 text-amber-700"}`}>
+                      {step.completed ? "已完成" : "下一步"}
+                    </span>
+                  </div>
+                  <p className="text-sm leading-6 text-muted-foreground">{step.description}</p>
+                </div>
+                <ArrowRight className="mt-1 h-4 w-4 shrink-0 text-muted-foreground" />
+              </div>
+            </Link>
+          ))}
+        </CardContent>
+      </Card>
+    </section>
+  )
+}
+
+function VocabularyProgressSection({
+  overview,
+  subjectReadiness,
+}: {
+  overview: DashboardVocabularyOverview
+  subjectReadiness: DashboardSubjectReadinessItem[]
+}) {
+  const vocabularySubjects = subjectReadiness.filter((item) => item.vocabularyTotalWords > 0)
+
+  return (
+    <section className="space-y-4">
+      <div className="space-y-1">
+        <h2 className="section-heading">單字進度</h2>
+        <p className="section-copy">不要把背單字當外掛模組。這裡直接看今天該清多少、哪科的字最需要回來補。</p>
+      </div>
+
+      {overview.totalWords > 0 ? (
+        <>
+          <Card className="overflow-hidden">
+            <CardContent className="grid gap-4 px-5 py-5 lg:grid-cols-[1.2fr_0.8fr] lg:px-6">
+              <div className="space-y-4">
+                <div className="space-y-2">
+                  <div className="inline-flex w-fit items-center gap-2 rounded-full bg-primary/10 px-3 py-1 text-sm font-medium text-primary">
+                    <BookOpen className="h-4 w-4" />
+                    英文單字主流程
+                  </div>
+                  <h3 className="text-2xl font-semibold tracking-tight text-foreground">
+                    {overview.dueWords > 0
+                      ? `今天先清 ${overview.dueWords} 個到期單字，別讓記憶債繼續堆。`
+                      : "今天沒有單字積壓，可以把力氣拿去做題或開新 session。"}
+                  </h3>
+                  <p className="text-sm leading-6 text-muted-foreground">
+                    {overview.familiarRate !== null
+                      ? `目前整體熟悉度 ${overview.familiarRate}% ，本週已複習 ${overview.reviewedThisWeek} 次。`
+                      : `目前共收了 ${overview.totalWords} 個單字，接下來把第一輪複習節奏跑起來就好。`}
+                  </p>
+                </div>
+
+                <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                  <MetricChip label="總單字量" value={`${overview.totalWords} 個`} />
+                  <MetricChip label="今日待複習" value={`${overview.dueWords} 個`} />
+                  <MetricChip label="本週已複習" value={`${overview.reviewedThisWeek} 次`} />
+                  <MetricChip
+                    label="覆蓋科目"
+                    value={`${overview.activeSubjects} 科`}
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-3 rounded-3xl border border-border/70 bg-background/75 p-4">
+                <ActionTile
+                  href={overview.dueWords > 0 ? "/review" : "/vocabulary"}
+                  title={overview.dueWords > 0 ? "先去清單字複習" : "去背一輪單字"}
+                  description={overview.dueWords > 0 ? "到期單字和複習任務會一起影響今天節奏。" : "沒有積壓時，最適合拉高熟悉度。"}
+                />
+                <ActionTile
+                  href="/vocabulary"
+                  title="打開英文單字主頁"
+                  description="背誦、複習與分析已經整合在同一頁，不用再切來切去。"
+                />
+              </div>
+            </CardContent>
+          </Card>
+
+          <div className="grid gap-4 lg:grid-cols-2 xl:grid-cols-3">
+            {vocabularySubjects.map((item) => (
+              <VocabularySubjectCard key={item.subjectId} item={item} />
+            ))}
+          </div>
+        </>
+      ) : (
+        <Card>
+          <CardContent className="py-8">
+            <InlineEmptyState
+              title="還沒有單字資料"
+              description="先匯入英文單字，Dashboard 之後就能把單字進度跟做題、複習一起排進主流程。"
+              href="/import"
+              cta="去匯入單字"
+            />
+          </CardContent>
+        </Card>
+      )}
+    </section>
+  )
+}
+
+function VocabularySubjectCard({ item }: { item: DashboardSubjectReadinessItem }) {
+  const familiarity = item.vocabularyFamiliarRate ?? 0
+  const ctaHref = item.vocabularyDue > 0 ? "/review" : "/vocabulary"
+
+  return (
+    <Card>
+      <CardContent className="space-y-4 px-5 py-5">
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <p className="text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">Vocabulary</p>
+            <h3 className="mt-2 text-xl font-semibold tracking-tight text-foreground">{item.subjectName}</h3>
+          </div>
+          <span className={`rounded-full px-3 py-1 text-xs font-medium ${item.vocabularyDue > 0 ? "bg-amber-500/12 text-amber-700" : "bg-emerald-500/12 text-emerald-700"}`}>
+            {item.vocabularyDue > 0 ? `待清 ${item.vocabularyDue}` : "節奏穩定"}
+          </span>
+        </div>
+
+        <div className="space-y-2">
+          <div className="flex items-end justify-between gap-3">
+            <div className="text-4xl font-semibold tracking-tight text-foreground">{familiarity}%</div>
+            <div className="text-right text-xs text-muted-foreground">
+              <p>單字熟悉度</p>
+              <p>共 {item.vocabularyTotalWords} 個單字</p>
+            </div>
+          </div>
+          <div className="h-2 overflow-hidden rounded-full bg-muted">
+            <div className="h-full rounded-full bg-sky-500 transition-all" style={{ width: `${familiarity}%` }} />
+          </div>
+        </div>
+
+        <div className="grid gap-2 sm:grid-cols-2">
+          <MetricChip label="到期單字" value={`${item.vocabularyDue} 個`} />
+          <MetricChip label="科目準備度" value={`${item.score} 分`} />
+        </div>
+
+        <div className="rounded-2xl border border-border/70 bg-background/70 p-4 text-sm">
+          <p className="font-medium text-foreground">
+            {item.vocabularyDue > 0
+              ? `這科先把 ${item.vocabularyDue} 個到期單字清掉。`
+              : "這科單字目前沒有積壓。"}
+          </p>
+          <p className="mt-2 leading-6 text-muted-foreground">
+            {item.vocabularyDue > 0
+              ? "單字延遲通常會拖慢閱讀速度與做題手感，先處理掉最划算。"
+              : "可以維持背誦節奏，或把時間挪去補這科的題目表現。"}
+          </p>
+        </div>
+
+        <Link href={ctaHref} className="inline-flex h-9 w-full items-center justify-center gap-1.5 rounded-xl border border-border/90 bg-background/80 px-4 text-sm font-medium transition-all duration-200 hover:border-primary/30 hover:bg-muted hover:text-foreground">
+          {item.vocabularyDue > 0 ? "去清單字複習" : "去背單字"}
+          <ArrowRight className="h-4 w-4" />
+        </Link>
+      </CardContent>
+    </Card>
   )
 }
 

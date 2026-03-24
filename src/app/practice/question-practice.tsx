@@ -1,5 +1,6 @@
 "use client"
 
+import Link from "next/link"
 import { useEffect, useMemo, useState } from "react"
 import { useRouter } from "next/navigation"
 import { CheckCircle2, CircleHelp, Clock3, PlayCircle, RotateCcw, Target } from "lucide-react"
@@ -43,6 +44,14 @@ type SessionState = {
   isAnswerChecked: boolean
 }
 
+type PracticeCompletionSummary = {
+  subjectId: string
+  subjectName: string
+  accuracy: number
+  strongestTopics: Array<{ topic: string; count: number }>
+  weakTopics: Array<{ topic: string; count: number }>
+}
+
 const QUESTION_COUNT_OPTIONS = [5, 10, 20] as const
 
 export function QuestionPractice({ questionBank, initialSubjectId, initialTopic }: QuestionPracticeProps) {
@@ -55,6 +64,7 @@ export function QuestionPractice({ questionBank, initialSubjectId, initialTopic 
   const [requestedCount, setRequestedCount] = useState<string>("10")
   const [session, setSession] = useState<SessionState | null>(null)
   const [result, setResult] = useState<PracticeQuestionSessionResult | null>(null)
+  const [completionSummary, setCompletionSummary] = useState<PracticeCompletionSummary | null>(null)
   const [isStarting, setIsStarting] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
 
@@ -112,7 +122,7 @@ export function QuestionPractice({ questionBank, initialSubjectId, initialTopic 
     }
 
     return Math.max(5, count * 1.5)
-  }, [requestedCount, selectedSubject])
+  }, [effectiveQuestionCount, requestedCount, selectedSubject])
 
   useEffect(() => {
     if (!selectedSubject) {
@@ -150,6 +160,7 @@ export function QuestionPractice({ questionBank, initialSubjectId, initialTopic 
       }
 
       setResult(null)
+      setCompletionSummary(null)
       setSession({
         questions,
         startedAt: Date.now(),
@@ -215,6 +226,7 @@ export function QuestionPractice({ questionBank, initialSubjectId, initialTopic 
           return
         }
 
+        setCompletionSummary(buildCompletionSummary(session.questions, session.answers, submissionResult))
         setResult(submissionResult)
         setSession(null)
         toast.success(submissionResult.message)
@@ -243,6 +255,7 @@ export function QuestionPractice({ questionBank, initialSubjectId, initialTopic 
   const restartPractice = () => {
     setSession(null)
     setResult(null)
+    setCompletionSummary(null)
   }
 
   if (questionBank.length === 0) {
@@ -503,28 +516,140 @@ export function QuestionPractice({ questionBank, initialSubjectId, initialTopic 
         </Card>
       ) : null}
 
-      {!session && result ? (
+      {!session && result && completionSummary ? (
         <Card>
           <CardHeader>
             <CardTitle>本次練習結果</CardTitle>
-            <CardDescription>結果已同步寫入最近練習紀錄。</CardDescription>
+            <CardDescription>結果已同步寫入最近練習紀錄，接下來直接做下一步就好。</CardDescription>
           </CardHeader>
-          <CardContent className="grid gap-3 sm:grid-cols-3">
-            <div className="rounded-lg border p-4">
-              <div className="text-sm text-muted-foreground">正確題數</div>
-              <div className="mt-1 text-2xl font-semibold">{correctCount}</div>
+          <CardContent className="space-y-5">
+            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+              <ResultStatCard label="正確題數" value={`${correctCount}`} helper="答對題目" />
+              <ResultStatCard label="總題數" value={`${result.totalQuestions}`} helper="本輪題量" />
+              <ResultStatCard label="正確率" value={`${completionSummary.accuracy}%`} helper={getAccuracyMessage(completionSummary.accuracy)} />
+              <ResultStatCard label="新增錯題" value={`${result.wrongQuestionCount}`} helper={result.wrongQuestionCount > 0 ? "已排進後續複習" : "這輪沒有新增錯題"} />
             </div>
-            <div className="rounded-lg border p-4">
-              <div className="text-sm text-muted-foreground">總題數</div>
-              <div className="mt-1 text-2xl font-semibold">{result.totalQuestions}</div>
+
+            <div className="rounded-2xl border border-border/70 bg-background/70 p-4 text-sm">
+              <p className="font-medium text-foreground">
+                {result.wrongQuestionCount > 0
+                  ? `這輪最需要回頭補的是 ${completionSummary.weakTopics[0]?.topic ?? completionSummary.subjectName}。`
+                  : "這輪手感不錯，適合趁熱再做一組或切去別的流程。"}
+              </p>
+              <p className="mt-2 leading-6 text-muted-foreground">
+                {result.wrongQuestionCount > 0
+                  ? `已經幫你把 ${result.wrongQuestionCount} 題錯題接進複習流程，現在先處理新鮮記憶最划算。`
+                  : "沒有新增錯題，代表這科目前穩定度不差；可以續刷同科，或回 Dashboard 看今天下一步。"}
+              </p>
+
+              {completionSummary.weakTopics.length > 0 ? (
+                <div className="mt-3 flex flex-wrap gap-2">
+                  {completionSummary.weakTopics.slice(0, 3).map((item) => (
+                    <Badge key={`${item.topic}-${item.count}`} variant="outline">
+                      {item.topic} · 錯 {item.count} 題
+                    </Badge>
+                  ))}
+                </div>
+              ) : null}
             </div>
-            <div className="rounded-lg border p-4">
-              <div className="text-sm text-muted-foreground">新增錯題</div>
-              <div className="mt-1 text-2xl font-semibold">{result.wrongQuestionCount}</div>
+
+            <div className="grid gap-3 lg:grid-cols-3">
+              <ResultActionTile
+                href={result.wrongQuestionCount > 0 ? "/review" : "/dashboard"}
+                title={result.wrongQuestionCount > 0 ? "先去清這輪複習" : "回 Dashboard 看總體節奏"}
+                description={result.wrongQuestionCount > 0 ? "把剛剛新產生的錯題和到期任務先處理掉。" : "確認今天哪一科還需要補強。"}
+              />
+              <ResultActionTile
+                href={completionSummary.weakTopics[0]
+                  ? `/practice?subject=${encodeURIComponent(completionSummary.subjectId)}&topic=${encodeURIComponent(completionSummary.weakTopics[0].topic)}`
+                  : `/practice?subject=${encodeURIComponent(completionSummary.subjectId)}`}
+                title={completionSummary.weakTopics[0] ? `再補 ${completionSummary.weakTopics[0].topic}` : `再刷一輪 ${completionSummary.subjectName}`}
+                description={completionSummary.weakTopics[0] ? "直接鎖定最容易失血的單元，再做一次最有感。" : "延續同一科的手感，鞏固剛剛的節奏。"}
+              />
+              <ResultActionTile
+                href="/study-log"
+                title="接著開一段專注讀書"
+                description="如果剛剛只是測驗，現在很適合順手把觀念補起來。"
+              />
             </div>
           </CardContent>
         </Card>
       ) : null}
     </div>
   )
+}
+
+function ResultStatCard({
+  label,
+  value,
+  helper,
+}: {
+  label: string
+  value: string
+  helper: string
+}) {
+  return (
+    <div className="rounded-2xl border border-border/70 bg-background/70 p-4">
+      <p className="text-sm text-muted-foreground">{label}</p>
+      <p className="mt-2 text-3xl font-semibold tracking-tight text-foreground">{value}</p>
+      <p className="mt-2 text-sm text-muted-foreground">{helper}</p>
+    </div>
+  )
+}
+
+function ResultActionTile({
+  href,
+  title,
+  description,
+}: {
+  href: string
+  title: string
+  description: string
+}) {
+  return (
+    <Link
+      href={href}
+      className="block rounded-2xl border border-border/70 bg-background/70 p-4 transition-all duration-200 hover:border-primary/30 hover:bg-background"
+    >
+      <p className="text-sm font-medium text-foreground">{title}</p>
+      <p className="mt-1 text-sm leading-6 text-muted-foreground">{description}</p>
+    </Link>
+  )
+}
+
+function buildCompletionSummary(
+  questions: PracticeQuestionItem[],
+  answers: PracticeQuestionAnswerInput[],
+  result: PracticeQuestionSessionResult
+): PracticeCompletionSummary {
+  const answerMap = new Map(answers.map((answer) => [answer.question_id, answer.selected_answer]))
+  const wrongTopicCount = new Map<string, number>()
+  const correctTopicCount = new Map<string, number>()
+
+  for (const question of questions) {
+    const selectedAnswer = answerMap.get(question.id)
+    const targetMap = selectedAnswer === question.answer ? correctTopicCount : wrongTopicCount
+    targetMap.set(question.topic, (targetMap.get(question.topic) ?? 0) + 1)
+  }
+
+  return {
+    subjectId: questions[0]?.subject_id ?? "",
+    subjectName: questions[0]?.subject_name ?? "",
+    accuracy: Math.round((result.correctQuestions / result.totalQuestions) * 100),
+    strongestTopics: mapTopicCounts(correctTopicCount),
+    weakTopics: mapTopicCounts(wrongTopicCount),
+  }
+}
+
+function mapTopicCounts(topicCount: Map<string, number>) {
+  return Array.from(topicCount.entries())
+    .map(([topic, count]) => ({ topic, count }))
+    .sort((left, right) => right.count - left.count || left.topic.localeCompare(right.topic, "zh-Hant"))
+}
+
+function getAccuracyMessage(accuracy: number) {
+  if (accuracy >= 85) return "這輪手感很穩"
+  if (accuracy >= 70) return "有抓到主線，但還能再補"
+  if (accuracy >= 60) return "還行，但需要回頭整理"
+  return "先補觀念再硬刷會更划算"
 }

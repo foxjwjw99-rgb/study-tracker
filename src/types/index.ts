@@ -115,6 +115,7 @@ export type DashboardSubjectReadinessItem = {
   suggestedAction: string
   vocabularyDue: number
   vocabularyFamiliarRate: number | null
+  vocabularyTotalWords: number
 }
 
 export type DashboardWeakAreaItem = {
@@ -138,6 +139,22 @@ export type DashboardPlanItem = {
   reason: string
   href: string
   tone: "danger" | "warning" | "focus" | "success"
+}
+
+export type DashboardOnboardingStep = {
+  id: string
+  title: string
+  description: string
+  href: string
+  completed: boolean
+}
+
+export type DashboardVocabularyOverview = {
+  totalWords: number
+  dueWords: number
+  familiarRate: number | null
+  reviewedThisWeek: number
+  activeSubjects: number
 }
 
 export type DashboardSubjectCoverageItem = {
@@ -191,6 +208,8 @@ export type DashboardData = {
   subjectCoverage: DashboardSubjectCoverageItem[]
   subjectTopicSections: DashboardSubjectTopicSectionItem[]
   todayPlan: DashboardPlanItem[]
+  onboardingSteps: DashboardOnboardingStep[]
+  vocabularyOverview: DashboardVocabularyOverview
   recommendation: string
   hasData: boolean
 }

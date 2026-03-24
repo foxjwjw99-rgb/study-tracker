@@ -100,6 +100,7 @@ export function StudyLogForm({
   const [manualDuration, setManualDuration] = useState("")
   const [endAt, setEndAt] = useState<number | null>(null)
   const [notificationPermission, setNotificationPermission] = useState<NotificationPermission>("default")
+  const [showFinishDetails, setShowFinishDetails] = useState(false)
 
   const timerSettings = useMemo(() => {
     if (useCustomPreset) {
@@ -512,6 +513,7 @@ export function StudyLogForm({
     setElapsedFocusSeconds(0)
     setCompletedPomodoros(0)
     setEndAt(null)
+    setShowFinishDetails(false)
     if (typeof window !== "undefined") {
       window.localStorage.removeItem(STORAGE_KEY)
     }
@@ -709,8 +711,8 @@ export function StudyLogForm({
               <form ref={finishFormRef} action={handleFinishSession} className="space-y-4 rounded-3xl border border-border/70 bg-background/70 p-4 sm:p-5">
                 <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                   <div>
-                    <h4 className="text-sm font-semibold text-foreground">本次 session 設定</h4>
-                    <p className="mt-1 text-sm text-muted-foreground">結束專注時會用這些欄位存成一筆學習紀錄。</p>
+                    <h4 className="text-sm font-semibold text-foreground">結束這輪 session</h4>
+                    <p className="mt-1 text-sm text-muted-foreground">先填科目、主題、模式就能直接存；專注度和備註改成選填，少一點摩擦。</p>
                   </div>
                   <Badge variant="outline">預計儲存 {sessionMinutes} 分鐘</Badge>
                 </div>
@@ -784,56 +786,66 @@ export function StudyLogForm({
                   <input type="hidden" name="study_type" value={studyType} />
                 </div>
 
-                <div className="grid gap-4 sm:grid-cols-2">
-                  <div className="space-y-2">
-                    <Label htmlFor="focus_score">專注度</Label>
-                    <Select
-                      name="focus_score"
-                      value={focusScore}
-                      onValueChange={(value) => setFocusScore(value ?? "4")}
-                      required
-                    >
-                      <SelectTrigger id="focus_score" className="h-11 w-full rounded-2xl bg-background/85 px-3">
-                        <SelectValue placeholder="選擇專注度" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {FOCUS_OPTIONS.map((score) => (
-                          <SelectItem key={score} value={score.toString()}>{score} / 5</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="focus_notes">備註</Label>
-                    <Input
-                      id="focus_notes"
-                      name="notes"
-                      value={notes}
-                      onChange={(event) => setNotes(event.target.value)}
-                      placeholder="例如：今天狀態不錯，第二輪後進入心流"
-                      className="h-11 rounded-2xl bg-background/85 px-3"
-                    />
-                  </div>
+                <div className="rounded-2xl border border-dashed border-border bg-card/60 px-4 py-3 text-sm text-muted-foreground">
+                  預設會以 <span className="font-medium text-foreground">專注度 {focusScore} / 5</span> 儲存；如果想補備註或調整完成度，再展開下面的選填欄位就好。
                 </div>
-
-                <label className="flex items-center gap-3 rounded-2xl border border-border/70 bg-card/70 px-4 py-3">
-                  <input
-                    type="checkbox"
-                    name="planned_done"
-                    checked={plannedDone}
-                    onChange={(event) => setPlannedDone(event.target.checked)}
-                    className="h-4 w-4 rounded border-border"
-                  />
-                  <span className="text-sm font-medium text-foreground">這次有完成原本預定的進度</span>
-                </label>
 
                 <div className="grid gap-2 sm:grid-cols-2">
-                  <SubmitButton label="結束本次專注並儲存" icon={Square} />
-                  <Button type="button" variant="outline" size="lg" onClick={() => resetSession(false)}>
-                    <TimerReset className="h-4 w-4" />
-                    只重置計時，不儲存
+                  <SubmitButton label="直接儲存本次專注" icon={Square} />
+                  <Button type="button" variant="outline" size="lg" onClick={() => setShowFinishDetails((value) => !value)}>
+                    {showFinishDetails ? "收起補充欄位" : "補充專注度 / 備註（選填）"}
                   </Button>
                 </div>
+
+                <div className={cn("space-y-4", !showFinishDetails && "hidden")}>
+                  <div className="grid gap-4 sm:grid-cols-2">
+                    <div className="space-y-2">
+                      <Label htmlFor="focus_score">專注度</Label>
+                      <Select
+                        name="focus_score"
+                        value={focusScore}
+                        onValueChange={(value) => setFocusScore(value ?? "4")}
+                        required
+                      >
+                        <SelectTrigger id="focus_score" className="h-11 w-full rounded-2xl bg-background/85 px-3">
+                          <SelectValue placeholder="選擇專注度" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {FOCUS_OPTIONS.map((score) => (
+                            <SelectItem key={score} value={score.toString()}>{score} / 5</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="focus_notes">備註</Label>
+                      <Input
+                        id="focus_notes"
+                        name="notes"
+                        value={notes}
+                        onChange={(event) => setNotes(event.target.value)}
+                        placeholder="例如：今天狀態不錯，第二輪後進入心流"
+                        className="h-11 rounded-2xl bg-background/85 px-3"
+                      />
+                    </div>
+                  </div>
+
+                  <label className="flex items-center gap-3 rounded-2xl border border-border/70 bg-card/70 px-4 py-3">
+                    <input
+                      type="checkbox"
+                      name="planned_done"
+                      checked={plannedDone}
+                      onChange={(event) => setPlannedDone(event.target.checked)}
+                      className="h-4 w-4 rounded border-border"
+                    />
+                    <span className="text-sm font-medium text-foreground">這次有完成原本預定的進度</span>
+                  </label>
+                </div>
+
+                <Button type="button" variant="ghost" size="lg" onClick={() => resetSession(false)}>
+                  <TimerReset className="h-4 w-4" />
+                  只重置計時，不儲存
+                </Button>
               </form>
             </TabsContent>
 

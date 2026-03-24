@@ -12,6 +12,7 @@ import {
 
 import type {
   DashboardData,
+  DashboardOnboardingStep,
   DashboardPlanItem,
   DashboardReviewFocusItem,
   DashboardSubjectCoverageItem,
@@ -19,6 +20,7 @@ import type {
   DashboardSubjectTopicSectionItem,
   DashboardTopicDetailItem,
   DashboardTrendPoint,
+  DashboardVocabularyOverview,
   DashboardWeakAreaItem,
   SubjectHoursItem,
 } from "@/types"
@@ -113,9 +115,11 @@ export async function getDashboardData(): Promise<DashboardData> {
     reviewTopicDueRaw,
     wrongTopicOpenRaw,
     vocabularyWords,
+    vocabularyReviewedThisWeek,
     subjectStudyLastRaw,
     subjectPracticeLastRaw,
     vocabularyReviewLastRaw,
+    practiceLogExists,
     questionTopicsRaw,
     studyTopicAllRaw,
     practiceTopicAllRaw,
@@ -236,6 +240,12 @@ export async function getDashboardData(): Promise<DashboardData> {
         lapse_count: true,
       },
     }),
+    prisma.vocabularyReviewLog.count({
+      where: {
+        user_id: user.id,
+        created_at: { gte: startOf7DaysAgo, lte: endOfToday },
+      },
+    }),
     prisma.studyLog.groupBy({
       by: ["subject_id"],
       where: { user_id: user.id },
@@ -250,6 +260,10 @@ export async function getDashboardData(): Promise<DashboardData> {
       by: ["subject_id"],
       where: { user_id: user.id },
       _max: { created_at: true },
+    }),
+    prisma.practiceLog.findFirst({
+      where: { user_id: user.id },
+      select: { id: true },
     }),
     prisma.question.groupBy({
       by: ["subject_id", "topic"],
@@ -373,6 +387,17 @@ export async function getDashboardData(): Promise<DashboardData> {
     vocabularyStatsBySubject.set(word.subject_id, current)
   }
 
+  const vocabularyOverview: DashboardVocabularyOverview = {
+    totalWords: vocabularyWords.length,
+    dueWords: vocabularyWords.filter((word) => word.next_review_date && word.next_review_date <= endOfToday).length,
+    familiarRate:
+      vocabularyWords.length > 0
+        ? Math.round((vocabularyWords.filter((word) => word.status === "FAMILIAR").length / vocabularyWords.length) * 100)
+        : null,
+    reviewedThisWeek: vocabularyReviewedThisWeek,
+    activeSubjects: Array.from(vocabularyStatsBySubject.values()).filter((item) => item.total > 0).length,
+  }
+
   const lastActivityBySubject = new Map<string, Date>()
   mergeLastActivity(lastActivityBySubject, subjectStudyLastRaw, (item) => item.subject_id, (item) => item._max.study_date)
   mergeLastActivity(lastActivityBySubject, subjectPracticeLastRaw, (item) => item.subject_id, (item) => item._max.practice_date)
@@ -492,6 +517,7 @@ export async function getDashboardData(): Promise<DashboardData> {
         }),
         vocabularyDue: vocabularyStats.due,
         vocabularyFamiliarRate,
+        vocabularyTotalWords: vocabularyStats.total,
       }
     })
     .sort((a, b) => a.score - b.score || a.subjectName.localeCompare(b.subjectName, "zh-Hant"))
@@ -511,6 +537,37 @@ export async function getDashboardData(): Promise<DashboardData> {
     nextReviewFocus,
     subjectReadiness,
   })
+
+  const onboardingSteps: DashboardOnboardingStep[] = [
+    {
+      id: "subjects",
+      title: "先建立科目",
+      description: "先把微積分、經濟、英文這些主科建好，後面的統計才有依據。",
+      href: "/settings",
+      completed: subjects.length > 0,
+    },
+    {
+      id: "exam-date",
+      title: "設定考試日期",
+      description: "讓首頁開始顯示倒數與衝刺節奏，不然很難判斷現在該快還是該穩。",
+      href: "/settings",
+      completed: user.exam_date !== null,
+    },
+    {
+      id: "import-materials",
+      title: "匯入題目或單字",
+      description: "先把題庫或單字丟進來，系統才能真的開始判斷你的弱點。",
+      href: "/import",
+      completed: questionTopicsRaw.length > 0 || vocabularyWords.length > 0,
+    },
+    {
+      id: "start-first-session",
+      title: "開始第一次練習 / 讀書 session",
+      description: "有了第一筆練習或學習紀錄後，Dashboard 才會從漂亮空殼變成真的有用。",
+      href: questionTopicsRaw.length > 0 ? "/practice" : "/study-log",
+      completed: studyDates.length > 0 || Boolean(practiceLogExists),
+    },
+  ]
 
   const studyDatesUnique = Array.from(
     new Set(studyDates.map((item) => startOfDay(item.study_date).toISOString()))
@@ -603,6 +660,8 @@ export async function getDashboardData(): Promise<DashboardData> {
     subjectCoverage,
     subjectTopicSections,
     todayPlan,
+    onboardingSteps,
+    vocabularyOverview,
     recommendation,
     hasData,
   }
