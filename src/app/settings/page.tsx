@@ -23,7 +23,7 @@ export default async function SettingsPage() {
     <div className="max-w-4xl space-y-6">
       <div>
         <h1 className="text-3xl font-bold tracking-tight mb-2">設定</h1>
-        <p className="text-muted-foreground">管理你的考試日期與學習科目。</p>
+        <p className="text-muted-foreground">管理使用者、科目與讀書房。考試日期已移到 Dashboard 可直接調整。</p>
       </div>
 
       <Card>

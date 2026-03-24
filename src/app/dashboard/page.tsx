@@ -13,6 +13,8 @@ import {
 } from "lucide-react"
 
 import { getDashboardData } from "@/app/actions/dashboard"
+import { resolveCurrentUserContext } from "@/lib/current-user"
+import { ExamDateForm } from "@/app/settings/exam-date-form"
 import { TrendChart, SubjectChart } from "@/components/dashboard-charts"
 import {
   readinessLabel,

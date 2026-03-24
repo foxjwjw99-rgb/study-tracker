@@ -40,11 +40,6 @@ export const NAV_ITEMS = [
     icon: Languages,
   },
   {
-    title: "單字分析",
-    href: "/vocabulary/insights",
-    icon: BarChart3,
-  },
-  {
     title: "複習與錯題",
     href: "/review",
     icon: CalendarCheck,

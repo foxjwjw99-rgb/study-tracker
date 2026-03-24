@@ -186,8 +186,16 @@ function ReviewTaskCard({
   task: ReviewTaskItem
   overdueDays: number
 }) {
+  const isOverdue = overdueDays > 0
+
   return (
-    <div className="flex flex-col gap-4 rounded-xl border p-4 sm:flex-row sm:items-center sm:justify-between">
+    <div
+      className={
+        isOverdue
+          ? "flex flex-col gap-4 rounded-xl border border-destructive/20 bg-destructive/5 p-4 sm:flex-row sm:items-center sm:justify-between"
+          : "flex flex-col gap-4 rounded-xl border border-amber-500/20 bg-amber-500/5 p-4 sm:flex-row sm:items-center sm:justify-between"
+      }
+    >
       <div className="min-w-0">
         <div className="flex flex-wrap items-center gap-2">
           <div className="font-semibold">
@@ -196,10 +204,12 @@ function ReviewTaskCard({
               : `${task.subject.name} - ${task.topic}`}
           </div>
           {task.source_type === "vocabulary" ? <Badge variant="outline">英文單字</Badge> : null}
-          {overdueDays > 0 ? (
+          {isOverdue ? (
             <Badge variant="destructive">逾期 {overdueDays} 天</Badge>
           ) : (
-            <Badge variant="secondary">今天到期</Badge>
+            <Badge variant="secondary" className="bg-amber-500/12 text-amber-700 dark:bg-amber-500/18 dark:text-amber-200">
+              今天到期
+            </Badge>
           )}
         </div>
         <div className="mt-1 text-sm text-muted-foreground">

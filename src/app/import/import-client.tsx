@@ -319,6 +319,15 @@ export function ImportClient({ studyGroups }: ImportClientProps) {
         </CardHeader>
         {showImageTool && (
           <CardContent className="space-y-4">
+            <div className="rounded-lg border border-dashed bg-muted/35 px-3 py-3 text-sm text-muted-foreground">
+              <p className="font-medium text-foreground">怎麼用這個工具</p>
+              <ol className="mt-2 list-decimal space-y-1 pl-5">
+                <li>如果你的題目沒有圖片，這段可以直接跳過。</li>
+                <li>如果題目有圖片，先在下面選一張圖片。</li>
+                <li>系統會自動產生一段 base64 字串，按「複製」。</li>
+                <li>把它貼進 JSON 裡的 <code>"image"</code> 欄位，例如：<code>"image": "data:image/png;base64,..."</code></li>
+              </ol>
+            </div>
             <input
               ref={imageInputRef}
               type="file"
