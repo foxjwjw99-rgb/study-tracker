@@ -127,10 +127,9 @@ export async function getDashboardData(): Promise<DashboardData> {
       where: { user_id: user.id, study_date: { gte: startOf7DaysAgo, lte: endOfToday } },
       _sum: { duration_minutes: true },
     }),
-    prisma.studyLog.groupBy({
-      by: ["subject_id"],
+    prisma.studyLog.findMany({
       where: { user_id: user.id, study_date: { gte: startOf7DaysAgo, lte: endOfToday } },
-      _sum: { duration_minutes: true },
+      select: { subject_id: true, duration_minutes: true, focus_score: true, study_type: true },
     }),
     prisma.wrongQuestion.findMany({
       where: { user_id: user.id, status: { not: "已掌握" } },
@@ -222,6 +221,8 @@ export async function getDashboardData(): Promise<DashboardData> {
         subject_id: true,
         status: true,
         next_review_date: true,
+        ease_factor: true,
+        lapse_count: true,
       },
     }),
     prisma.studyLog.groupBy({
@@ -272,10 +273,19 @@ export async function getDashboardData(): Promise<DashboardData> {
 
   const subjectNameMap = new Map(subjects.map((subject) => [subject.id, subject.name]))
 
-  const subjectHours: SubjectHoursItem[] = subjectStudyThisWeek.map((studySummary) => ({
-    subject: subjectNameMap.get(studySummary.subject_id) || "未知科目",
-    minutes: studySummary._sum.duration_minutes || 0,
-  }))
+  // 原始分鐘（顯示用）
+  const rawMinutes7dBySubject = new Map<string, number>()
+  for (const log of subjectStudyThisWeek) {
+    const mins = log.duration_minutes || 0
+    rawMinutes7dBySubject.set(log.subject_id, (rawMinutes7dBySubject.get(log.subject_id) || 0) + mins)
+  }
+
+  const subjectHours: SubjectHoursItem[] = Array.from(rawMinutes7dBySubject.entries()).map(
+    ([subjectId, minutes]) => ({
+      subject: (subjectNameMap.get(subjectId) || "未知科目") as string,
+      minutes,
+    })
+  )
 
   const nextReviewFocus: DashboardReviewFocusItem[] = nextReviewFocusRaw.map((r) => ({
     id: r.id,
@@ -285,9 +295,12 @@ export async function getDashboardData(): Promise<DashboardData> {
     subject: r.subject,
   }))
 
-  const study7dBySubject = new Map(
-    subjectStudyThisWeek.map((item) => [item.subject_id, item._sum.duration_minutes || 0])
-  )
+  // 有效分鐘（評分用）：加入專注度與學習類型加權
+  const study7dBySubject = new Map<string, number>()
+  for (const log of subjectStudyThisWeek) {
+    const eff = (log.duration_minutes || 0) * focusMultiplier(log.focus_score) * studyTypeMultiplier(log.study_type)
+    study7dBySubject.set(log.subject_id, (study7dBySubject.get(log.subject_id) || 0) + eff)
+  }
   const practice14dBySubject = new Map(
     subjectPractice14dRaw.map((item) => [
       item.subject_id,
@@ -306,7 +319,7 @@ export async function getDashboardData(): Promise<DashboardData> {
 
   const vocabularyStatsBySubject = new Map<
     string,
-    { total: number; familiar: number; due: number }
+    { total: number; familiar: number; due: number; sumEaseFactor: number; sumLapseCount: number }
   >()
 
   for (const word of vocabularyWords) {
@@ -314,11 +327,15 @@ export async function getDashboardData(): Promise<DashboardData> {
       total: 0,
       familiar: 0,
       due: 0,
+      sumEaseFactor: 0,
+      sumLapseCount: 0,
     }
 
     current.total += 1
     if (word.status === "FAMILIAR") current.familiar += 1
     if (word.next_review_date && word.next_review_date <= endOfToday) current.due += 1
+    current.sumEaseFactor += word.ease_factor ?? 2.5
+    current.sumLapseCount += word.lapse_count ?? 0
 
     vocabularyStatsBySubject.set(word.subject_id, current)
   }
@@ -343,7 +360,8 @@ export async function getDashboardData(): Promise<DashboardData> {
 
   const subjectReadiness: DashboardSubjectReadinessItem[] = subjects
     .map((subject) => {
-      const studyMinutes7d = study7dBySubject.get(subject.id) || 0
+      const studyMinutes7d = rawMinutes7dBySubject.get(subject.id) || 0
+      const effectiveStudyMinutes7d = study7dBySubject.get(subject.id) || 0
       const practiceStats = practice14dBySubject.get(subject.id) || {
         totalQuestions: 0,
         correctQuestions: 0,
@@ -358,6 +376,8 @@ export async function getDashboardData(): Promise<DashboardData> {
         total: 0,
         familiar: 0,
         due: 0,
+        sumEaseFactor: 0,
+        sumLapseCount: 0,
       }
       const vocabularyFamiliarRate =
         vocabularyStats.total > 0
@@ -369,14 +389,34 @@ export async function getDashboardData(): Promise<DashboardData> {
         ? differenceInCalendarDays(endOfToday, startOfDay(lastActivity))
         : null
 
-      const studyScore = scaleToScore(studyMinutes7d, SUBJECT_WEEKLY_TARGET_MINUTES)
+      const studyScore = scaleToScore(effectiveStudyMinutes7d, SUBJECT_WEEKLY_TARGET_MINUTES)
       const practiceScore =
         practiceAccuracy14d ?? (studyMinutes7d > 0 ? 45 : dueReviews > 0 || unresolvedWrongCount > 0 ? 35 : 20)
       const reviewScore = clampScore(100 - dueReviews * 14 - unresolvedWrongCount * 6)
       const recencyScore = getRecencyScore(lastActivityDays)
+      const avgEaseFactor = vocabularyStats.total > 0
+        ? vocabularyStats.sumEaseFactor / vocabularyStats.total
+        : null
+      const avgLapseCount = vocabularyStats.total > 0
+        ? vocabularyStats.sumLapseCount / vocabularyStats.total
+        : null
+      // easeScore: ease_factor 1.3（難）~3.4（易）正規化至 0-100
+      const easeScore = avgEaseFactor !== null
+        ? clampScore(Math.round(((avgEaseFactor - 1.3) / 2.1) * 100))
+        : 65
+      // lapseScore: 平均遺忘次數每次扣 15 分
+      const lapseScore = avgLapseCount !== null
+        ? clampScore(100 - Math.round(avgLapseCount * 15))
+        : 100
       const retentionScore = clampScore(
         vocabularyFamiliarRate !== null
-          ? Math.round(recencyScore * 0.55 + vocabularyFamiliarRate * 0.45 - vocabularyStats.due * 4)
+          ? Math.round(
+              recencyScore * 0.50 +
+              vocabularyFamiliarRate * 0.35 +
+              easeScore * 0.10 +
+              lapseScore * 0.05 -
+              vocabularyStats.due * 4
+            )
           : recencyScore
       )
 
@@ -985,11 +1025,19 @@ function getReadinessLevel(score: number): DashboardSubjectReadinessItem["level"
 
 function getRecencyScore(lastActivityDays: number | null) {
   if (lastActivityDays === null) return 20
-  if (lastActivityDays <= 1) return 100
-  if (lastActivityDays <= 3) return 88
-  if (lastActivityDays <= 7) return 72
-  if (lastActivityDays <= 14) return 56
-  return 36
+  // 指數衰減，半衰期約 10 天；底部設 20 與「從未」相區隔
+  const raw = 100 * Math.exp(-0.069 * lastActivityDays)
+  return Math.max(20, Math.round(raw))
+}
+
+function focusMultiplier(focusScore: number): number {
+  const map: Record<number, number> = { 1: 0.6, 2: 0.75, 3: 0.9, 4: 1.0, 5: 1.15 }
+  return map[focusScore] ?? 1.0
+}
+
+function studyTypeMultiplier(studyType: string): number {
+  const map: Record<string, number> = { "做題": 1.2, "複習": 1.1, "上課": 1.0, "看書": 0.85 }
+  return map[studyType] ?? 1.0
 }
 
 function scaleToScore(value: number, target: number) {
