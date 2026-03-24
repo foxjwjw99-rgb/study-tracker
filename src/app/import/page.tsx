@@ -46,7 +46,7 @@ export default async function ImportPage() {
         </TabsContent>
 
         <TabsContent value="vocabulary" className="space-y-6">
-          <VocabularyImportClient />
+          <VocabularyImportClient studyGroups={studyGroups} />
           <div className="prose max-w-none prose-sm dark:prose-invert">
             <h3>英文單字 JSON 格式要求</h3>
             <p>英文單字匯入也必須是一個物件陣列，結構如下：</p>
@@ -65,6 +65,7 @@ export default async function ImportPage() {
               <li><strong>part_of_speech</strong>、<strong>example_sentence_translation</strong> 為選填。</li>
               <li><strong>part_of_speech</strong> 目前接受：<code>n.</code>、<code>v.</code>、<code>adj.</code>、<code>adv.</code>、<code>prep.</code>、<code>conj.</code>、<code>pron.</code>、<code>interj.</code>、<code>phrase</code>。</li>
               <li>同一使用者、同一科目、同一單字若已存在，匯入時會自動跳過。</li>
+              <li>若選擇分享到讀書房，會把這批單字分發給目前房內成員；每個人的複習進度仍各自獨立。</li>
             </ul>
           </div>
         </TabsContent>

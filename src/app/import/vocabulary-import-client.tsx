@@ -2,15 +2,24 @@
 
 import { useMemo, useState } from "react"
 import { z } from "zod"
-import { AlertCircle, CheckCircle2, ClipboardPaste, FileJson, RefreshCcw } from "lucide-react"
+import { AlertCircle, CheckCircle2, ClipboardPaste, FileJson, RefreshCcw, Users } from "lucide-react"
 import { toast } from "sonner"
 
 import { importVocabularyWords } from "@/app/actions/vocabulary"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Label } from "@/components/ui/label"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { vocabularyImportSchema, ImportedVocabularyWord } from "./vocabulary-schema"
 import type { ImportResult } from "@/app/actions/import"
+import type { QuestionVisibility, StudyGroupSummary } from "@/types"
 
 function formatIssues(error: z.ZodError) {
   return error.issues
@@ -49,12 +58,24 @@ function parseVocabularyInput(rawText: string) {
   }
 }
 
-export function VocabularyImportClient() {
+type VocabularyImportClientProps = {
+  studyGroups: StudyGroupSummary[]
+}
+
+export function VocabularyImportClient({ studyGroups }: VocabularyImportClientProps) {
   const [inputText, setInputText] = useState("")
   const [previewData, setPreviewData] = useState<ImportedVocabularyWord[] | null>(null)
   const [parsingError, setParsingError] = useState<string | null>(null)
   const [isImporting, setIsImporting] = useState(false)
   const [result, setResult] = useState<ImportResult | null>(null)
+  const [visibility, setVisibility] = useState<QuestionVisibility>("private")
+  const [sharedStudyGroupId, setSharedStudyGroupId] = useState<string>(studyGroups[0]?.id ?? "")
+
+  const canShareToGroup = studyGroups.length > 0
+  const selectedGroup = useMemo(
+    () => studyGroups.find((group) => group.id === sharedStudyGroupId) ?? null,
+    [sharedStudyGroupId, studyGroups]
+  )
 
   const previewSummary = useMemo(() => {
     if (!previewData) return null
@@ -120,13 +141,20 @@ export function VocabularyImportClient() {
 
   const handleImport = async () => {
     if (!previewData) return
+    if (visibility === "study_group" && !sharedStudyGroupId) {
+      toast.error("請先選擇要分享的讀書房。")
+      return
+    }
 
     setIsImporting(true)
     try {
-      const response = await importVocabularyWords(previewData)
+      const response = await importVocabularyWords(previewData, {
+        visibility,
+        shared_study_group_id: visibility === "study_group" ? sharedStudyGroupId : undefined,
+      })
       setResult(response)
       if (response.success) {
-        toast.success("英文單字匯入完成！")
+        toast.success(visibility === "study_group" ? "英文單字已分享到讀書房！" : "英文單字匯入完成！")
       } else {
         toast.error(response.message)
       }
@@ -145,6 +173,70 @@ export function VocabularyImportClient() {
           <CardDescription>可直接貼上 JSON 陣列，或上傳 .json 檔案；送出前會先做格式驗證與預覽。</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div className="space-y-2">
+              <Label>匯入方式</Label>
+              <Select
+                value={visibility}
+                onValueChange={(value) => setVisibility((value as QuestionVisibility) ?? "private")}
+              >
+                <SelectTrigger>
+                  <SelectValue>
+                    {visibility === "study_group" ? "分享到讀書房" : "私人單字庫（只有自己可背）"}
+                  </SelectValue>
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="private">私人單字庫（只有自己可背）</SelectItem>
+                  <SelectItem value="study_group" disabled={!canShareToGroup}>
+                    分享到讀書房
+                  </SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-2">
+              <Label>讀書房</Label>
+              {visibility === "study_group" ? (
+                <Select
+                  value={sharedStudyGroupId}
+                  disabled={!canShareToGroup}
+                  onValueChange={(value) => setSharedStudyGroupId(value ?? "")}
+                >
+                  <SelectTrigger>
+                    <SelectValue>
+                      {selectedGroup
+                        ? `${selectedGroup.name} (${selectedGroup.memberCount} 人)`
+                        : canShareToGroup
+                          ? "選擇讀書房"
+                          : "目前尚未加入讀書房"}
+                    </SelectValue>
+                  </SelectTrigger>
+                  <SelectContent>
+                    {studyGroups.map((group) => (
+                      <SelectItem key={group.id} value={group.id}>
+                        {group.name} ({group.memberCount} 人)
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              ) : (
+                <div className="rounded-lg border border-dashed bg-muted/30 px-3 py-2 text-sm text-muted-foreground">
+                  目前為私人單字庫，不會分享到讀書房。
+                </div>
+              )}
+            </div>
+          </div>
+
+          {visibility === "study_group" ? (
+            <div className="rounded-lg border bg-muted/40 p-3 text-sm text-muted-foreground">
+              <div className="flex items-center gap-2 font-medium text-foreground">
+                <Users className="h-4 w-4" />
+                {selectedGroup ? `將分享至「${selectedGroup.name}」` : "請先選擇讀書房"}
+              </div>
+              <p className="mt-1">這批單字會發給目前房內成員，但每個人的熟悉度、複習排程與 review 紀錄仍各自獨立。</p>
+            </div>
+          ) : null}
+
           <div className="space-y-2">
             <div className="flex items-center gap-2 text-sm font-medium">
               <ClipboardPaste className="h-4 w-4" />
@@ -263,7 +355,11 @@ export function VocabularyImportClient() {
             </div>
             <div className="flex justify-end">
               <Button onClick={handleImport} disabled={isImporting}>
-                {isImporting ? "匯入中..." : `確認匯入 ${previewData.length} 個單字`}
+                {isImporting
+                  ? "匯入中..."
+                  : visibility === "study_group"
+                    ? `確認匯入並分享 ${previewData.length} 個單字`
+                    : `確認匯入 ${previewData.length} 個單字`}
               </Button>
             </div>
           </CardContent>

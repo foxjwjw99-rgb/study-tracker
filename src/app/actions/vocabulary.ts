@@ -21,9 +21,17 @@ import type {
   VocabularyStatus,
   VocabularyStatusFilter,
   VocabularyWordItem,
+  QuestionImportTarget,
 } from "@/types"
 
-export async function importVocabularyWords(data: unknown): Promise<ImportResult> {
+const DEFAULT_IMPORT_TARGET: QuestionImportTarget = {
+  visibility: "private",
+}
+
+export async function importVocabularyWords(
+  data: unknown,
+  importTarget: QuestionImportTarget = DEFAULT_IMPORT_TARGET
+): Promise<ImportResult> {
   const user = await getCurrentUserOrThrow()
   const parsed = vocabularyImportSchema.safeParse(data)
 
@@ -37,102 +45,115 @@ export async function importVocabularyWords(data: unknown): Promise<ImportResult
     }
   }
 
+  const normalizedTarget = await resolveVocabularyImportTarget(user.id, importTarget)
+  if (!normalizedTarget.success) {
+    return {
+      success: false,
+      message: normalizedTarget.message,
+      validCount: 0,
+      duplicateCount: 0,
+      errorCount: 0,
+    }
+  }
+
   const items = parsed.data
   let validCount = 0
   let duplicateCount = 0
   let errorCount = 0
 
   try {
-    const dbSubjects = await prisma.subject.findMany({
-      where: { user_id: user.id },
-      select: {
-        id: true,
-        name: true,
-      },
-    })
-    const subjectMap = new Map<string, string>(
-      dbSubjects.map((subject) => [subject.name.trim(), subject.id])
-    )
-
-    const uniqueImportSubjects = Array.from(new Set(items.map((item) => item.subject.trim())))
-    const missingSubjects = uniqueImportSubjects.filter((sub) => !subjectMap.has(sub))
-
-    if (missingSubjects.length > 0) {
-      try {
-        await prisma.subject.createMany({
-          data: missingSubjects.map((name) => ({
-            user_id: user.id,
-            name,
-          })),
-        })
-        const newSubjects = await prisma.subject.findMany({
-          where: {
-            user_id: user.id,
-            name: { in: missingSubjects },
-          },
-        })
-        for (const sub of newSubjects) {
-          subjectMap.set(sub.name.trim(), sub.id)
-        }
-      } catch (e) {
-        console.error("Error creating subjects", e)
-        return {
-          success: false,
-          message: "建立科目失敗。",
-          validCount: 0,
-          duplicateCount: 0,
-          errorCount: items.length,
-        }
-      }
-    }
-
-    const dbWords = await prisma.vocabularyWord.findMany({
-      where: { user_id: user.id },
-      select: { subject_id: true, word: true },
-    })
-
-    const existingWordSet = new Set(
-      dbWords.map((w: { subject_id: string; word: string }) => `${w.subject_id}::${w.word.trim()}`)
-    )
-
-    const newWordsData = []
-
-    for (const item of items) {
-      const subjectId = subjectMap.get(item.subject.trim())
-      if (!subjectId) {
-        errorCount++
-        continue
-      }
-
-      const dedupKey = `${subjectId}::${item.word.trim()}`
-      if (existingWordSet.has(dedupKey)) {
-        duplicateCount++
-        continue
-      }
-
-      existingWordSet.add(dedupKey)
-
-      newWordsData.push({
-        user_id: user.id,
-        subject_id: subjectId,
-        word: item.word.trim(),
-        part_of_speech: item.part_of_speech?.trim() || null,
-        meaning: item.meaning.trim(),
-        example_sentence: item.example_sentence.trim(),
-        example_sentence_translation: item.example_sentence_translation?.trim() || null,
-        status: "NEW",
+    for (const recipientUserId of normalizedTarget.recipientUserIds) {
+      const dbSubjects = await prisma.subject.findMany({
+        where: { user_id: recipientUserId },
+        select: {
+          id: true,
+          name: true,
+        },
       })
-    }
+      const subjectMap = new Map<string, string>(
+        dbSubjects.map((subject) => [subject.name.trim(), subject.id])
+      )
 
-    if (newWordsData.length > 0) {
-      try {
-        const result = await prisma.vocabularyWord.createMany({
-          data: newWordsData,
+      const uniqueImportSubjects = Array.from(new Set(items.map((item) => item.subject.trim())))
+      const missingSubjects = uniqueImportSubjects.filter((sub) => !subjectMap.has(sub))
+
+      if (missingSubjects.length > 0) {
+        try {
+          await prisma.subject.createMany({
+            data: missingSubjects.map((name) => ({
+              user_id: recipientUserId,
+              name,
+            })),
+          })
+          const newSubjects = await prisma.subject.findMany({
+            where: {
+              user_id: recipientUserId,
+              name: { in: missingSubjects },
+            },
+          })
+          for (const sub of newSubjects) {
+            subjectMap.set(sub.name.trim(), sub.id)
+          }
+        } catch (e) {
+          console.error("Error creating subjects", e)
+          return {
+            success: false,
+            message: "建立科目失敗。",
+            validCount: 0,
+            duplicateCount: 0,
+            errorCount: items.length,
+          }
+        }
+      }
+
+      const dbWords = await prisma.vocabularyWord.findMany({
+        where: { user_id: recipientUserId },
+        select: { subject_id: true, word: true },
+      })
+
+      const existingWordSet = new Set(
+        dbWords.map((w: { subject_id: string; word: string }) => `${w.subject_id}::${w.word.trim()}`)
+      )
+
+      const newWordsData = []
+
+      for (const item of items) {
+        const subjectId = subjectMap.get(item.subject.trim())
+        if (!subjectId) {
+          errorCount += 1
+          continue
+        }
+
+        const dedupKey = `${subjectId}::${item.word.trim()}`
+        if (existingWordSet.has(dedupKey)) {
+          duplicateCount += 1
+          continue
+        }
+
+        existingWordSet.add(dedupKey)
+
+        newWordsData.push({
+          user_id: recipientUserId,
+          subject_id: subjectId,
+          word: item.word.trim(),
+          part_of_speech: item.part_of_speech?.trim() || null,
+          meaning: item.meaning.trim(),
+          example_sentence: item.example_sentence.trim(),
+          example_sentence_translation: item.example_sentence_translation?.trim() || null,
+          status: "NEW",
         })
-        validCount = result.count
-      } catch (e) {
-        console.error("Error creating vocabulary words batch", e)
-        errorCount += newWordsData.length
+      }
+
+      if (newWordsData.length > 0) {
+        try {
+          const result = await prisma.vocabularyWord.createMany({
+            data: newWordsData,
+          })
+          validCount += result.count
+        } catch (e) {
+          console.error("Error creating vocabulary words batch", e)
+          errorCount += newWordsData.length
+        }
       }
     }
   } catch (error) {
@@ -152,10 +173,64 @@ export async function importVocabularyWords(data: unknown): Promise<ImportResult
 
   return {
     success: true,
-    message: "英文單字匯入完成。",
+    message:
+      normalizedTarget.visibility === "study_group"
+        ? `英文單字已分享到讀書房，已分發給 ${normalizedTarget.memberCount} 位成員；每個人的複習進度仍各自獨立。`
+        : "英文單字匯入完成。",
     validCount,
     duplicateCount,
     errorCount,
+  }
+}
+
+async function resolveVocabularyImportTarget(userId: string, importTarget: QuestionImportTarget) {
+  if (importTarget.visibility === "private") {
+    return {
+      success: true as const,
+      visibility: "private" as const,
+      recipientUserIds: [userId],
+      memberCount: 1,
+    }
+  }
+
+  if (!importTarget.shared_study_group_id) {
+    return {
+      success: false as const,
+      message: "請選擇要分享的讀書房。",
+    }
+  }
+
+  const membership = await prisma.studyGroupMember.findFirst({
+    where: {
+      user_id: userId,
+      study_group_id: importTarget.shared_study_group_id,
+    },
+    select: {
+      study_group_id: true,
+    },
+  })
+
+  if (!membership) {
+    return {
+      success: false as const,
+      message: "你不在這個讀書房中，不能分享單字。",
+    }
+  }
+
+  const members = await prisma.studyGroupMember.findMany({
+    where: {
+      study_group_id: membership.study_group_id,
+    },
+    select: {
+      user_id: true,
+    },
+  })
+
+  return {
+    success: true as const,
+    visibility: "study_group" as const,
+    recipientUserIds: members.map((member) => member.user_id),
+    memberCount: members.length,
   }
 }
 

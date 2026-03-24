@@ -189,7 +189,9 @@ export function ImportClient({ studyGroups }: ImportClientProps) {
                 onValueChange={(value) => setVisibility((value as QuestionVisibility) ?? "private")}
               >
                 <SelectTrigger>
-                  <SelectValue />
+                  <SelectValue>
+                    {visibility === "study_group" ? "分享到讀書房" : "私人題庫（只有自己可練習）"}
+                  </SelectValue>
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="private">私人題庫（只有自己可練習）</SelectItem>
