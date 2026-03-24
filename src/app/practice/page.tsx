@@ -13,7 +13,12 @@ import { Button } from "@/components/ui/button"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import type { PracticeLogListItem } from "@/types"
 
-export default async function PracticePage() {
+export default async function PracticePage({
+  searchParams,
+}: {
+  searchParams: Promise<{ subject?: string; topic?: string }>
+}) {
+  const { subject: initialSubjectId, topic: initialTopic } = await searchParams
   const subjects = await getSubjects()
   const logs = await getPracticeLogs()
   const questionBank = await getPracticeQuestionBank()
@@ -42,7 +47,11 @@ export default async function PracticePage() {
 
           <TabsContent value="question-bank" className="space-y-4">
             {questionBank.length > 0 ? (
-              <QuestionPractice questionBank={questionBank} />
+              <QuestionPractice
+                questionBank={questionBank}
+                initialSubjectId={initialSubjectId}
+                initialTopic={initialTopic}
+              />
             ) : (
               <Card>
                 <CardHeader>

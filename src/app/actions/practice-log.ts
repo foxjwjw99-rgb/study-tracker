@@ -96,9 +96,40 @@ export async function getPracticeQuestionBank(): Promise<PracticeQuestionBankSum
   return Array.from(grouped.values()).sort((a, b) => a.subject_name.localeCompare(b.subject_name, "zh-Hant"))
 }
 
+export async function getPracticeQuestionTopics(
+  subjectNameOrId: string
+): Promise<{ topic: string; count: number }[]> {
+  const user = await getCurrentUserOrThrow()
+  const accessibleGroupIds = await getAccessibleStudyGroupIds(user.id)
+
+  const ownSubject = await prisma.subject.findFirst({
+    where: { OR: [{ id: subjectNameOrId, user_id: user.id }, { name: subjectNameOrId, user_id: user.id }] },
+    select: { name: true },
+  })
+  const normalizedSubjectName = ownSubject?.name ?? stripSharedSubjectPrefix(subjectNameOrId)
+
+  const questions = await prisma.question.findMany({
+    where: {
+      ...buildAccessibleQuestionWhere(user.id, accessibleGroupIds),
+      subject: { name: normalizedSubjectName },
+    },
+    select: { topic: true },
+  })
+
+  const countByTopic = new Map<string, number>()
+  for (const q of questions) {
+    countByTopic.set(q.topic, (countByTopic.get(q.topic) ?? 0) + 1)
+  }
+
+  return Array.from(countByTopic.entries())
+    .map(([topic, count]) => ({ topic, count }))
+    .sort((a, b) => a.topic.localeCompare(b.topic, "zh-Hant"))
+}
+
 export async function getPracticeQuestions(
   subjectNameOrId: string,
-  requestedCount: number
+  requestedCount: number,
+  topic?: string
 ): Promise<PracticeQuestionItem[]> {
   const user = await getCurrentUserOrThrow()
   const accessibleGroupIds = await getAccessibleStudyGroupIds(user.id)
@@ -125,6 +156,7 @@ export async function getPracticeQuestions(
       subject: {
         name: normalizedSubjectName,
       },
+      ...(topic ? { topic } : {}),
     },
     include: {
       shared_study_group: {
