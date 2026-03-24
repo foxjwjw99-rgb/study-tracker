@@ -26,6 +26,27 @@ import type {
 const SUBJECT_WEEKLY_TARGET_MINUTES = 240
 const TOPIC_WEEKLY_TARGET_MINUTES = 120
 
+const STUDY_TYPE_MULTIPLIER: Record<string, number> = {
+  "做題": 1.4,
+  "複習": 1.2,
+  "看書": 1.0,
+  "上課": 1.0,
+}
+
+type StudyLogRawItem = {
+  subject_id: string
+  topic: string
+  duration_minutes: number
+  focus_score: number
+  study_type: string
+}
+
+function getEffectiveMinutes(item: StudyLogRawItem): number {
+  const typeMultiplier = STUDY_TYPE_MULTIPLIER[item.study_type] ?? 1.0
+  const focusMultiplier = item.focus_score / 5
+  return item.duration_minutes * typeMultiplier * focusMultiplier
+}
+
 type SubjectSummary = {
   id: string
   name: string
@@ -46,14 +67,6 @@ type TopicAccumulator = {
 type TopicGroupRow = {
   subject_id: string
   topic: string
-}
-
-type TopicStudyRow = {
-  subject_id: string
-  topic: string
-  _sum: {
-    duration_minutes: number | null
-  }
 }
 
 type TopicPracticeRow = {
@@ -89,14 +102,13 @@ export async function getDashboardData(): Promise<DashboardData> {
     todaysPractice,
     pendingReviews,
     last7DaysStudy,
-    subjectStudyThisWeek,
+    studyLogs7dRaw,
     weakTopics,
     nextReviewFocusRaw,
     studyDates,
     subjectPractice14dRaw,
     subjectReviewDueRaw,
     subjectWrongOpenRaw,
-    studyTopic7dRaw,
     practiceTopic14dRaw,
     reviewTopicDueRaw,
     wrongTopicOpenRaw,
@@ -127,10 +139,9 @@ export async function getDashboardData(): Promise<DashboardData> {
       where: { user_id: user.id, study_date: { gte: startOf7DaysAgo, lte: endOfToday } },
       _sum: { duration_minutes: true },
     }),
-    prisma.studyLog.groupBy({
-      by: ["subject_id"],
+    prisma.studyLog.findMany({
       where: { user_id: user.id, study_date: { gte: startOf7DaysAgo, lte: endOfToday } },
-      _sum: { duration_minutes: true },
+      select: { subject_id: true, topic: true, duration_minutes: true, focus_score: true, study_type: true },
     }),
     prisma.wrongQuestion.findMany({
       where: { user_id: user.id, status: { not: "已掌握" } },
@@ -188,11 +199,6 @@ export async function getDashboardData(): Promise<DashboardData> {
         status: { not: "已掌握" },
       },
       _count: { _all: true },
-    }),
-    prisma.studyLog.groupBy({
-      by: ["subject_id", "topic"],
-      where: { user_id: user.id, study_date: { gte: startOf7DaysAgo, lte: endOfToday } },
-      _sum: { duration_minutes: true },
     }),
     prisma.practiceLog.groupBy({
       by: ["subject_id", "topic"],
@@ -272,9 +278,21 @@ export async function getDashboardData(): Promise<DashboardData> {
 
   const subjectNameMap = new Map(subjects.map((subject) => [subject.id, subject.name]))
 
-  const subjectHours: SubjectHoursItem[] = subjectStudyThisWeek.map((studySummary) => ({
-    subject: subjectNameMap.get(studySummary.subject_id) || "未知科目",
-    minutes: studySummary._sum.duration_minutes || 0,
+  // Aggregate study logs with focus_score and study_type weighting
+  const study7dBySubject = new Map<string, number>()
+  const recentStudyByTopic = new Map<string, number>()
+  const rawMinutesBySubject = new Map<string, number>()
+  for (const item of studyLogs7dRaw) {
+    const effective = getEffectiveMinutes(item)
+    study7dBySubject.set(item.subject_id, (study7dBySubject.get(item.subject_id) || 0) + effective)
+    rawMinutesBySubject.set(item.subject_id, (rawMinutesBySubject.get(item.subject_id) || 0) + item.duration_minutes)
+    const topicKey = makeTopicKey(item.subject_id, item.topic)
+    recentStudyByTopic.set(topicKey, (recentStudyByTopic.get(topicKey) || 0) + effective)
+  }
+
+  const subjectHours: SubjectHoursItem[] = Array.from(rawMinutesBySubject.entries()).map(([subjectId, minutes]) => ({
+    subject: subjectNameMap.get(subjectId) || "未知科目",
+    minutes,
   }))
 
   const nextReviewFocus: DashboardReviewFocusItem[] = nextReviewFocusRaw.map((r) => ({
@@ -284,10 +302,6 @@ export async function getDashboardData(): Promise<DashboardData> {
     reviewStage: r.review_stage,
     subject: r.subject,
   }))
-
-  const study7dBySubject = new Map(
-    subjectStudyThisWeek.map((item) => [item.subject_id, item._sum.duration_minutes || 0])
-  )
   const practice14dBySubject = new Map(
     subjectPractice14dRaw.map((item) => [
       item.subject_id,
@@ -335,10 +349,11 @@ export async function getDashboardData(): Promise<DashboardData> {
     practiceTopicAllRaw,
     reviewTopicAllRaw,
     wrongTopicAllRaw,
-    studyTopic7dRaw,
+    recentStudyByTopic,
     practiceTopic14dRaw,
     reviewTopicDueRaw,
     wrongTopicOpenRaw,
+    daysUntilExam,
   })
 
   const subjectReadiness: DashboardSubjectReadinessItem[] = subjects
@@ -385,7 +400,7 @@ export async function getDashboardData(): Promise<DashboardData> {
       )
 
       const weakTopic = topicAnalysis.weakestAreas.find((item) => item.subjectId === subject.id)?.topic || null
-      const level = getReadinessLevel(score)
+      const level = getReadinessLevel(score, daysUntilExam)
       const momentum = getMomentum({
         practiceAccuracy14d,
         dueReviews,
@@ -541,10 +556,11 @@ function buildTopicAnalysis({
   practiceTopicAllRaw,
   reviewTopicAllRaw,
   wrongTopicAllRaw,
-  studyTopic7dRaw,
+  recentStudyByTopic,
   practiceTopic14dRaw,
   reviewTopicDueRaw,
   wrongTopicOpenRaw,
+  daysUntilExam,
 }: {
   subjects: SubjectSummary[]
   questionTopicsRaw: TopicGroupRow[]
@@ -552,10 +568,11 @@ function buildTopicAnalysis({
   practiceTopicAllRaw: TopicCountRow[]
   reviewTopicAllRaw: TopicCountRow[]
   wrongTopicAllRaw: TopicCountRow[]
-  studyTopic7dRaw: TopicStudyRow[]
+  recentStudyByTopic: Map<string, number>
   practiceTopic14dRaw: TopicPracticeRow[]
   reviewTopicDueRaw: TopicCountRow[]
   wrongTopicOpenRaw: TopicCountRow[]
+  daysUntilExam: number | null
 }): {
   weakestAreas: DashboardWeakAreaItem[]
   subjectCoverage: DashboardSubjectCoverageItem[]
@@ -577,10 +594,6 @@ function buildTopicAnalysis({
   addTopicKeysBySubject(totalTopicKeysBySubject, practiceTopicAllRaw)
   addTopicKeysBySubject(totalTopicKeysBySubject, reviewTopicAllRaw)
   addTopicKeysBySubject(totalTopicKeysBySubject, wrongTopicAllRaw)
-
-  const recentStudyByTopic = new Map(
-    studyTopic7dRaw.map((item) => [makeTopicKey(item.subject_id, item.topic), item._sum.duration_minutes || 0])
-  )
   const recentPracticeByTopic = new Map(
     practiceTopic14dRaw.map((item) => [
       makeTopicKey(item.subject_id, item.topic),
@@ -619,6 +632,7 @@ function buildTopicAnalysis({
         recentPracticeByTopic,
         dueReviewsByTopic,
         wrongCountByTopic,
+        daysUntilExam,
       }))
       .sort((a, b) => {
         if (a.score !== b.score) return a.score - b.score
@@ -704,6 +718,7 @@ function buildTopicDetail({
   recentPracticeByTopic,
   dueReviewsByTopic,
   wrongCountByTopic,
+  daysUntilExam,
 }: {
   key: string
   subjectId: string
@@ -714,6 +729,7 @@ function buildTopicDetail({
   recentPracticeByTopic: Map<string, { totalQuestions: number; correctQuestions: number }>
   dueReviewsByTopic: Map<string, number>
   wrongCountByTopic: Map<string, number>
+  daysUntilExam: number | null
 }): DashboardTopicDetailItem {
   const topic = key.split("::")[1]
   const studyMinutes7d = recentStudyByTopic.get(key) || 0
@@ -759,7 +775,7 @@ function buildTopicDetail({
     subjectName,
     topic,
     score,
-    status: getReadinessLevel(score),
+    status: getReadinessLevel(score, daysUntilExam),
     studyMinutes7d,
     practiceAccuracy14d,
     practiceCount14d: practiceStats.totalQuestions,
@@ -976,10 +992,24 @@ function getMomentum({
   return "steady"
 }
 
-function getReadinessLevel(score: number): DashboardSubjectReadinessItem["level"] {
-  if (score >= 80) return "strong"
-  if (score >= 65) return "steady"
-  if (score >= 50) return "warning"
+function getReadinessLevel(score: number, daysUntilExam?: number | null): DashboardSubjectReadinessItem["level"] {
+  let strongThreshold = 80
+  let steadyThreshold = 65
+  let warningThreshold = 50
+
+  if (daysUntilExam !== null && daysUntilExam !== undefined && daysUntilExam >= 0) {
+    if (daysUntilExam <= 7) {
+      strongThreshold = 90; steadyThreshold = 78; warningThreshold = 65
+    } else if (daysUntilExam <= 14) {
+      strongThreshold = 87; steadyThreshold = 74; warningThreshold = 60
+    } else if (daysUntilExam <= 30) {
+      strongThreshold = 83; steadyThreshold = 70; warningThreshold = 55
+    }
+  }
+
+  if (score >= strongThreshold) return "strong"
+  if (score >= steadyThreshold) return "steady"
+  if (score >= warningThreshold) return "warning"
   return "danger"
 }
 
