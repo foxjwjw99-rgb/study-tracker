@@ -7,6 +7,7 @@ import { toast } from "sonner"
 
 import {
   getPracticeQuestions,
+  getPracticeQuestionTopics,
   submitPracticeQuestionSession,
 } from "@/app/actions/practice-log"
 import { Badge } from "@/components/ui/badge"
@@ -29,6 +30,8 @@ import type {
 
 type QuestionPracticeProps = {
   questionBank: PracticeQuestionBankSummary[]
+  initialSubjectId?: string
+  initialTopic?: string
 }
 
 type SessionState = {
@@ -42,11 +45,13 @@ type SessionState = {
 
 const QUESTION_COUNT_OPTIONS = [5, 10, 20] as const
 
-export function QuestionPractice({ questionBank }: QuestionPracticeProps) {
+export function QuestionPractice({ questionBank, initialSubjectId, initialTopic }: QuestionPracticeProps) {
   const router = useRouter()
   const [selectedSubjectId, setSelectedSubjectId] = useState(
-    questionBank[0]?.subject_id ?? ""
+    initialSubjectId ?? questionBank[0]?.subject_id ?? ""
   )
+  const [selectedTopic, setSelectedTopic] = useState(initialTopic ?? "")
+  const [topics, setTopics] = useState<{ topic: string; count: number }[]>([])
   const [requestedCount, setRequestedCount] = useState<string>("10")
   const [session, setSession] = useState<SessionState | null>(null)
   const [result, setResult] = useState<PracticeQuestionSessionResult | null>(null)
@@ -58,8 +63,22 @@ export function QuestionPractice({ questionBank }: QuestionPracticeProps) {
     [questionBank, selectedSubjectId]
   )
 
+  useEffect(() => {
+    if (!selectedSubjectId) return
+    setSelectedTopic("")
+    setTopics([])
+    getPracticeQuestionTopics(selectedSubjectId).then(setTopics).catch(() => {})
+  }, [selectedSubjectId])
+
+  const effectiveQuestionCount = useMemo(() => {
+    if (selectedTopic) {
+      return topics.find((t) => t.topic === selectedTopic)?.count ?? 0
+    }
+    return selectedSubject?.question_count ?? 0
+  }, [selectedTopic, topics, selectedSubject])
+
   const questionCountOptions = useMemo(() => {
-    const availableCount = selectedSubject?.question_count ?? 0
+    const availableCount = effectiveQuestionCount
     const baseOptions: number[] = QUESTION_COUNT_OPTIONS.filter(
       (count) => count < availableCount
     )
@@ -69,7 +88,7 @@ export function QuestionPractice({ questionBank }: QuestionPracticeProps) {
     }
 
     return [...new Set(baseOptions)].sort((a, b) => a - b)
-  }, [selectedSubject])
+  }, [effectiveQuestionCount])
 
   const currentQuestion = session ? session.questions[session.currentIndex] : null
   const currentAnswer = currentQuestion
@@ -85,7 +104,7 @@ export function QuestionPractice({ questionBank }: QuestionPracticeProps) {
     }
 
     const count = requestedCount === "all"
-      ? selectedSubject.question_count
+      ? effectiveQuestionCount
       : Number.parseInt(requestedCount, 10)
 
     if (!Number.isFinite(count) || count <= 0) {
@@ -123,7 +142,7 @@ export function QuestionPractice({ questionBank }: QuestionPracticeProps) {
       const count = requestedCount === "all"
         ? selectedSubject?.question_count ?? 0
         : Number.parseInt(requestedCount, 10)
-      const questions = await getPracticeQuestions(selectedSubjectId, count)
+      const questions = await getPracticeQuestions(selectedSubjectId, count, selectedTopic || undefined)
 
       if (questions.length === 0) {
         toast.error("這個科目目前沒有可用題目。")
@@ -249,7 +268,7 @@ export function QuestionPractice({ questionBank }: QuestionPracticeProps) {
             <CardDescription>從自己的題目與讀書房共享題目中抽題作答，完成後會自動寫入個人練習紀錄。</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
-            <div className="grid gap-4 sm:grid-cols-2">
+            <div className="grid gap-4 sm:grid-cols-3">
               <div className="space-y-2">
                 <label className="text-sm font-medium">科目</label>
                 <Select
@@ -267,6 +286,30 @@ export function QuestionPractice({ questionBank }: QuestionPracticeProps) {
                     {questionBank.map((item) => (
                       <SelectItem key={item.subject_id} value={item.subject_id}>
                         {item.subject_name} ({item.question_count} 題)
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <label className="text-sm font-medium">單元</label>
+                <Select
+                  value={selectedTopic || "__all__"}
+                  onValueChange={(value) => setSelectedTopic(value === "__all__" ? "" : (value ?? ""))}
+                  disabled={topics.length === 0}
+                >
+                  <SelectTrigger className="w-full">
+                    <SelectValue>
+                      {selectedTopic
+                        ? `${selectedTopic} (${topics.find((t) => t.topic === selectedTopic)?.count ?? 0} 題)`
+                        : "全部單元"}
+                    </SelectValue>
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="__all__">全部單元</SelectItem>
+                    {topics.map((t) => (
+                      <SelectItem key={t.topic} value={t.topic}>
+                        {t.topic} ({t.count} 題)
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -299,8 +342,10 @@ export function QuestionPractice({ questionBank }: QuestionPracticeProps) {
               <div className="grid gap-3 sm:grid-cols-3">
                 <div className="rounded-lg border bg-muted/40 p-3 text-sm">
                   <div className="text-muted-foreground">目前題庫</div>
-                  <div className="mt-1 font-medium text-foreground">{selectedSubject.subject_name}</div>
-                  <div className="mt-1 text-muted-foreground">共 {selectedSubject.question_count} 題</div>
+                  <div className="mt-1 font-medium text-foreground">
+                    {selectedSubject.subject_name}{selectedTopic ? ` · ${selectedTopic}` : ""}
+                  </div>
+                  <div className="mt-1 text-muted-foreground">共 {effectiveQuestionCount} 題</div>
                 </div>
                 <div className="rounded-lg border bg-muted/40 p-3 text-sm">
                   <div className="text-muted-foreground">練習模式</div>

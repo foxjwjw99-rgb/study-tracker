@@ -232,6 +232,8 @@ export default async function DashboardPage() {
         </Card>
       </section>
 
+      <StreakMilestoneSection streakDays={data.streakDays} trendData={data.trendData} />
+
       <section className="space-y-4">
         <div className="space-y-1">
           <h2 className="section-heading">三科準備狀態</h2>
@@ -659,7 +661,90 @@ function PlanStep({ item, index }: { item: DashboardPlanItem; index: number }) {
   )
 }
 
+const STREAK_MILESTONES = [3, 7, 14, 30]
+
+function StreakMilestoneSection({
+  streakDays,
+  trendData,
+}: {
+  streakDays: number
+  trendData: { date: string; minutes: number }[]
+}) {
+  const weeklyMinutes = trendData.reduce((sum, d) => sum + d.minutes, 0)
+  const isNewMilestone = STREAK_MILESTONES.includes(streakDays)
+  const nextMilestone = STREAK_MILESTONES.find((m) => m > streakDays) ?? null
+  const streakProgress = nextMilestone ? Math.round((streakDays / nextMilestone) * 100) : 100
+
+  if (streakDays === 0 && weeklyMinutes === 0) return null
+
+  return (
+    <section>
+      <Card>
+        <CardContent className="px-5 py-4">
+          <div className="flex flex-wrap items-center gap-6">
+            <div className="flex items-center gap-3">
+              <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-amber-500/12 text-xl">
+                🔥
+              </div>
+              <div>
+                <p className="text-xs text-muted-foreground">連續學習</p>
+                <p className="text-xl font-bold text-foreground">
+                  {streakDays} 天
+                  {isNewMilestone && streakDays > 0 && (
+                    <span className="ml-2 rounded-full bg-amber-500/15 px-2 py-0.5 text-xs font-medium text-amber-700">
+                      里程碑達成！
+                    </span>
+                  )}
+                </p>
+              </div>
+            </div>
+
+            {nextMilestone && streakDays > 0 && (
+              <div className="flex-1 min-w-[120px] space-y-1">
+                <p className="text-xs text-muted-foreground">距離下個里程碑：{nextMilestone} 天</p>
+                <div className="h-1.5 w-full overflow-hidden rounded-full bg-muted">
+                  <div
+                    className="h-full rounded-full bg-amber-500 transition-all"
+                    style={{ width: `${streakProgress}%` }}
+                  />
+                </div>
+                <p className="text-xs text-muted-foreground">還差 {nextMilestone - streakDays} 天</p>
+              </div>
+            )}
+
+            <div className="flex items-center gap-3">
+              <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-sky-500/12 text-xl">
+                ⏱️
+              </div>
+              <div>
+                <p className="text-xs text-muted-foreground">本週已讀</p>
+                <p className="text-xl font-bold text-foreground">{weeklyMinutes} 分鐘</p>
+              </div>
+            </div>
+
+            <div className="flex flex-wrap gap-2 ml-auto">
+              {STREAK_MILESTONES.map((m) => (
+                <span
+                  key={m}
+                  className={`rounded-full px-2.5 py-1 text-xs font-medium ${
+                    streakDays >= m
+                      ? "bg-amber-500/15 text-amber-700"
+                      : "bg-muted text-muted-foreground"
+                  }`}
+                >
+                  {m} 天
+                </span>
+              ))}
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+    </section>
+  )
+}
+
 function WeakAreaRow({ item }: { item: DashboardWeakAreaItem }) {
+  const practiceHref = `/practice?subject=${encodeURIComponent(item.subjectId)}&topic=${encodeURIComponent(item.topic)}`
   return (
     <div className="rounded-2xl border border-border/70 bg-background/70 p-4">
       <div className="flex items-start justify-between gap-3">
@@ -681,6 +766,16 @@ function WeakAreaRow({ item }: { item: DashboardWeakAreaItem }) {
           value={item.practiceAccuracy !== null ? `${item.practiceAccuracy}%` : "—"}
         />
         <MiniMetric label="待補量" value={`${item.dueReviews + item.wrongCount}`} />
+      </div>
+
+      <div className="mt-3">
+        <Link
+          href={practiceHref}
+          className="inline-flex items-center gap-1 rounded-lg bg-primary/10 px-3 py-1.5 text-xs font-medium text-primary hover:bg-primary/20 transition-colors"
+        >
+          練習此單元
+          <ArrowRight className="h-3 w-3" />
+        </Link>
       </div>
     </div>
   )
