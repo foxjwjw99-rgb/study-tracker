@@ -93,7 +93,6 @@ export async function getDashboardData(): Promise<DashboardData> {
     weakTopics,
     nextReviewFocusRaw,
     studyDates,
-    subjectStudy7dRaw,
     subjectPractice14dRaw,
     subjectReviewDueRaw,
     subjectWrongOpenRaw,
@@ -167,11 +166,6 @@ export async function getDashboardData(): Promise<DashboardData> {
       where: { user_id: user.id },
       select: { study_date: true },
       orderBy: { study_date: "desc" },
-    }),
-    prisma.studyLog.groupBy({
-      by: ["subject_id"],
-      where: { user_id: user.id, study_date: { gte: startOf7DaysAgo, lte: endOfToday } },
-      _sum: { duration_minutes: true },
     }),
     prisma.practiceLog.groupBy({
       by: ["subject_id"],
@@ -292,7 +286,7 @@ export async function getDashboardData(): Promise<DashboardData> {
   }))
 
   const study7dBySubject = new Map(
-    subjectStudy7dRaw.map((item) => [item.subject_id, item._sum.duration_minutes || 0])
+    subjectStudyThisWeek.map((item) => [item.subject_id, item._sum.duration_minutes || 0])
   )
   const practice14dBySubject = new Map(
     subjectPractice14dRaw.map((item) => [
@@ -499,21 +493,14 @@ export async function getDashboardData(): Promise<DashboardData> {
     recommendation = "今天節奏不錯，清完待辦後可以再做一組題目鞏固手感。"
   }
 
-  const trendData: DashboardTrendPoint[] = []
-  for (let i = 6; i >= 0; i--) {
-    const day = subDays(today, i)
-    const dailyEntries = last7DaysStudy.filter(
-      (study) => new Date(study.study_date).toDateString() === day.toDateString()
-    )
-    const sum = dailyEntries.reduce(
-      (acc, current) => acc + (current._sum.duration_minutes || 0),
-      0
-    )
-    trendData.push({
-      date: formatShortDate(day),
-      minutes: sum,
-    })
-  }
+  const studyByDateKey = new Map(
+    last7DaysStudy.map((s) => [formatShortDate(new Date(s.study_date)), s._sum.duration_minutes || 0])
+  )
+  const trendData: DashboardTrendPoint[] = Array.from({ length: 7 }, (_, i) => {
+    const day = subDays(today, 6 - i)
+    const dateKey = formatShortDate(day)
+    return { date: dateKey, minutes: studyByDateKey.get(dateKey) || 0 }
+  })
 
   let hasData = subjects.length > 0 || todaysStudyMinutes > 0
   if (!hasData) {
