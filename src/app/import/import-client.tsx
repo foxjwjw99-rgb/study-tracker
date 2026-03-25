@@ -1,5 +1,6 @@
 "use client"
 
+import Image from "next/image"
 import { useRef, useMemo, useState } from "react"
 import { z } from "zod"
 import { toast } from "sonner"
@@ -337,7 +338,14 @@ export function ImportClient({ studyGroups }: ImportClientProps) {
             />
             {imagePreviewUrl && (
               <div className="space-y-3">
-                <img src={imagePreviewUrl} alt="預覽" className="max-h-48 rounded-lg border object-contain" />
+                <Image
+                  src={imagePreviewUrl}
+                  alt="預覽"
+                  width={640}
+                  height={320}
+                  unoptimized
+                  className="max-h-48 w-auto rounded-lg border object-contain"
+                />
                 {imageBase64 && (
                   <div className="space-y-2">
                     <div className="flex items-center justify-between">
@@ -408,7 +416,14 @@ export function ImportClient({ studyGroups }: ImportClientProps) {
                       <TableCell>{q.answer}</TableCell>
                       <TableCell>
                         {q.image ? (
-                          <img src={q.image} alt="題目圖片" className="h-8 w-8 rounded object-cover" />
+                          <Image
+                            src={q.image}
+                            alt="題目圖片"
+                            width={32}
+                            height={32}
+                            unoptimized
+                            className="h-8 w-8 rounded object-cover"
+                          />
                         ) : (
                           <span className="text-muted-foreground">—</span>
                         )}

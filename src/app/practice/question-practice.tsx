@@ -1,5 +1,6 @@
 "use client"
 
+import Image from "next/image"
 import Link from "next/link"
 import { useEffect, useMemo, useState } from "react"
 import { useRouter } from "next/navigation"
@@ -419,9 +420,12 @@ export function QuestionPractice({ questionBank, initialSubjectId, initialTopic 
             </div>
             {currentQuestion.image_url && (
               <div>
-                <img
+                <Image
                   src={currentQuestion.image_url}
                   alt="題目圖片"
+                  width={960}
+                  height={540}
+                  unoptimized
                   className="max-w-full rounded-lg border"
                 />
               </div>

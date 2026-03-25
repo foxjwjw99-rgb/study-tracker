@@ -12,6 +12,9 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // Local assistant worktrees / scratch directories:
+    ".claude/**",
+    ".learnings/**",
   ]),
   {
     rules: {
