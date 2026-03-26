@@ -235,7 +235,12 @@ export function ImportClient({ studyGroups }: ImportClientProps) {
                 onValueChange={(value) => setSharedStudyGroupId(value ?? "")}
               >
                 <SelectTrigger>
-                  <SelectValue placeholder={canShareToGroup ? "選擇讀書房" : "目前尚未加入讀書房"} />
+                  <SelectValue placeholder={canShareToGroup ? "選擇讀書房" : "目前尚未加入讀書房"}>
+                    {(() => {
+                      const group = studyGroups.find((g) => g.id === sharedStudyGroupId)
+                      return group ? `${group.name} (${group.memberCount} 人)` : undefined
+                    })()}
+                  </SelectValue>
                 </SelectTrigger>
                 <SelectContent>
                   {studyGroups.map((group) => (
