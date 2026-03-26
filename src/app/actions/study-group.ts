@@ -1,5 +1,7 @@
 "use server"
 
+import { randomBytes } from "crypto"
+
 import { revalidatePath } from "next/cache"
 import { endOfDay, startOfDay, subDays } from "date-fns"
 
@@ -215,15 +217,18 @@ export async function getStudyLeaderboardData(input?: {
 }
 
 async function generateInviteCode() {
+  const CHARS = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789" // excludes I, O, 0, 1 to avoid confusion
   for (let attempt = 0; attempt < 10; attempt += 1) {
-    const code = Math.random().toString(36).slice(2, 8).toUpperCase()
+    const bytes = randomBytes(12)
+    const code = Array.from(bytes).map((b) => CHARS[b % CHARS.length]).join("")
     const existing = await prisma.studyGroup.findUnique({ where: { invite_code: code } })
     if (!existing) {
       return code
     }
   }
 
-  return `ROOM${Date.now().toString().slice(-6)}`
+  // Fallback: 16-char hex from crypto
+  return randomBytes(8).toString("hex").toUpperCase()
 }
 
 function getPeriodRange(period: LeaderboardPeriod) {
