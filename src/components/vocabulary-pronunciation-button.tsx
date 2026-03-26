@@ -38,7 +38,22 @@ export function VocabularyPronunciationButton({
     }
   }, [])
 
-  const handleSpeak = () => {
+  const getVoicesAsync = (synthesis: SpeechSynthesis): Promise<SpeechSynthesisVoice[]> => {
+    return new Promise((resolve) => {
+      const voices = synthesis.getVoices()
+      if (voices.length > 0) {
+        resolve(voices)
+        return
+      }
+      const onVoicesChanged = () => {
+        synthesis.removeEventListener("voiceschanged", onVoicesChanged)
+        resolve(synthesis.getVoices())
+      }
+      synthesis.addEventListener("voiceschanged", onVoicesChanged)
+    })
+  }
+
+  const handleSpeak = async () => {
     if (!supportsSpeech) {
       toast.error("這個瀏覽器目前不支援內建語音。")
       return
@@ -52,16 +67,21 @@ export function VocabularyPronunciationButton({
     const synthesis = window.speechSynthesis
     synthesis.cancel()
 
-    const utterance = new window.SpeechSynthesisUtterance(trimmedText)
-    const voices = synthesis.getVoices()
+    const voices = await getVoicesAsync(synthesis)
+    const enUSVoices = voices.filter((v) => v.lang === "en-US")
     const matchedVoice =
-      voices.find((voice) => voice.lang === "en-US") ??
-      voices.find((voice) => voice.lang.startsWith("en")) ??
+      enUSVoices.find((v) => v.name.includes("Aria")) ??
+      enUSVoices.find((v) => v.name.includes("Natural")) ??
+      enUSVoices.find((v) => v.name.includes("Google US English")) ??
+      enUSVoices.find((v) => v.name.includes("Online")) ??
+      enUSVoices[0] ??
+      voices.find((v) => v.lang.startsWith("en")) ??
       null
 
+    const utterance = new window.SpeechSynthesisUtterance(trimmedText)
     utterance.lang = matchedVoice?.lang ?? "en-US"
     utterance.voice = matchedVoice
-    utterance.rate = 0.92
+    utterance.rate = 0.88
     utterance.pitch = 1
     utterance.onstart = () => setIsSpeaking(true)
     utterance.onend = () => setIsSpeaking(false)
