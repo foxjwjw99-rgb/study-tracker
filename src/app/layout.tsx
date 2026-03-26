@@ -12,6 +12,14 @@ export const metadata: Metadata = {
   title: "學習追蹤器",
   description: "追蹤你的學習時間、學習成果與複習任務。",
   applicationName: "學習追蹤器",
+  icons: {
+    icon: [
+      { url: "/icon-192.png", sizes: "192x192", type: "image/png" },
+      { url: "/icon-512.png", sizes: "512x512", type: "image/png" },
+    ],
+    apple: [{ url: "/apple-icon.png", sizes: "180x180", type: "image/png" }],
+    shortcut: ["/icon-192.png"],
+  },
   appleWebApp: {
     capable: true,
     statusBarStyle: "default",

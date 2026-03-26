@@ -1,5 +1,7 @@
 import { ImageResponse } from "next/og"
 
+import { getAppIconDataUrl } from "./icon-image"
+
 export const size = {
   width: 180,
   height: 180,
@@ -7,7 +9,9 @@ export const size = {
 
 export const contentType = "image/png"
 
-export default function AppleIcon() {
+export default async function AppleIcon() {
+  const src = await getAppIconDataUrl()
+
   return new ImageResponse(
     (
       <div
@@ -15,17 +19,18 @@ export default function AppleIcon() {
           width: "100%",
           height: "100%",
           display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          borderRadius: 36,
-          background: "linear-gradient(160deg, #6D54E8 0%, #4CC6B7 100%)",
-          color: "white",
-          fontSize: 82,
-          fontWeight: 700,
-          letterSpacing: -4,
+          background: "#6D54E8",
         }}
       >
-        讀
+        <img
+          src={src}
+          alt="學習追蹤器"
+          style={{
+            width: "100%",
+            height: "100%",
+            objectFit: "cover",
+          }}
+        />
       </div>
     ),
     size
