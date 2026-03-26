@@ -3,7 +3,7 @@
 import Link from "next/link"
 import { useMemo, useState } from "react"
 import { format } from "date-fns"
-import { BookOpenText, Check, RotateCcw, Sparkles, Trash2 } from "lucide-react"
+import { BookOpenText, Check, CheckCircle2, Sparkles, Trash2, X, XCircle } from "lucide-react"
 import { toast } from "sonner"
 
 import { deleteVocabularyWord, getVocabularySession, updateVocabularyReviewStatus } from "@/app/actions/vocabulary"
@@ -12,10 +12,10 @@ import { Badge } from "@/components/ui/badge"
 import { Button, buttonVariants } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { formatVocabularyStatus } from "@/lib/vocabulary"
+import { cn } from "@/lib/utils"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import type {
   VocabularyBankItem,
-  VocabularyConfidenceLevel,
   VocabularyQueueItem,
   VocabularyReviewRating,
   VocabularyStatusFilter,
@@ -32,6 +32,9 @@ type VocabularySessionState = {
   isFlipped: boolean
   reviewedCount: number
   cardStartedAt: number
+  choices: VocabularyQueueItem[]
+  selectedOptionId: string | null
+  pendingRating: VocabularyReviewRating | null
 }
 
 const STATUS_FILTER_OPTIONS: Array<{ value: VocabularyStatusFilter; label: string }> = [
@@ -43,6 +46,15 @@ const STATUS_FILTER_OPTIONS: Array<{ value: VocabularyStatusFilter; label: strin
 ]
 
 const SESSION_LIMIT_OPTIONS = [5, 10, 20] as const
+
+function generateChoices(
+  allWords: VocabularyQueueItem[],
+  currentWord: VocabularyQueueItem
+): VocabularyQueueItem[] {
+  const pool = allWords.filter((w) => w.id !== currentWord.id && w.meaning.trim().length > 0)
+  const distractors = [...pool].sort(() => Math.random() - 0.5).slice(0, 2)
+  return [currentWord, ...distractors].sort(() => Math.random() - 0.5)
+}
 
 export function VocabularyStudyClient({
   bank,
@@ -112,6 +124,9 @@ export function VocabularyStudyClient({
         isFlipped: false,
         reviewedCount: 0,
         cardStartedAt: Date.now(),
+        choices: generateChoices(words, result[0]),
+        selectedOptionId: null,
+        pendingRating: null,
       })
     } catch {
       toast.error("載入單字卡失敗。")
@@ -143,23 +158,19 @@ export function VocabularyStudyClient({
         currentWords.map((word) => (word.id === result.word.id ? result.word : word))
       )
 
-      if (isLastCard) {
-        setSession({
-          ...session,
-          reviewedCount: session.reviewedCount + 1,
-          currentIndex: session.currentIndex + 1,
-          isFlipped: false,
-          cardStartedAt: Date.now(),
-        })
-      } else {
-        setSession({
-          ...session,
-          reviewedCount: session.reviewedCount + 1,
-          currentIndex: session.currentIndex + 1,
-          isFlipped: false,
-          cardStartedAt: Date.now(),
-        })
-      }
+      const nextIndex = session.currentIndex + 1
+      const nextWord = session.words[nextIndex]
+
+      setSession({
+        ...session,
+        reviewedCount: session.reviewedCount + 1,
+        currentIndex: nextIndex,
+        isFlipped: false,
+        cardStartedAt: Date.now(),
+        choices: nextWord ? generateChoices(words, nextWord) : [],
+        selectedOptionId: null,
+        pendingRating: null,
+      })
 
       toast.success(result.message)
     } catch {
@@ -167,6 +178,21 @@ export function VocabularyStudyClient({
     } finally {
       setIsUpdating(false)
     }
+  }
+
+  const handleOptionSelect = (option: VocabularyQueueItem) => {
+    if (!session || session.selectedOptionId !== null || !currentWord) return
+    const isCorrect = option.id === currentWord.id
+    setSession({
+      ...session,
+      selectedOptionId: option.id,
+      pendingRating: isCorrect ? "easy" : "hard",
+    })
+  }
+
+  const handleNextWord = async () => {
+    if (!session?.pendingRating) return
+    await rateCurrentWord(session.pendingRating)
   }
 
   const endSession = () => {
@@ -273,111 +299,132 @@ export function VocabularyStudyClient({
 
       {session && currentWord ? (
         <Card>
-          <CardHeader className="gap-3">
-            <div className="flex flex-wrap items-center gap-2">
-              <Badge variant="secondary">
-                第 {session.currentIndex + 1} / {session.words.length} 張
-              </Badge>
-              <Badge variant="outline">{currentWord.subject_name}</Badge>
-              <Badge variant="outline">{formatVocabularyStatus(currentWord.status)}</Badge>
-            </div>
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-              <CardTitle className="text-3xl tracking-wide">{currentWord.word}</CardTitle>
-              <VocabularyPronunciationButton text={currentWord.word} />
-            </div>
-            {!session.isFlipped ? (
-              <CardDescription>
-                先試著回想意思，翻卡後再標記熟悉度。
-              </CardDescription>
-            ) : null}
-          </CardHeader>
-          <CardContent className="space-y-4">
-            {session.isFlipped ? (
-              <div className="space-y-3 rounded-xl border bg-muted/40 p-5">
-                <div>
-                  <div className="text-sm text-muted-foreground">中文意思</div>
-                  <div className="mt-1 flex flex-wrap items-center gap-2">
-                    {currentWord.part_of_speech ? (
-                      <span className="rounded bg-primary/10 px-1.5 py-0.5 text-xs font-mono font-semibold text-primary">
-                        {currentWord.part_of_speech}
-                      </span>
-                    ) : null}
-                    <span className="text-lg font-medium">{currentWord.meaning}</span>
-                  </div>
-                </div>
-                <div>
-                  <div className="mb-1 flex items-center justify-between">
-                    <div className="text-sm text-muted-foreground">例句</div>
-                    <VocabularyPronunciationButton
-                      text={currentWord.example_sentence}
-                      label="朗讀例句"
-                      size="sm"
-                      variant="ghost"
-                      className="h-7 px-2"
-                    />
-                  </div>
-                  <div className="break-words text-base">
-                    <HighlightedExample sentence={currentWord.example_sentence} word={currentWord.word} />
-                  </div>
-                  {currentWord.example_sentence_translation ? (
-                    <div className="mt-1 text-sm text-muted-foreground italic">
-                      {currentWord.example_sentence_translation}
-                    </div>
-                  ) : null}
-                </div>
-              </div>
-            ) : null}
-
-            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-              <Button type="button" variant="outline" onClick={() => setSession({ ...session, isFlipped: !session.isFlipped })}>
-                {session.isFlipped ? "收起答案" : "翻卡"}
-              </Button>
-              <button
+          <CardHeader className="pb-2">
+            <div className="flex items-center gap-3">
+              <Button
                 type="button"
+                variant="ghost"
+                size="icon"
                 onClick={endSession}
-                className="self-end text-sm text-muted-foreground transition-colors hover:text-foreground"
+                aria-label="結束練習"
               >
-                結束本輪
-              </button>
+                <X className="h-4 w-4" />
+              </Button>
+              <div className="h-2.5 flex-1 overflow-hidden rounded-full bg-muted">
+                <div
+                  className="h-full rounded-full bg-primary transition-all duration-300"
+                  style={{
+                    width: `${(session.currentIndex / session.words.length) * 100}%`,
+                  }}
+                />
+              </div>
+              <span className="shrink-0 text-xs text-muted-foreground">
+                {session.currentIndex + 1} / {session.words.length}
+              </span>
+            </div>
+          </CardHeader>
+          <CardContent className="space-y-6">
+            {/* Definition card */}
+            <div className="flex min-h-[120px] items-center justify-center rounded-2xl border bg-card p-6 shadow-sm">
+              <p className="text-center text-xl font-medium leading-relaxed">
+                {currentWord.meaning}
+              </p>
             </div>
 
-            {session.isFlipped ? (
-              <div className="space-y-4 pt-2">
-                <div className="grid gap-3 sm:grid-cols-3">
+            {/* Multiple choice buttons */}
+            <div className="space-y-3">
+              {session.choices.map((option) => {
+                const isSelected = session.selectedOptionId === option.id
+                const isCorrect = option.id === currentWord.id
+                const hasAnswered = session.selectedOptionId !== null
+
+                let extraClass = ""
+                if (hasAnswered) {
+                  if (isCorrect) {
+                    extraClass =
+                      "border-emerald-400 bg-emerald-50 text-emerald-800 hover:bg-emerald-50 dark:border-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300"
+                  } else if (isSelected) {
+                    extraClass =
+                      "border-red-400 bg-red-50 text-red-800 hover:bg-red-50 dark:border-red-700 dark:bg-red-950/40 dark:text-red-300"
+                  }
+                }
+
+                return (
                   <Button
+                    key={option.id}
                     type="button"
                     variant="outline"
-                    disabled={isUpdating}
-                    onClick={() => rateCurrentWord("hard")}
-                    className="h-12 border-red-200 bg-red-50 text-red-700 hover:bg-red-100 hover:text-red-800 dark:border-red-900/50 dark:bg-red-950/30 dark:text-red-300"
+                    disabled={hasAnswered || isUpdating}
+                    onClick={() => handleOptionSelect(option)}
+                    className={cn("h-12 w-full justify-start text-left font-medium", extraClass)}
                   >
-                    不熟
+                    {hasAnswered && isCorrect && (
+                      <CheckCircle2 className="mr-2 h-4 w-4 shrink-0 text-emerald-600" />
+                    )}
+                    {hasAnswered && isSelected && !isCorrect && (
+                      <XCircle className="mr-2 h-4 w-4 shrink-0 text-red-500" />
+                    )}
+                    {option.word}
                   </Button>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    disabled={isUpdating}
-                    onClick={() => rateCurrentWord("okay")}
-                    className="h-12"
-                  >
-                    普通
-                  </Button>
-                  <Button
-                    type="button"
-                    disabled={isUpdating}
-                    onClick={() => rateCurrentWord("easy")}
-                    className="h-12 bg-emerald-600 hover:bg-emerald-700"
-                  >
-                    熟悉
-                  </Button>
+                )
+              })}
+            </div>
+
+            {/* Feedback area */}
+            {session.selectedOptionId !== null ? (
+              <div className="space-y-3 rounded-xl border bg-muted/40 p-4">
+                <p
+                  className={cn(
+                    "font-semibold",
+                    session.pendingRating === "easy"
+                      ? "text-emerald-700 dark:text-emerald-400"
+                      : "text-red-700 dark:text-red-400"
+                  )}
+                >
+                  {session.pendingRating === "easy" ? "✓ That's correct!" : "✗ That's incorrect!"}
+                </p>
+
+                <div className="flex flex-wrap items-center gap-2">
+                  {currentWord.part_of_speech ? (
+                    <span className="rounded bg-primary/10 px-1.5 py-0.5 text-xs font-mono font-semibold text-primary">
+                      {currentWord.part_of_speech}
+                    </span>
+                  ) : null}
+                  <span className="text-lg font-semibold">{currentWord.word}</span>
+                  <VocabularyPronunciationButton text={currentWord.word} />
                 </div>
+
+                {currentWord.example_sentence ? (
+                  <div>
+                    <div className="mb-1 text-sm font-medium text-muted-foreground">
+                      Used in a sentence:
+                    </div>
+                    <div className="text-sm">
+                      <HighlightedExample
+                        sentence={currentWord.example_sentence}
+                        word={currentWord.word}
+                      />
+                    </div>
+                    {currentWord.example_sentence_translation ? (
+                      <div className="mt-1 text-xs italic text-muted-foreground">
+                        {currentWord.example_sentence_translation}
+                      </div>
+                    ) : null}
+                  </div>
+                ) : null}
               </div>
             ) : null}
 
-            {isLastCard && session.reviewedCount > 0 ? (
-              <div className="rounded-lg border border-green-200 bg-green-50 p-4 text-sm text-green-800">
-                目前已完成 {session.reviewedCount} 張。這張評分後，本輪會結束。
-              </div>
+            {/* Next word button */}
+            {session.selectedOptionId !== null ? (
+              <Button
+                type="button"
+                disabled={isUpdating}
+                onClick={handleNextWord}
+                className="w-full"
+              >
+                {isUpdating ? "更新中..." : isLastCard ? "完成本輪" : "Next word →"}
+              </Button>
             ) : null}
           </CardContent>
         </Card>
