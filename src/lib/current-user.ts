@@ -1,58 +1,33 @@
 import "server-only"
 
 import type { User } from "@prisma/client"
-import { cookies } from "next/headers"
 
+import { auth } from "@/auth"
 import prisma from "@/lib/prisma"
 import type { CurrentUserSummary } from "@/types"
 
-export const CURRENT_USER_COOKIE = "study-tracker-user-id"
 export const OWNERSHIP_ERROR_MESSAGE = "找不到或無權限存取該資料。"
-const DEFAULT_USER_NAME = "測試學生"
 
 type CurrentUserContext = {
   user: User
-  hasCookie: boolean
 }
 
 export async function resolveCurrentUserContext(): Promise<CurrentUserContext> {
-  const cookieStore = await cookies()
-  const cookieUserId = cookieStore.get(CURRENT_USER_COOKIE)?.value
+  const session = await auth()
 
-  if (cookieUserId) {
-    const cookieUser = await prisma.user.findUnique({
-      where: { id: cookieUserId },
-    })
-
-    if (cookieUser) {
-      return {
-        user: cookieUser,
-        hasCookie: true,
-      }
-    }
+  if (!session?.user?.id) {
+    throw new Error("UNAUTHORIZED")
   }
 
-  const firstUser = await prisma.user.findFirst({
-    orderBy: [{ created_at: "asc" }, { id: "asc" }],
+  const user = await prisma.user.findUnique({
+    where: { id: session.user.id },
   })
 
-  if (firstUser) {
-    return {
-      user: firstUser,
-      hasCookie: false,
-    }
+  if (!user) {
+    throw new Error("UNAUTHORIZED")
   }
 
-  const createdUser = await prisma.user.create({
-    data: {
-      name: DEFAULT_USER_NAME,
-    },
-  })
-
-  return {
-    user: createdUser,
-    hasCookie: false,
-  }
+  return { user }
 }
 
 export async function getCurrentUserOrThrow() {
@@ -61,15 +36,8 @@ export async function getCurrentUserOrThrow() {
 }
 
 export async function listUserSummaries(): Promise<CurrentUserSummary[]> {
-  return prisma.user.findMany({
-    orderBy: [{ created_at: "asc" }, { id: "asc" }],
-    select: {
-      id: true,
-      name: true,
-      exam_date: true,
-      created_at: true,
-    },
-  })
+  const { user } = await resolveCurrentUserContext()
+  return [toCurrentUserSummary(user)]
 }
 
 export function toCurrentUserSummary(user: User): CurrentUserSummary {
@@ -79,16 +47,6 @@ export function toCurrentUserSummary(user: User): CurrentUserSummary {
     exam_date: user.exam_date,
     created_at: user.created_at,
   }
-}
-
-export async function setCurrentUserCookie(userId: string) {
-  const cookieStore = await cookies()
-  cookieStore.set(CURRENT_USER_COOKIE, userId, {
-    httpOnly: true,
-    sameSite: "lax",
-    path: "/",
-    maxAge: 60 * 60 * 24 * 365,
-  })
 }
 
 export function assertOwnedRecord<T>(

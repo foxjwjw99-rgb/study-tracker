@@ -6,33 +6,28 @@ import { SubjectsList } from "./subjects-list"
 import { UserManagement } from "./user-management"
 import { StudyGroupManagement } from "./study-group-management"
 import { getStudyGroupsForCurrentUser } from "@/app/actions/study-group"
-import {
-  listUserSummaries,
-  resolveCurrentUserContext,
-  toCurrentUserSummary,
-} from "@/lib/current-user"
+import { resolveCurrentUserContext, toCurrentUserSummary } from "@/lib/current-user"
 
 export default async function SettingsPage() {
   const { user } = await resolveCurrentUserContext()
   const currentUser = toCurrentUserSummary(user)
-  const users = await listUserSummaries()
   const subjects = await getSubjects()
   const studyGroups = await getStudyGroupsForCurrentUser()
 
   return (
     <div className="max-w-4xl space-y-6">
       <div>
-        <h1 className="text-3xl font-bold tracking-tight mb-2">設定</h1>
-        <p className="text-muted-foreground">管理使用者、科目與讀書房。考試日期已移到 Dashboard 可直接調整。</p>
+        <h1 className="mb-2 text-3xl font-bold tracking-tight">設定</h1>
+        <p className="text-muted-foreground">管理帳號、科目與讀書房。考試日期已移到 Dashboard 可直接調整。</p>
       </div>
 
       <Card>
         <CardHeader>
-          <CardTitle>使用者切換</CardTitle>
-          <CardDescription>在沒有登入系統前，使用這裡切換目前操作中的使用者。</CardDescription>
+          <CardTitle>帳號與存取</CardTitle>
+          <CardDescription>已改成 Google 登入，資料直接綁定登入中的帳號。</CardDescription>
         </CardHeader>
         <CardContent>
-          <UserManagement currentUser={currentUser} users={users} />
+          <UserManagement currentUser={currentUser} />
         </CardContent>
       </Card>
 

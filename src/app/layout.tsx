@@ -2,13 +2,11 @@ import type { Metadata, Viewport } from "next"
 
 import "./globals.css"
 import "katex/dist/katex.min.css"
+import { auth } from "@/auth"
 import { AppShell } from "@/components/app-shell"
 import { PwaInstallHint } from "@/components/pwa-install-hint"
 import { Toaster } from "@/components/ui/sonner"
-import {
-  resolveCurrentUserContext,
-  toCurrentUserSummary,
-} from "@/lib/current-user"
+import { resolveCurrentUserContext, toCurrentUserSummary } from "@/lib/current-user"
 
 export const metadata: Metadata = {
   title: "學習追蹤器",
@@ -36,15 +34,26 @@ export default async function RootLayout({
 }: Readonly<{
   children: React.ReactNode
 }>) {
-  const { user, hasCookie } = await resolveCurrentUserContext()
+  const session = await auth()
+
+  if (!session?.user) {
+    return (
+      <html lang="zh-Hant">
+        <body>
+          {children}
+          <PwaInstallHint />
+          <Toaster />
+        </body>
+      </html>
+    )
+  }
+
+  const { user } = await resolveCurrentUserContext()
 
   return (
     <html lang="zh-Hant">
       <body>
-        <AppShell
-          currentUser={toCurrentUserSummary(user)}
-          shouldSyncCookie={!hasCookie}
-        >
+        <AppShell currentUser={toCurrentUserSummary(user)}>
           {children}
         </AppShell>
         <PwaInstallHint />
