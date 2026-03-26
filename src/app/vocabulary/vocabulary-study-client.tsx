@@ -276,6 +276,15 @@ export function VocabularyStudyClient({
         : session.pendingRating !== null
     : false
 
+  const sessionViewKey = session
+    ? [
+        session.currentIndex,
+        session.mode,
+        session.flashcardRevealed ? "revealed" : "hidden",
+        hasAnswered ? session.pendingRating ?? "answered" : "pending",
+      ].join("-")
+    : "idle"
+
   if (bank.length === 0) {
     return (
       <Card>
@@ -446,9 +455,9 @@ export function VocabularyStudyClient({
           </div>
 
           <div className="relative flex flex-1 flex-col items-center justify-center overflow-auto px-5 py-8">
-            <div className="w-full max-w-lg space-y-8">
-              <div className="flex min-h-[140px] items-center justify-center rounded-3xl border border-border/50 bg-card/80 p-8 shadow-sm backdrop-blur-sm">
-                <p className="text-center text-xl leading-relaxed text-foreground/90 sm:text-2xl">
+            <div key={sessionViewKey} className="w-full max-w-lg space-y-6 animate-in fade-in-0 zoom-in-95 duration-200 sm:space-y-8">
+              <div className="flex min-h-[124px] items-center justify-center rounded-3xl border border-border/50 bg-card/80 p-6 shadow-sm backdrop-blur-sm transition-all duration-200 sm:min-h-[136px] sm:p-8">
+                <p className="text-center text-lg leading-relaxed text-foreground/90 sm:text-2xl">
                   {currentWord.meaning}
                 </p>
               </div>
@@ -456,31 +465,35 @@ export function VocabularyStudyClient({
               {session.mode === "flashcard" ? (
                 <div className="space-y-4">
                   {session.flashcardRevealed ? (
-                    <div className="space-y-4 rounded-2xl border border-border/40 bg-card/50 p-5 backdrop-blur-sm">
-                      <div className="flex flex-wrap items-center gap-2">
-                        {currentWord.part_of_speech ? (
-                          <span className="rounded bg-primary/10 px-1.5 py-0.5 text-xs font-mono font-semibold text-primary">
-                            {currentWord.part_of_speech}
-                          </span>
-                        ) : null}
-                        <span className="text-lg font-semibold">{currentWord.word}</span>
-                        <VocabularyPronunciationButton text={currentWord.word} />
-                      </div>
-
-                      {currentWord.example_sentence ? (
-                        <div>
-                          <div className="mb-1 text-xs font-medium text-muted-foreground/70">例句</div>
-                          <div className="text-sm leading-relaxed">
-                            <HighlightedExample sentence={currentWord.example_sentence} word={currentWord.word} />
-                          </div>
-                          {currentWord.example_sentence_translation ? (
-                            <div className="mt-1.5 text-xs italic text-muted-foreground/60">
-                              {currentWord.example_sentence_translation}
-                            </div>
+                    hasAnswered ? (
+                      <AnsweredWordCard currentWord={currentWord} rating={session.pendingRating} />
+                    ) : (
+                      <div className="space-y-4 rounded-2xl border border-border/40 bg-card/50 p-5 backdrop-blur-sm">
+                        <div className="flex flex-wrap items-center gap-2">
+                          {currentWord.part_of_speech ? (
+                            <span className="rounded bg-primary/10 px-1.5 py-0.5 text-xs font-mono font-semibold text-primary">
+                              {currentWord.part_of_speech}
+                            </span>
                           ) : null}
+                          <span className="text-lg font-semibold">{currentWord.word}</span>
+                          <VocabularyPronunciationButton text={currentWord.word} />
                         </div>
-                      ) : null}
-                    </div>
+
+                        {currentWord.example_sentence ? (
+                          <div>
+                            <div className="mb-1 text-xs font-medium text-muted-foreground/70">例句</div>
+                            <div className="text-sm leading-relaxed">
+                              <HighlightedExample sentence={currentWord.example_sentence} word={currentWord.word} />
+                            </div>
+                            {currentWord.example_sentence_translation ? (
+                              <div className="mt-1.5 text-xs italic text-muted-foreground/60">
+                                {currentWord.example_sentence_translation}
+                              </div>
+                            ) : null}
+                          </div>
+                        ) : null}
+                      </div>
+                    )
                   ) : (
                     <div className="rounded-2xl border border-dashed p-4 text-center text-sm text-muted-foreground">
                       先自己回想英文，想好再翻開答案。
@@ -645,48 +658,8 @@ export function VocabularyStudyClient({
                 </div>
               ) : null}
 
-              {hasAnswered ? (
-                <div className="space-y-4 rounded-2xl border border-border/40 bg-card/50 p-5 backdrop-blur-sm">
-                  <p
-                    className={cn(
-                      "text-sm font-semibold",
-                      session.pendingRating === "easy"
-                        ? "text-emerald-700 dark:text-emerald-400"
-                        : "text-red-700 dark:text-red-400"
-                    )}
-                  >
-                    {session.pendingRating === "easy" ? "答對了 / 很熟" : session.pendingRating === "okay" ? "普通" : "需要再複習"}
-                  </p>
-
-                  <div className="flex flex-wrap items-center gap-2">
-                    {currentWord.part_of_speech ? (
-                      <span className="rounded bg-primary/10 px-1.5 py-0.5 text-xs font-mono font-semibold text-primary">
-                        {currentWord.part_of_speech}
-                      </span>
-                    ) : null}
-                    <span className="text-lg font-semibold">{currentWord.word}</span>
-                    <VocabularyPronunciationButton text={currentWord.word} />
-                  </div>
-
-                  {currentWord.example_sentence ? (
-                    <div>
-                      <div className="mb-1 text-xs font-medium text-muted-foreground/70">
-                        例句
-                      </div>
-                      <div className="text-sm leading-relaxed">
-                        <HighlightedExample
-                          sentence={currentWord.example_sentence}
-                          word={currentWord.word}
-                        />
-                      </div>
-                      {currentWord.example_sentence_translation ? (
-                        <div className="mt-1.5 text-xs italic text-muted-foreground/60">
-                          {currentWord.example_sentence_translation}
-                        </div>
-                      ) : null}
-                    </div>
-                  ) : null}
-                </div>
+              {hasAnswered && session.mode !== "flashcard" ? (
+                <AnsweredWordCard currentWord={currentWord} rating={session.pendingRating} />
               ) : null}
 
               {hasAnswered ? (
@@ -805,6 +778,55 @@ export function VocabularyStudyClient({
           )}
         </CardContent>
       </Card>
+    </div>
+  )
+}
+
+function AnsweredWordCard({
+  currentWord,
+  rating,
+}: {
+  currentWord: VocabularyQueueItem
+  rating: VocabularyReviewRating | null
+}) {
+  return (
+    <div className="space-y-4 rounded-2xl border border-border/40 bg-card/50 p-5 backdrop-blur-sm animate-in fade-in-0 slide-in-from-bottom-2 duration-200">
+      <p
+        className={cn(
+          "text-sm font-semibold",
+          rating === "easy"
+            ? "text-emerald-700 dark:text-emerald-400"
+            : rating === "okay"
+              ? "text-foreground"
+              : "text-red-700 dark:text-red-400"
+        )}
+      >
+        {rating === "easy" ? "答對了 / 很熟" : rating === "okay" ? "普通" : "需要再複習"}
+      </p>
+
+      <div className="flex flex-wrap items-center gap-2">
+        {currentWord.part_of_speech ? (
+          <span className="rounded bg-primary/10 px-1.5 py-0.5 text-xs font-mono font-semibold text-primary">
+            {currentWord.part_of_speech}
+          </span>
+        ) : null}
+        <span className="text-lg font-semibold">{currentWord.word}</span>
+        <VocabularyPronunciationButton text={currentWord.word} />
+      </div>
+
+      {currentWord.example_sentence ? (
+        <div>
+          <div className="mb-1 text-xs font-medium text-muted-foreground/70">例句</div>
+          <div className="text-sm leading-relaxed">
+            <HighlightedExample sentence={currentWord.example_sentence} word={currentWord.word} />
+          </div>
+          {currentWord.example_sentence_translation ? (
+            <div className="mt-1.5 text-xs italic text-muted-foreground/60">
+              {currentWord.example_sentence_translation}
+            </div>
+          ) : null}
+        </div>
+      ) : null}
     </div>
   )
 }
