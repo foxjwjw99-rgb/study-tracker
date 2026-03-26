@@ -33,12 +33,15 @@ export default async function LoginPage() {
   return (
     <div className="mx-auto flex min-h-screen max-w-6xl items-center px-4 py-10 sm:px-6 lg:px-8">
       <div className="grid w-full gap-6 lg:grid-cols-[1.1fr_0.9fr] lg:gap-8">
-        <section className="surface-subtle space-y-6 rounded-3xl p-6 sm:p-8">
-          <div className="inline-flex w-fit items-center gap-2 rounded-full bg-primary/10 px-3 py-1 text-sm font-medium text-primary">
+        <section className="surface-subtle relative space-y-6 overflow-hidden rounded-3xl p-6 sm:p-8">
+          {/* Decorative gradient blobs */}
+          <div className="pointer-events-none absolute -right-20 -top-20 h-56 w-56 rounded-full bg-primary/8 blur-3xl" />
+          <div className="pointer-events-none absolute -bottom-16 -left-16 h-48 w-48 rounded-full bg-secondary/20 blur-3xl" />
+          <div className="relative inline-flex w-fit items-center gap-2 rounded-full bg-primary/10 px-3 py-1 text-sm font-medium text-primary">
             <ShieldCheck className="h-4 w-4" />
             Study Tracker 安全登入
           </div>
-          <div className="space-y-3">
+          <div className="relative space-y-3">
             <h1 className="text-3xl font-semibold tracking-tight text-balance sm:text-4xl">
               先登入，再看你的 dashboard 與學習進度。
             </h1>
@@ -47,7 +50,7 @@ export default async function LoginPage() {
             </p>
           </div>
 
-          <div className="grid gap-3">
+          <div className="relative grid gap-3">
             {features.map((feature) => (
               <div key={feature.title} className="rounded-2xl border border-border/70 bg-background/85 p-4">
                 <div className="flex items-start gap-3">

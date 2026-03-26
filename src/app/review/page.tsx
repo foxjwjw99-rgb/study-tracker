@@ -20,10 +20,12 @@ export default async function ReviewPage() {
   const unresolvedWrongCount = wrongQs.filter((q) => q.status !== "已掌握").length
 
   return (
-    <div className="max-w-5xl space-y-6">
-      <div className="space-y-2">
-        <h1 className="text-3xl font-bold tracking-tight">複習與錯題</h1>
-        <p className="text-muted-foreground">先清逾期、再消今天、最後才開新題，節奏會穩很多。</p>
+    <div className="mx-auto max-w-6xl space-y-6 lg:space-y-8">
+      <div className="space-y-3">
+        <h1 className="text-3xl font-semibold tracking-tight sm:text-4xl">複習與錯題</h1>
+        <p className="text-sm leading-7 text-muted-foreground sm:text-base">
+          先清逾期、再消今天、最後才開新題，節奏會穩很多。
+        </p>
         <div className="rounded-2xl border border-amber-500/20 bg-amber-500/5 px-4 py-3 text-sm text-amber-800 dark:text-amber-200">
           建議順序：<span className="font-semibold">逾期複習 → 今天到期 → 再看錯題狀態</span>
         </div>
@@ -47,7 +49,7 @@ export default async function ReviewPage() {
         </Card>
       ) : null}
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
         <Card>
           <CardHeader>
             <CardTitle>今日複習任務</CardTitle>
@@ -55,7 +57,10 @@ export default async function ReviewPage() {
           </CardHeader>
           <CardContent>
             {reviews.length === 0 ? (
-              <div className="text-center text-sm text-muted-foreground py-4">目前沒有待複習任務！太棒了。</div>
+              <div className="rounded-2xl border border-dashed border-border bg-background/60 px-5 py-8 text-center">
+                <p className="text-sm font-medium text-foreground">目前沒有待複習任務！太棒了。</p>
+                <p className="mt-1 text-xs text-muted-foreground">所有複習都已完成，繼續保持。</p>
+              </div>
             ) : (
               <div className="space-y-5">
                 {overdueReviews.length > 0 ? (
@@ -103,11 +108,14 @@ export default async function ReviewPage() {
           </CardHeader>
           <CardContent>
             {wrongQs.length === 0 ? (
-              <div className="text-center text-sm text-muted-foreground py-4">目前沒有錯題紀錄。</div>
+              <div className="rounded-2xl border border-dashed border-border bg-background/60 px-5 py-8 text-center">
+                <p className="text-sm font-medium text-foreground">目前沒有錯題紀錄。</p>
+                <p className="mt-1 text-xs text-muted-foreground">做練習題後，答錯的會自動出現在這裡。</p>
+              </div>
             ) : (
-              <div className="space-y-4">
+              <div className="space-y-3">
                 {wrongQs.map((q: WrongQuestionItem) => (
-                  <div key={q.id} className="border p-4 rounded-md space-y-3">
+                  <div key={q.id} className="rounded-xl border border-border/70 bg-background/70 p-4 space-y-3">
                     <div className="min-w-0">
                       <div className="flex flex-col gap-2 font-semibold sm:flex-row sm:items-center sm:justify-between">
                         <span className="break-words">{q.subject.name} - {q.topic}</span>
@@ -115,13 +123,13 @@ export default async function ReviewPage() {
                           {q.status}
                         </Badge>
                       </div>
-                      <div className="text-sm text-muted-foreground mt-1">
+                      <div className="mt-1 text-sm text-muted-foreground">
                         首錯日期：{format(q.first_wrong_date, "PP")}
-                        {q.error_reason && ` • 原因：${q.error_reason}`}
+                        {q.error_reason && ` · 原因：${q.error_reason}`}
                       </div>
                       {q.notes && <div className="mt-2 break-words text-sm text-muted-foreground">{q.notes}</div>}
                     </div>
-                    
+
                     <div className="flex flex-col gap-2 sm:flex-row sm:justify-end">
                       {q.status === '未訂正' && (
                         <form action={async () => {
@@ -163,7 +171,7 @@ function SummaryCard({
   tone?: "default" | "warning"
 }) {
   return (
-    <div className="rounded-2xl border border-border/70 bg-background/75 p-4">
+    <div className="rounded-2xl border border-border/70 bg-background/75 p-5">
       <p className="text-sm font-medium text-muted-foreground">{label}</p>
       <p
         className={
@@ -213,7 +221,7 @@ function ReviewTaskCard({
           )}
         </div>
         <div className="mt-1 text-sm text-muted-foreground">
-          階段：第 {task.review_stage} 天 • 預定：{format(task.review_date, "PP")}
+          階段：第 {task.review_stage} 天 · 預定：{format(task.review_date, "PP")}
         </div>
         {task.source_type === "vocabulary" && task.vocabulary_word ? (
           <VocabularyReviewTaskControls
