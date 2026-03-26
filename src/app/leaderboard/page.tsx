@@ -137,9 +137,12 @@ export default async function LeaderboardPage({
                   <div className="flex items-center gap-4">
                     <div className={cn(
                       "flex h-12 w-12 items-center justify-center rounded-2xl text-lg font-semibold",
-                      entry.rank <= 3 ? "bg-primary/12 text-primary" : "bg-muted text-foreground"
+                      entry.rank === 1 && "bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300",
+                      entry.rank === 2 && "bg-slate-100 text-slate-600 dark:bg-slate-800/40 dark:text-slate-300",
+                      entry.rank === 3 && "bg-orange-100 text-orange-700 dark:bg-orange-900/40 dark:text-orange-300",
+                      entry.rank > 3 && "bg-muted text-foreground"
                     )}>
-                      #{entry.rank}
+                      {entry.rank <= 3 ? ["", "🥇", "🥈", "🥉"][entry.rank] : `#${entry.rank}`}
                     </div>
                     <div>
                       <div className="flex flex-wrap items-center gap-2">
