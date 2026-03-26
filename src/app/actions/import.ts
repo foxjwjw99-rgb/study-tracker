@@ -56,8 +56,19 @@ export async function importQuestions(
     dbSubjects.map((subject) => [subject.name, subject.id])
   )
 
+  const MAX_SUBJECTS_PER_USER = 200
   const uniqueImportSubjects = Array.from(new Set(questions.map((q) => q.subject)))
   const missingSubjects = uniqueImportSubjects.filter((sub) => !subjectMap.has(sub))
+
+  if (dbSubjects.length + missingSubjects.length > MAX_SUBJECTS_PER_USER) {
+    return {
+      success: false,
+      message: `科目數量已達上限（${MAX_SUBJECTS_PER_USER} 個），請先刪除不需要的科目再匯入。`,
+      validCount: 0,
+      duplicateCount: 0,
+      errorCount: questions.length,
+    }
+  }
 
   if (missingSubjects.length > 0) {
     try {
@@ -94,7 +105,7 @@ export async function importQuestions(
   })
 
   const existingQuestionsSet = new Set(
-    dbQuestions.map((q) => `${q.subject_id}::${q.question}`)
+    dbQuestions.map((q) => JSON.stringify([q.subject_id, q.question]))
   )
 
   const newQuestionsData = []
@@ -106,7 +117,7 @@ export async function importQuestions(
       continue
     }
 
-    const dedupKey = `${subjectId}::${q.question}`
+    const dedupKey = JSON.stringify([subjectId, q.question])
     if (existingQuestionsSet.has(dedupKey)) {
       duplicateCount += 1
       continue

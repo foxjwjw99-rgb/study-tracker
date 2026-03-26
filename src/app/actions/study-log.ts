@@ -38,6 +38,11 @@ export async function createStudyLog(data: {
   source_type?: string
   notes?: string
 }) {
+  const MAX_DURATION_MINUTES = 720 // 12 hours cap per session
+  if (data.duration_minutes < 1 || data.duration_minutes > MAX_DURATION_MINUTES) {
+    throw new Error(`每次學習時間必須介於 1 至 ${MAX_DURATION_MINUTES} 分鐘之間。`)
+  }
+
   const user = await getCurrentUserOrThrow()
   const subject = await prisma.subject.findFirst({
     where: {
@@ -52,6 +57,7 @@ export async function createStudyLog(data: {
   const log = await prisma.studyLog.create({
     data: {
       ...data,
+      duration_minutes: Math.min(data.duration_minutes, MAX_DURATION_MINUTES),
       source_type: data.source_type ?? "manual",
       user_id: user.id,
     },

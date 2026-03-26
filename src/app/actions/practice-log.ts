@@ -193,7 +193,8 @@ export async function getPracticeQuestions(
         shared_study_group_id: question.shared_study_group_id,
         shared_study_group_name: question.shared_study_group?.name ?? null,
       }]
-    } catch {
+    } catch (e) {
+      console.error(`[getPracticeQuestions] Failed to parse options for question ${question.id}:`, e)
       return []
     }
   })
