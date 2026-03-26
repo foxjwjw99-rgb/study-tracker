@@ -6,7 +6,6 @@ import { toast } from "sonner"
 import {
   Bell,
   BellRing,
-  BookOpen,
   CheckCircle2,
   Coffee,
   Pause,
@@ -546,38 +545,32 @@ export function StudyLogForm({
 
   return (
     <div className="space-y-6">
-      <div className="grid gap-4 xl:grid-cols-[1.25fr_0.75fr]">
-        <div className="surface-subtle p-4 sm:p-5">
-          <Tabs value={mode} onValueChange={(value) => setMode(value as Mode)}>
-            <TabsList className="mb-4 rounded-2xl bg-muted/70 p-1">
-              <TabsTrigger value="focus" className="rounded-xl px-4">專注計時</TabsTrigger>
-              <TabsTrigger value="manual" className="rounded-xl px-4">手動補登</TabsTrigger>
-            </TabsList>
+      <div className="surface-subtle p-4 sm:p-5">
+        <Tabs value={mode} onValueChange={(value) => setMode(value as Mode)}>
+          <TabsList className="mb-4 rounded-2xl bg-muted/70 p-1">
+            <TabsTrigger value="focus" className="rounded-xl px-4">專注計時</TabsTrigger>
+            <TabsTrigger value="manual" className="rounded-xl px-4">手動補登</TabsTrigger>
+          </TabsList>
 
-            <TabsContent value="focus" className="space-y-5">
-              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                <div>
-                  <h3 className="text-lg font-semibold tracking-tight">專注計時器</h3>
-                  <p className="text-sm text-muted-foreground">以 session 為主。切到背景也會自動校正時間，重整後也能恢復。</p>
-                </div>
-                <div className="flex flex-wrap gap-2">
-                  <Badge variant="secondary">今天已累積 {todayStudyMinutes} 分鐘</Badge>
-                  <Badge variant="outline">已完成 {completedPomodoros} 顆番茄</Badge>
-                  <Badge variant="outline">
-                    {notificationPermission === "granted" ? <BellRing className="h-3 w-3" /> : <Bell className="h-3 w-3" />}
-                    {notificationPermission === "granted" ? "已開提醒" : "可開提醒"}
-                  </Badge>
-                </div>
-              </div>
+          <TabsContent value="focus" className="space-y-5">
+            <div className="flex flex-wrap items-center gap-2">
+              <Badge variant="secondary">已累積 {todayStudyMinutes} 分鐘</Badge>
+              <Badge variant="outline">{completedPomodoros} 顆番茄</Badge>
+              <Badge variant="outline">
+                {notificationPermission === "granted" ? <BellRing className="h-3 w-3" /> : <Bell className="h-3 w-3" />}
+                {notificationPermission === "granted" ? "已開提醒" : "可開提醒"}
+              </Badge>
+            </div>
 
-              <div className="grid gap-4 lg:grid-cols-[1.1fr_0.9fr]">
+            <div className="space-y-4">
+                {/* Timer */}
                 <div className="rounded-3xl border border-border/70 bg-card/90 p-5 sm:p-6">
                   <div className="flex items-center justify-between">
                     <Badge variant={phase === "focus" ? "default" : "secondary"}>
                       {phase === "focus" ? "專注中" : "休息中"}
                     </Badge>
                     <span className="text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">
-                      模式 {currentPresetLabel}
+                      {currentPresetLabel}
                     </span>
                   </div>
 
@@ -587,8 +580,8 @@ export function StudyLogForm({
                     </div>
                     <p className="mt-2 text-sm text-muted-foreground">
                       {phase === "focus"
-                        ? `這輪專注 ${timerSettings.focusMinutes} 分鐘`
-                        : `休息 ${timerSettings.breakMinutes} 分鐘，等等再回來`}
+                        ? `專注 ${timerSettings.focusMinutes} 分鐘 · 已累積 ${sessionMinutes} 分鐘`
+                        : `休息 ${timerSettings.breakMinutes} 分鐘`}
                     </p>
                   </div>
 
@@ -611,52 +604,65 @@ export function StudyLogForm({
                       重設
                     </Button>
                   </div>
-
-                  <div className="mt-6 grid gap-3 sm:grid-cols-2">
-                    <StatTile label="本次已專注" value={`${sessionMinutes} 分鐘`} icon={BookOpen} />
-                    <StatTile label="完成番茄" value={`${completedPomodoros} 顆`} icon={CheckCircle2} />
-                  </div>
                 </div>
 
-                <div className="space-y-4 rounded-3xl border border-border/70 bg-background/70 p-4 sm:p-5">
-                  <div>
-                    <h4 className="text-sm font-semibold text-foreground">番茄鐘設定</h4>
-                    <p className="mt-1 text-sm text-muted-foreground">先用預設就夠好；你想要也可以自訂節奏。</p>
-                  </div>
+                {/* Timer settings — collapsible */}
+                <details className="rounded-2xl border border-border/70 bg-background/70">
+                  <summary className="cursor-pointer px-4 py-3 text-sm font-medium text-foreground select-none">
+                    番茄鐘設定（目前 {currentPresetLabel}）
+                  </summary>
+                  <div className="space-y-3 border-t border-border/50 px-4 py-4">
+                    <div className="grid gap-2 sm:grid-cols-3">
+                      {POMODORO_PRESETS.map((preset, index) => (
+                        <button
+                          key={preset.label}
+                          type="button"
+                          disabled={isSessionConfigLocked}
+                          onClick={() => {
+                            setUseCustomPreset(false)
+                            setPresetIndex(index)
+                            if (!isRunning) {
+                              setPhase("focus")
+                              setRemainingSeconds(preset.focusMinutes * 60)
+                              setEndAt(null)
+                            }
+                          }}
+                          className={cn(
+                            "rounded-xl border px-3 py-2.5 text-left text-sm transition-all disabled:cursor-not-allowed disabled:opacity-50",
+                            !useCustomPreset && presetIndex === index
+                              ? "border-primary/40 bg-primary/10 text-primary"
+                              : "border-border/70 bg-background/80 hover:border-primary/20"
+                          )}
+                        >
+                          <span className="font-medium">{preset.label}</span>
+                        </button>
+                      ))}
+                    </div>
 
-                  <div className="grid gap-2 sm:grid-cols-3">
-                    {POMODORO_PRESETS.map((preset, index) => (
-                      <button
-                        key={preset.label}
-                        type="button"
-                        disabled={isSessionConfigLocked}
-                        onClick={() => {
-                          setUseCustomPreset(false)
-                          setPresetIndex(index)
-                          if (!isRunning) {
-                            setPhase("focus")
-                            setRemainingSeconds(preset.focusMinutes * 60)
-                            setEndAt(null)
-                          }
-                        }}
-                        className={cn(
-                          "rounded-2xl border px-3 py-3 text-left text-sm transition-all duration-200 disabled:cursor-not-allowed disabled:opacity-50",
-                          !useCustomPreset && presetIndex === index
-                            ? "border-primary/40 bg-primary/10 text-primary"
-                            : "border-border/70 bg-background/80 hover:border-primary/20 hover:bg-background"
-                        )}
-                      >
-                        <div className="font-medium">{preset.label}</div>
-                        <div className="mt-1 text-xs text-muted-foreground">{preset.focusMinutes} 分專注 / {preset.breakMinutes} 分休息</div>
-                      </button>
-                    ))}
-                  </div>
-
-                  <div className="rounded-2xl border border-border/70 bg-card/80 p-4">
-                    <div className="flex items-center justify-between gap-3">
-                      <div>
-                        <p className="text-sm font-medium text-foreground">自訂節奏</p>
-                        <p className="mt-1 text-xs text-muted-foreground">例如 40 / 8 或 60 / 10</p>
+                    <div className="flex flex-wrap items-end gap-3">
+                      <div className="space-y-1">
+                        <Label htmlFor="custom_focus" className="text-xs">專注</Label>
+                        <Input
+                          id="custom_focus"
+                          type="number"
+                          min="1"
+                          value={customFocusMinutes}
+                          onChange={(event) => setCustomFocusMinutes(event.target.value)}
+                          disabled={isSessionConfigLocked}
+                          className="h-9 w-20"
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <Label htmlFor="custom_break" className="text-xs">休息</Label>
+                        <Input
+                          id="custom_break"
+                          type="number"
+                          min="1"
+                          value={customBreakMinutes}
+                          onChange={(event) => setCustomBreakMinutes(event.target.value)}
+                          disabled={isSessionConfigLocked}
+                          className="h-9 w-20"
+                        />
                       </div>
                       <Button
                         type="button"
@@ -672,40 +678,17 @@ export function StudyLogForm({
                           }
                         }}
                       >
-                        使用自訂
+                        套用自訂
                       </Button>
                     </div>
-                    <div className="mt-3 grid grid-cols-2 gap-3">
-                      <div className="space-y-2">
-                        <Label htmlFor="custom_focus">專注分鐘</Label>
-                        <Input
-                          id="custom_focus"
-                          type="number"
-                          min="1"
-                          value={customFocusMinutes}
-                          onChange={(event) => setCustomFocusMinutes(event.target.value)}
-                          disabled={isSessionConfigLocked}
-                        />
-                      </div>
-                      <div className="space-y-2">
-                        <Label htmlFor="custom_break">休息分鐘</Label>
-                        <Input
-                          id="custom_break"
-                          type="number"
-                          min="1"
-                          value={customBreakMinutes}
-                          onChange={(event) => setCustomBreakMinutes(event.target.value)}
-                          disabled={isSessionConfigLocked}
-                        />
-                      </div>
-                    </div>
+
                     {isSessionConfigLocked ? (
-                      <p className="mt-3 text-xs leading-5 text-muted-foreground">
-                        這次 session 已經開始，番茄鐘設定先鎖定；如果要改節奏，先重設這輪再調整，避免時間被算亂。
+                      <p className="text-xs text-muted-foreground">
+                        Session 進行中，設定先鎖定。重設後才能調整。
                       </p>
                     ) : null}
                   </div>
-                </div>
+                </details>
               </div>
 
               <form ref={finishFormRef} action={handleFinishSession} className="space-y-4 rounded-3xl border border-border/70 bg-background/70 p-4 sm:p-5">
@@ -943,25 +926,6 @@ export function StudyLogForm({
             </TabsContent>
           </Tabs>
         </div>
-
-        <div className="space-y-4">
-          <div className="surface-subtle p-4 sm:p-5">
-            <h3 className="text-sm font-semibold text-foreground">這輪升級後你會感受到的事</h3>
-            <div className="mt-3 space-y-3 text-sm leading-6 text-muted-foreground">
-              <p>1. 切到背景或鎖屏回來，時間會自動校正。</p>
-              <p>2. 重整頁面後，番茄鐘 session 會自己恢復。</p>
-              <p>3. 專注 / 休息切換時會有 toast、提示音與瀏覽器通知。</p>
-            </div>
-          </div>
-
-          <div className="surface-subtle p-4 sm:p-5">
-            <h3 className="text-sm font-semibold text-foreground">提醒</h3>
-            <p className="mt-2 text-sm leading-6 text-muted-foreground">
-              iPhone 上建議用 Safari 開，第一次按開始時允許通知；加入主畫面後，用起來會更像真正的讀書 app。
-            </p>
-          </div>
-        </div>
-      </div>
     </div>
   )
 }
@@ -980,26 +944,6 @@ function SubmitButton({
       <Icon className="h-4 w-4" />
       {pending ? "儲存中..." : label}
     </Button>
-  )
-}
-
-function StatTile({
-  label,
-  value,
-  icon: Icon,
-}: {
-  label: string
-  value: string
-  icon: typeof BookOpen
-}) {
-  return (
-    <div className="rounded-2xl border border-border/70 bg-background/80 p-4">
-      <div className="flex items-center justify-between gap-2">
-        <p className="text-sm text-muted-foreground">{label}</p>
-        <Icon className="h-4 w-4 text-muted-foreground" />
-      </div>
-      <p className="mt-2 text-2xl font-semibold tracking-tight text-foreground">{value}</p>
-    </div>
   )
 }
 
