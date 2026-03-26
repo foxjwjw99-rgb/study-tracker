@@ -138,12 +138,13 @@ function getEasyInterval(currentIntervalDays: number, easeFactor: number, review
   return Math.max(1, currentIntervalDays * easeFactor)
 }
 
-function getOkayInterval(currentIntervalDays: number, _easeFactor: number, reviewCount: number) {
+function getOkayInterval(currentIntervalDays: number, easeFactor: number, reviewCount: number) {
   if (reviewCount === 0 || currentIntervalDays <= 0) {
     return 1
   }
 
-  return Math.max(1, currentIntervalDays)
+  // Grow at ~75% the rate of "easy" to reward continued review without stalling
+  return Math.max(1, currentIntervalDays * easeFactor * 0.75)
 }
 
 function getElapsedDays(lastReviewedAt: Date | null, now: Date, fallback: number) {
