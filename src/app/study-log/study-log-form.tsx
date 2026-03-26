@@ -80,6 +80,7 @@ export function StudyLogForm({
 
   const [mode, setMode] = useState<Mode>("focus")
   const [selectedSubjectId, setSelectedSubjectId] = useState(subjects[0]?.id ?? "")
+  const [manualSubjectId, setManualSubjectId] = useState("")
   const [topic, setTopic] = useState("")
   const [studyType, setStudyType] = useState<(typeof STUDY_TYPES)[number]>("看書")
   const [focusScore, setFocusScore] = useState("4")
@@ -842,9 +843,11 @@ export function StudyLogForm({
                 <div className="grid gap-4 sm:grid-cols-2">
                   <div className="space-y-2">
                     <Label htmlFor="manual_subject">科目</Label>
-                    <Select name="subject_id" required>
+                    <Select name="subject_id" value={manualSubjectId} onValueChange={(value) => setManualSubjectId(value ?? "")} required>
                       <SelectTrigger id="manual_subject" className="h-11 w-full rounded-2xl bg-background/85 px-3">
-                        <SelectValue placeholder="選擇科目" />
+                        <SelectValue placeholder="選擇科目">
+                          {subjects.find((s) => s.id === manualSubjectId)?.name}
+                        </SelectValue>
                       </SelectTrigger>
                       <SelectContent>
                         {subjects.map((subject) => (
