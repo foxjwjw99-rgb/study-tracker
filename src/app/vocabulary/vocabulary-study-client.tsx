@@ -493,7 +493,7 @@ export function VocabularyStudyClient({
           <div className="relative mx-auto flex w-full max-w-lg items-center gap-3 px-5 pt-[max(1.5rem,env(safe-area-inset-top))]">
             <button
               type="button"
-              onClick={endSession}
+              onClick={() => endSession()}
               className="rounded-full p-2 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
               aria-label="結束練習"
             >
