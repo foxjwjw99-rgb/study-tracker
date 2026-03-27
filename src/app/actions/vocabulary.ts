@@ -425,6 +425,42 @@ function toVocabularyQueueItem(word: VocabularyWordItem): VocabularyQueueItem {
   }
 }
 
+export async function recordVocabularySessionStudyLog(
+  subjectId: string,
+  durationMinutes: number,
+  reviewedCount: number
+): Promise<void> {
+  const MAX_DURATION_MINUTES = 720
+  const clampedDuration = Math.min(Math.max(1, Math.round(durationMinutes)), MAX_DURATION_MINUTES)
+
+  const user = await getCurrentUserOrThrow()
+  const subject = await prisma.subject.findFirst({
+    where: { id: subjectId, user_id: user.id },
+    select: { id: true },
+  })
+
+  if (!subject) {
+    return
+  }
+
+  await prisma.studyLog.create({
+    data: {
+      user_id: user.id,
+      subject_id: subjectId,
+      topic: `英文單字複習（${reviewedCount} 個）`,
+      study_date: new Date(),
+      duration_minutes: clampedDuration,
+      study_type: "複習",
+      focus_score: 3,
+      planned_done: true,
+      source_type: "vocabulary_review",
+    },
+  })
+
+  revalidatePath("/study-log")
+  revalidatePath("/dashboard")
+}
+
 export async function deleteVocabularyWord(id: string): Promise<void> {
   const user = await getCurrentUserOrThrow()
 
