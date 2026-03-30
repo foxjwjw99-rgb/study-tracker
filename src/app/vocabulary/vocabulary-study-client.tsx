@@ -543,7 +543,7 @@ export function VocabularyStudyClient({
                             </span>
                           ) : null}
                           <span className="text-lg font-semibold">{currentWord.word}</span>
-                          <VocabularyPronunciationButton text={currentWord.word} />
+                          <VocabularyPronunciationButton text={currentWord.word} showPhonetic />
                         </div>
 
                         {currentWord.example_sentence ? (
@@ -800,6 +800,7 @@ export function VocabularyStudyClient({
                         size="sm"
                         variant="ghost"
                         className="h-7 px-2"
+                        showPhonetic
                       />
                     </div>
                     <div className="text-sm text-muted-foreground">{word.meaning}</div>
@@ -885,7 +886,7 @@ function AnsweredWordCard({
           </span>
         ) : null}
         <span className="text-lg font-semibold">{currentWord.word}</span>
-        <VocabularyPronunciationButton text={currentWord.word} />
+        <VocabularyPronunciationButton text={currentWord.word} showPhonetic />
       </div>
 
       {currentWord.example_sentence ? (

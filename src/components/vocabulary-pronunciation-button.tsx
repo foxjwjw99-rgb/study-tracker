@@ -12,6 +12,70 @@ type VocabularyPronunciationButtonProps = {
   size?: "sm" | "default"
   variant?: "outline" | "ghost" | "secondary"
   className?: string
+  showPhonetic?: boolean
+}
+
+type PhoneticResult = {
+  audioUrl: string | null
+  phonetic: string | null
+}
+
+// Cache to avoid repeated API calls for the same word
+const phoneticCache = new Map<string, PhoneticResult>()
+
+async function fetchDictionaryPhonetic(word: string): Promise<PhoneticResult> {
+  const key = word.toLowerCase()
+  if (phoneticCache.has(key)) {
+    return phoneticCache.get(key)!
+  }
+
+  try {
+    const res = await fetch(
+      `https://api.dictionaryapi.dev/api/v2/entries/en/${encodeURIComponent(key)}`
+    )
+    if (!res.ok) {
+      phoneticCache.set(key, { audioUrl: null, phonetic: null })
+      return { audioUrl: null, phonetic: null }
+    }
+    const data = await res.json()
+    const entry = data[0]
+    if (!entry) {
+      phoneticCache.set(key, { audioUrl: null, phonetic: null })
+      return { audioUrl: null, phonetic: null }
+    }
+
+    const phonetics: Array<{ text?: string; audio?: string }> = entry.phonetics ?? []
+    // Prefer a phonetic entry that has both audio and text; fall back to audio-only or text-only
+    const withBoth = phonetics.find((p) => p.audio?.trim() && p.text?.trim())
+    const withAudio = phonetics.find((p) => p.audio?.trim())
+    const withText = phonetics.find((p) => p.text?.trim())
+
+    const best = withBoth ?? withAudio
+    const result: PhoneticResult = {
+      audioUrl: best?.audio ?? null,
+      phonetic: withBoth?.text ?? withText?.text ?? null,
+    }
+    phoneticCache.set(key, result)
+    return result
+  } catch {
+    phoneticCache.set(key, { audioUrl: null, phonetic: null })
+    return { audioUrl: null, phonetic: null }
+  }
+}
+
+function getVoicesAsync(synthesis: SpeechSynthesis): Promise<SpeechSynthesisVoice[]> {
+  return new Promise((resolve) => {
+    const voices = synthesis.getVoices()
+    if (voices.length > 0) {
+      resolve(voices)
+      return
+    }
+    const onVoicesChanged = () => {
+      synthesis.removeEventListener("voiceschanged", onVoicesChanged)
+      resolve(synthesis.getVoices())
+    }
+    synthesis.addEventListener("voiceschanged", onVoicesChanged)
+  })
 }
 
 export function VocabularyPronunciationButton({
@@ -20,8 +84,10 @@ export function VocabularyPronunciationButton({
   size = "sm",
   variant = "outline",
   className,
+  showPhonetic = false,
 }: VocabularyPronunciationButtonProps) {
   const utteranceRef = useRef<SpeechSynthesisUtterance | null>(null)
+  const audioRef = useRef<HTMLAudioElement | null>(null)
   const [supportsSpeech] = useState(
     () =>
       typeof window !== "undefined" &&
@@ -29,41 +95,30 @@ export function VocabularyPronunciationButton({
       typeof window.SpeechSynthesisUtterance !== "undefined"
   )
   const [isSpeaking, setIsSpeaking] = useState(false)
+  const [phonetic, setPhonetic] = useState<string | null>(null)
+
+  const isSingleWord = !text.trim().includes(" ")
+
+  // Prefetch phonetic for single words
+  useEffect(() => {
+    if (!isSingleWord || !showPhonetic) return
+    fetchDictionaryPhonetic(text.trim()).then((result) => {
+      setPhonetic(result.phonetic)
+    })
+  }, [text, isSingleWord, showPhonetic])
 
   useEffect(() => {
     return () => {
       if (utteranceRef.current && typeof window !== "undefined" && "speechSynthesis" in window) {
         window.speechSynthesis.cancel()
       }
+      if (audioRef.current) {
+        audioRef.current.pause()
+      }
     }
   }, [])
 
-  const getVoicesAsync = (synthesis: SpeechSynthesis): Promise<SpeechSynthesisVoice[]> => {
-    return new Promise((resolve) => {
-      const voices = synthesis.getVoices()
-      if (voices.length > 0) {
-        resolve(voices)
-        return
-      }
-      const onVoicesChanged = () => {
-        synthesis.removeEventListener("voiceschanged", onVoicesChanged)
-        resolve(synthesis.getVoices())
-      }
-      synthesis.addEventListener("voiceschanged", onVoicesChanged)
-    })
-  }
-
-  const handleSpeak = async () => {
-    if (!supportsSpeech) {
-      toast.error("這個瀏覽器目前不支援內建語音。")
-      return
-    }
-
-    const trimmedText = text.trim()
-    if (!trimmedText) {
-      return
-    }
-
+  const speakWithSynthesis = async (trimmedText: string) => {
     const synthesis = window.speechSynthesis
     synthesis.cancel()
 
@@ -94,17 +149,65 @@ export function VocabularyPronunciationButton({
     synthesis.speak(utterance)
   }
 
+  const handleSpeak = async () => {
+    if (!supportsSpeech) {
+      toast.error("這個瀏覽器目前不支援內建語音。")
+      return
+    }
+
+    const trimmedText = text.trim()
+    if (!trimmedText) return
+
+    // For single words, try real dictionary audio first
+    if (isSingleWord) {
+      const { audioUrl, phonetic: fetchedPhonetic } = await fetchDictionaryPhonetic(trimmedText)
+
+      if (showPhonetic && fetchedPhonetic) {
+        setPhonetic(fetchedPhonetic)
+      }
+
+      if (audioUrl) {
+        if (audioRef.current) {
+          audioRef.current.pause()
+        }
+        const audio = new Audio(audioUrl)
+        audioRef.current = audio
+        audio.playbackRate = 0.9
+        setIsSpeaking(true)
+        audio.onended = () => setIsSpeaking(false)
+        audio.onerror = async () => {
+          // Fall back to synthesis if audio file fails
+          await speakWithSynthesis(trimmedText)
+        }
+        try {
+          await audio.play()
+        } catch {
+          await speakWithSynthesis(trimmedText)
+        }
+        return
+      }
+    }
+
+    // Sentences or words without dictionary audio → use synthesis
+    await speakWithSynthesis(trimmedText)
+  }
+
   return (
-    <Button
-      type="button"
-      size={size}
-      variant={variant}
-      onClick={handleSpeak}
-      disabled={!supportsSpeech}
-      className={className}
-    >
-      {isSpeaking ? <Languages className="mr-2 h-4 w-4" /> : <Volume2 className="mr-2 h-4 w-4" />}
-      {isSpeaking ? "播放中..." : label}
-    </Button>
+    <span className="inline-flex items-center gap-1.5">
+      <Button
+        type="button"
+        size={size}
+        variant={variant}
+        onClick={handleSpeak}
+        disabled={!supportsSpeech}
+        className={className}
+      >
+        {isSpeaking ? <Languages className="mr-2 h-4 w-4" /> : <Volume2 className="mr-2 h-4 w-4" />}
+        {isSpeaking ? "播放中..." : label}
+      </Button>
+      {showPhonetic && phonetic ? (
+        <span className="text-xs text-muted-foreground">{phonetic}</span>
+      ) : null}
+    </span>
   )
 }
