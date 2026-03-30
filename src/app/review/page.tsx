@@ -14,7 +14,7 @@ export default async function ReviewPage() {
   const wrongQs = await getWrongQuestions()
   const today = startOfDay(new Date())
   const overdueReviews = reviews.filter((task) => differenceInCalendarDays(today, new Date(task.review_date)) > 0)
-  const dueTodayReviews = reviews.filter((task) => differenceInCalendarDays(today, new Date(task.review_date)) <= 0)
+  const dueTodayReviews = reviews.filter((task) => differenceInCalendarDays(today, new Date(task.review_date)) === 0)
   const overdueCount = overdueReviews.length
   const todayCount = dueTodayReviews.length
   const unresolvedWrongCount = wrongQs.filter((q) => q.status !== "已掌握").length

@@ -162,6 +162,7 @@ export async function getStudyLeaderboardData(input?: {
         gte: range.start,
         lte: range.end,
       },
+      source_type: "timer",
     },
     _sum: {
       duration_minutes: true,
