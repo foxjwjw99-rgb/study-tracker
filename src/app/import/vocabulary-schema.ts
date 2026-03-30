@@ -1,6 +1,6 @@
 import { z } from "zod"
 
-export const VALID_POS = ["n.", "v.", "adj.", "adv.", "prep.", "conj.", "pron.", "interj.", "phrase"] as const
+export const VALID_POS = ["n.", "v.", "adj.", "adv.", "prep.", "conj.", "pron.", "interj.", "phrase", "常用搭配詞"] as const
 
 export const vocabularyItemSchema = z.object({
   subject: z.string().trim().min(1, "科目名稱不能為空"),

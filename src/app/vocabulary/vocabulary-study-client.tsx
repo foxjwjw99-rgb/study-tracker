@@ -538,7 +538,7 @@ export function VocabularyStudyClient({
                       <div className="space-y-4 rounded-2xl border border-border/40 bg-card/50 p-5 backdrop-blur-sm">
                         <div className="flex flex-wrap items-center gap-2">
                           {currentWord.part_of_speech ? (
-                            <span className="rounded bg-primary/10 px-1.5 py-0.5 text-xs font-mono font-semibold text-primary">
+                            <span className="rounded bg-primary/10 px-1.5 py-0.5 text-xs font-semibold text-primary">
                               {currentWord.part_of_speech}
                             </span>
                           ) : null}
@@ -790,7 +790,7 @@ export function VocabularyStudyClient({
                     <div className="flex flex-wrap items-center gap-2">
                       <div className="font-semibold">{word.word}</div>
                       {word.part_of_speech ? (
-                        <span className="rounded bg-primary/10 px-1.5 py-0.5 text-xs font-mono font-semibold text-primary">
+                        <span className="rounded bg-primary/10 px-1.5 py-0.5 text-xs font-semibold text-primary">
                           {word.part_of_speech}
                         </span>
                       ) : null}
@@ -880,7 +880,7 @@ function AnsweredWordCard({
 
       <div className="flex flex-wrap items-center gap-2">
         {currentWord.part_of_speech ? (
-          <span className="rounded bg-primary/10 px-1.5 py-0.5 text-xs font-mono font-semibold text-primary">
+          <span className="rounded bg-primary/10 px-1.5 py-0.5 text-xs font-semibold text-primary">
             {currentWord.part_of_speech}
           </span>
         ) : null}

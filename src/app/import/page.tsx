@@ -64,7 +64,7 @@ export default async function ImportPage() {
             <ul>
               <li><strong>subject</strong>, <strong>word</strong>, <strong>meaning</strong>, <strong>example_sentence</strong> 為必填。</li>
               <li><strong>part_of_speech</strong>、<strong>example_sentence_translation</strong> 為選填。</li>
-              <li><strong>part_of_speech</strong> 目前接受：<code>n.</code>、<code>v.</code>、<code>adj.</code>、<code>adv.</code>、<code>prep.</code>、<code>conj.</code>、<code>pron.</code>、<code>interj.</code>、<code>phrase</code>。</li>
+              <li><strong>part_of_speech</strong> 目前接受：<code>n.</code>、<code>v.</code>、<code>adj.</code>、<code>adv.</code>、<code>prep.</code>、<code>conj.</code>、<code>pron.</code>、<code>interj.</code>、<code>phrase</code>、<code>常用搭配詞</code>。</li>
               <li>同一使用者、同一科目、同一單字若已存在，匯入時會自動跳過。</li>
               <li>若選擇分享到讀書房，會把這批單字分發給目前房內成員；每個人的複習進度仍各自獨立。</li>
             </ul>
