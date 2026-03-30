@@ -118,7 +118,7 @@ export default async function PracticePage({
                         </div>
                         {log.notes && <div className="rounded-md bg-muted p-2 text-sm break-words">{log.notes}</div>}
 
-                        {log.total_questions > log.correct_questions && (
+                        {log.total_questions > log.correct_questions && log.source !== "共享題庫" && log.source !== "匯入題庫" && (
                           <form action={async () => {
                             "use server"
                             await addWrongQuestion({
