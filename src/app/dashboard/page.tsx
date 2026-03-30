@@ -56,7 +56,7 @@ const summaryCards = [
   {
     key: "review",
     label: "待複習數",
-    helper: "今天要處理",
+    helper: "含逾期未完成",
     icon: CalendarClock,
     accent: "text-amber-600",
   },

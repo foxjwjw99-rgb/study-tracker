@@ -133,6 +133,10 @@ export default async function PracticePage({
                             <Button variant="outline" size="sm" type="submit" className="w-full sm:w-auto">追蹤錯題</Button>
                           </form>
                         )}
+                        {log.total_questions > log.correct_questions &&
+                          (log.source === "共享題庫" || log.source === "匯入題庫") && (
+                            <p className="text-xs text-muted-foreground">錯題已自動排進複習</p>
+                          )}
                       </div>
 
                       <form action={async () => {
