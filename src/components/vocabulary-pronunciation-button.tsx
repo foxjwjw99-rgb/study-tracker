@@ -15,51 +15,47 @@ type VocabularyPronunciationButtonProps = {
   showPhonetic?: boolean
 }
 
-type PhoneticResult = {
-  audioUrl: string | null
-  phonetic: string | null
-}
+// Cache audio object URLs to avoid repeated API calls
+const audioUrlCache = new Map<string, string>()
 
-// Cache to avoid repeated API calls for the same word
-const phoneticCache = new Map<string, PhoneticResult>()
+// Cache IPA phonetics
+const phoneticCache = new Map<string, string | null>()
 
-async function fetchDictionaryPhonetic(word: string): Promise<PhoneticResult> {
+async function fetchPhonetic(word: string): Promise<string | null> {
   const key = word.toLowerCase()
-  if (phoneticCache.has(key)) {
-    return phoneticCache.get(key)!
-  }
+  if (phoneticCache.has(key)) return phoneticCache.get(key)!
 
   try {
     const res = await fetch(
       `https://api.dictionaryapi.dev/api/v2/entries/en/${encodeURIComponent(key)}`
     )
     if (!res.ok) {
-      phoneticCache.set(key, { audioUrl: null, phonetic: null })
-      return { audioUrl: null, phonetic: null }
+      phoneticCache.set(key, null)
+      return null
     }
     const data = await res.json()
-    const entry = data[0]
-    if (!entry) {
-      phoneticCache.set(key, { audioUrl: null, phonetic: null })
-      return { audioUrl: null, phonetic: null }
-    }
-
-    const phonetics: Array<{ text?: string; audio?: string }> = entry.phonetics ?? []
-    // Prefer a phonetic entry that has both audio and text; fall back to audio-only or text-only
-    const withBoth = phonetics.find((p) => p.audio?.trim() && p.text?.trim())
-    const withAudio = phonetics.find((p) => p.audio?.trim())
-    const withText = phonetics.find((p) => p.text?.trim())
-
-    const best = withBoth ?? withAudio
-    const result: PhoneticResult = {
-      audioUrl: best?.audio ?? null,
-      phonetic: withBoth?.text ?? withText?.text ?? null,
-    }
-    phoneticCache.set(key, result)
-    return result
+    const phonetics: Array<{ text?: string; audio?: string }> = data[0]?.phonetics ?? []
+    const phonetic = phonetics.find((p) => p.text?.trim())?.text ?? null
+    phoneticCache.set(key, phonetic)
+    return phonetic
   } catch {
-    phoneticCache.set(key, { audioUrl: null, phonetic: null })
-    return { audioUrl: null, phonetic: null }
+    phoneticCache.set(key, null)
+    return null
+  }
+}
+
+async function fetchTTSAudioUrl(text: string): Promise<string | null> {
+  if (audioUrlCache.has(text)) return audioUrlCache.get(text)!
+
+  try {
+    const res = await fetch(`/api/tts?text=${encodeURIComponent(text)}`)
+    if (!res.ok) return null
+    const blob = await res.blob()
+    const url = URL.createObjectURL(blob)
+    audioUrlCache.set(text, url)
+    return url
+  } catch {
+    return null
   }
 }
 
@@ -78,6 +74,36 @@ function getVoicesAsync(synthesis: SpeechSynthesis): Promise<SpeechSynthesisVoic
   })
 }
 
+async function speakWithSynthesis(text: string, onStart: () => void, onEnd: () => void) {
+  const synthesis = window.speechSynthesis
+  synthesis.cancel()
+
+  const voices = await getVoicesAsync(synthesis)
+  const enUSVoices = voices.filter((v) => v.lang === "en-US")
+  const matchedVoice =
+    enUSVoices.find((v) => v.name.includes("Aria")) ??
+    enUSVoices.find((v) => v.name.includes("Natural")) ??
+    enUSVoices.find((v) => v.name.includes("Google US English")) ??
+    enUSVoices.find((v) => v.name.includes("Online")) ??
+    enUSVoices[0] ??
+    voices.find((v) => v.lang.startsWith("en")) ??
+    null
+
+  const utterance = new window.SpeechSynthesisUtterance(text)
+  utterance.lang = matchedVoice?.lang ?? "en-US"
+  utterance.voice = matchedVoice
+  utterance.rate = 0.88
+  utterance.pitch = 1
+  utterance.onstart = onStart
+  utterance.onend = onEnd
+  utterance.onerror = () => {
+    onEnd()
+    toast.error("播放發音失敗，請稍後再試。")
+  }
+
+  synthesis.speak(utterance)
+}
+
 export function VocabularyPronunciationButton({
   text,
   label = "播放發音",
@@ -86,7 +112,6 @@ export function VocabularyPronunciationButton({
   className,
   showPhonetic = false,
 }: VocabularyPronunciationButtonProps) {
-  const utteranceRef = useRef<SpeechSynthesisUtterance | null>(null)
   const audioRef = useRef<HTMLAudioElement | null>(null)
   const [supportsSpeech] = useState(
     () =>
@@ -99,97 +124,60 @@ export function VocabularyPronunciationButton({
 
   const isSingleWord = !text.trim().includes(" ")
 
-  // Prefetch phonetic for single words
   useEffect(() => {
     if (!isSingleWord || !showPhonetic) return
-    fetchDictionaryPhonetic(text.trim()).then((result) => {
-      setPhonetic(result.phonetic)
-    })
+    fetchPhonetic(text.trim()).then(setPhonetic)
   }, [text, isSingleWord, showPhonetic])
 
   useEffect(() => {
     return () => {
-      if (utteranceRef.current && typeof window !== "undefined" && "speechSynthesis" in window) {
-        window.speechSynthesis.cancel()
-      }
       if (audioRef.current) {
         audioRef.current.pause()
+      }
+      if (typeof window !== "undefined" && "speechSynthesis" in window) {
+        window.speechSynthesis.cancel()
       }
     }
   }, [])
 
-  const speakWithSynthesis = async (trimmedText: string) => {
-    const synthesis = window.speechSynthesis
-    synthesis.cancel()
+  const handleSpeak = async () => {
+    const trimmedText = text.trim()
+    if (!trimmedText) return
 
-    const voices = await getVoicesAsync(synthesis)
-    const enUSVoices = voices.filter((v) => v.lang === "en-US")
-    const matchedVoice =
-      enUSVoices.find((v) => v.name.includes("Aria")) ??
-      enUSVoices.find((v) => v.name.includes("Natural")) ??
-      enUSVoices.find((v) => v.name.includes("Google US English")) ??
-      enUSVoices.find((v) => v.name.includes("Online")) ??
-      enUSVoices[0] ??
-      voices.find((v) => v.lang.startsWith("en")) ??
-      null
-
-    const utterance = new window.SpeechSynthesisUtterance(trimmedText)
-    utterance.lang = matchedVoice?.lang ?? "en-US"
-    utterance.voice = matchedVoice
-    utterance.rate = 0.88
-    utterance.pitch = 1
-    utterance.onstart = () => setIsSpeaking(true)
-    utterance.onend = () => setIsSpeaking(false)
-    utterance.onerror = () => {
-      setIsSpeaking(false)
-      toast.error("播放發音失敗，請稍後再試。")
+    if (audioRef.current) {
+      audioRef.current.pause()
     }
 
-    utteranceRef.current = utterance
-    synthesis.speak(utterance)
-  }
+    // Try Neural2 TTS first
+    const ttsUrl = await fetchTTSAudioUrl(trimmedText)
+    if (ttsUrl) {
+      const audio = new Audio(ttsUrl)
+      audioRef.current = audio
+      setIsSpeaking(true)
+      audio.onended = () => setIsSpeaking(false)
+      audio.onerror = async () => {
+        // Invalidate cache and fall back to synthesis
+        audioUrlCache.delete(trimmedText)
+        if (supportsSpeech) {
+          await speakWithSynthesis(trimmedText, () => setIsSpeaking(true), () => setIsSpeaking(false))
+        } else {
+          setIsSpeaking(false)
+        }
+      }
+      try {
+        await audio.play()
+      } catch {
+        setIsSpeaking(false)
+      }
+      return
+    }
 
-  const handleSpeak = async () => {
+    // Fall back to Web Speech API
     if (!supportsSpeech) {
       toast.error("這個瀏覽器目前不支援內建語音。")
       return
     }
-
-    const trimmedText = text.trim()
-    if (!trimmedText) return
-
-    // For single words, try real dictionary audio first
-    if (isSingleWord) {
-      const { audioUrl, phonetic: fetchedPhonetic } = await fetchDictionaryPhonetic(trimmedText)
-
-      if (showPhonetic && fetchedPhonetic) {
-        setPhonetic(fetchedPhonetic)
-      }
-
-      if (audioUrl) {
-        if (audioRef.current) {
-          audioRef.current.pause()
-        }
-        const audio = new Audio(audioUrl)
-        audioRef.current = audio
-        audio.playbackRate = 0.9
-        setIsSpeaking(true)
-        audio.onended = () => setIsSpeaking(false)
-        audio.onerror = async () => {
-          // Fall back to synthesis if audio file fails
-          await speakWithSynthesis(trimmedText)
-        }
-        try {
-          await audio.play()
-        } catch {
-          await speakWithSynthesis(trimmedText)
-        }
-        return
-      }
-    }
-
-    // Sentences or words without dictionary audio → use synthesis
-    await speakWithSynthesis(trimmedText)
+    await speakWithSynthesis(trimmedText, () => setIsSpeaking(true), () => setIsSpeaking(false))
   }
 
   return (
@@ -199,7 +187,6 @@ export function VocabularyPronunciationButton({
         size={size}
         variant={variant}
         onClick={handleSpeak}
-        disabled={!supportsSpeech}
         className={className}
       >
         {isSpeaking ? <Languages className="mr-2 h-4 w-4" /> : <Volume2 className="mr-2 h-4 w-4" />}
