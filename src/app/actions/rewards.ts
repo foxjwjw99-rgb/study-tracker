@@ -71,7 +71,8 @@ export async function getRewardsData(): Promise<RewardsData> {
 export async function performRewardDraw(): Promise<RewardDrawActionResult> {
   const user = await getCurrentUserOrThrow()
 
-  const result = await prisma.$transaction(async (tx) => {
+  const result = await prisma.$transaction(
+    async (tx) => {
     const [studyAgg, usedDraws] = await Promise.all([
       tx.studyLog.aggregate({
         where: {
@@ -116,7 +117,9 @@ export async function performRewardDraw(): Promise<RewardDrawActionResult> {
       reward,
       remainingDraws: availableDraws - 1,
     } satisfies RewardDrawActionResult
-  })
+  },
+  { isolationLevel: "Serializable" }
+  )
 
   revalidatePath("/rewards")
   revalidatePath("/dashboard")

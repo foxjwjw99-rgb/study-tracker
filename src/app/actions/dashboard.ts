@@ -181,6 +181,7 @@ export async function getDashboardData(): Promise<DashboardData> {
       where: { user_id: user.id },
       select: { study_date: true },
       orderBy: { study_date: "desc" },
+      take: 365,
     }),
     prisma.practiceLog.groupBy({
       by: ["subject_id"],

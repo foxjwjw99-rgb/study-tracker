@@ -6,6 +6,7 @@ import { endOfDay } from "date-fns"
 import { vocabularyImportSchema } from "@/app/import/vocabulary-schema"
 import { getCurrentUserOrThrow } from "@/lib/current-user"
 import prisma from "@/lib/prisma"
+import { VocabularyWordStatus } from "@prisma/client"
 import { applyVocabularyReview } from "@/lib/vocabulary-review"
 import {
   formatVocabularyStatus,
@@ -140,7 +141,7 @@ export async function importVocabularyWords(
           meaning: item.meaning.trim(),
           example_sentence: item.example_sentence.trim(),
           example_sentence_translation: item.example_sentence_translation?.trim() || null,
-          status: "NEW",
+          status: VocabularyWordStatus.NEW,
         })
       }
 
@@ -364,9 +365,9 @@ export async function updateVocabularyReviewStatus(
 }
 
 function buildStatusFilter(status: VocabularyStatusFilter, todayEnd: Date) {
-  if (status === "new") return { status: "NEW" }
-  if (status === "learning") return { status: "LEARNING" }
-  if (status === "familiar") return { status: "FAMILIAR" }
+  if (status === "new") return { status: VocabularyWordStatus.NEW }
+  if (status === "learning") return { status: VocabularyWordStatus.LEARNING }
+  if (status === "familiar") return { status: VocabularyWordStatus.FAMILIAR }
   if (status === "due") return { next_review_date: { lte: todayEnd } }
   return {}
 }

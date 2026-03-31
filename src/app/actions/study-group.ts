@@ -6,6 +6,7 @@ import { revalidatePath } from "next/cache"
 import { endOfDay, startOfDay, subDays } from "date-fns"
 
 import prisma from "@/lib/prisma"
+
 import { getCurrentUserOrThrow } from "@/lib/current-user"
 import type {
   ActionResult,
@@ -71,12 +72,19 @@ export async function joinStudyGroup(inviteCode: string): Promise<ActionResult> 
     return { success: true, message: `你已經在「${group.name}」裡了。` }
   }
 
-  await prisma.studyGroupMember.create({
-    data: {
-      study_group_id: group.id,
-      user_id: user.id,
-    },
-  })
+  try {
+    await prisma.studyGroupMember.create({
+      data: {
+        study_group_id: group.id,
+        user_id: user.id,
+      },
+    })
+  } catch (e) {
+    if (typeof e === "object" && e !== null && "code" in e && (e as { code: string }).code === "P2002") {
+      return { success: true, message: `你已經在「${group.name}」裡了。` }
+    }
+    throw e
+  }
 
   revalidatePath("/leaderboard")
   revalidatePath("/settings")
