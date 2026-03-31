@@ -1,10 +1,15 @@
 import { ImportClient } from "./import-client"
+import { QuestionManagementClient } from "./question-management-client"
 import { VocabularyImportClient } from "./vocabulary-import-client"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { getStudyGroupsForCurrentUser } from "@/app/actions/study-group"
+import { getPracticeQuestionBank } from "@/app/actions/practice-log"
 
 export default async function ImportPage() {
-  const studyGroups = await getStudyGroupsForCurrentUser()
+  const [studyGroups, questionBank] = await Promise.all([
+    getStudyGroupsForCurrentUser(),
+    getPracticeQuestionBank(),
+  ])
 
   return (
     <div className="max-w-4xl space-y-6">
@@ -16,6 +21,7 @@ export default async function ImportPage() {
       <Tabs defaultValue="questions" className="space-y-6">
         <TabsList className="w-full sm:w-auto">
           <TabsTrigger value="questions">練習題目</TabsTrigger>
+          <TabsTrigger value="manage">管理題目</TabsTrigger>
           <TabsTrigger value="vocabulary">英文單字</TabsTrigger>
         </TabsList>
 
@@ -44,6 +50,10 @@ export default async function ImportPage() {
               <li><strong>請直接貼原始 JSON</strong>；不要貼 base64、不要額外加引號。</li>
             </ul>
           </div>
+        </TabsContent>
+
+        <TabsContent value="manage" className="space-y-6">
+          <QuestionManagementClient questionBank={questionBank} />
         </TabsContent>
 
         <TabsContent value="vocabulary" className="space-y-6">
