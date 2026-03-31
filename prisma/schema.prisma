@@ -13,6 +13,12 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+enum VocabularyWordStatus {
+  NEW
+  LEARNING
+  FAMILIAR
+}
+
 model User {
   id            String    @id @default(cuid())
   name          String
@@ -172,6 +178,7 @@ model ReviewTask {
   updated_at DateTime @updatedAt
 
   @@index([user_id, review_date, completed])
+  @@index([user_id, subject_id])
 }
 
 model Question {
@@ -208,7 +215,7 @@ model VocabularyWord {
   meaning                     String
   example_sentence            String
   example_sentence_translation String? // 例句中文翻譯
-  status                      String   // NEW / LEARNING / FAMILIAR
+  status                      VocabularyWordStatus
   ease_factor      Float    @default(2.5)
   interval_days    Float    @default(0)
   review_count     Int      @default(0)
@@ -225,6 +232,8 @@ model VocabularyWord {
   updated_at DateTime @updatedAt
 
   @@unique([user_id, subject_id, word])
+  @@index([user_id, next_review_date])
+  @@index([user_id, status])
 }
 
 model VocabularyReviewLog {

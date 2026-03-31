@@ -36,12 +36,7 @@ export async function getQuestionsForManagement(
   topic?: string
 ): Promise<QuestionManagementItem[]> {
   const user = await getCurrentUserOrThrow()
-
-  const ownSubject = await prisma.subject.findFirst({
-    where: { OR: [{ id: subjectNameOrId, user_id: user.id }, { name: subjectNameOrId, user_id: user.id }] },
-    select: { name: true },
-  })
-  const normalizedSubjectName = ownSubject?.name ?? stripSharedSubjectPrefix(subjectNameOrId)
+  const normalizedSubjectName = await resolveSubjectName(user.id, subjectNameOrId)
 
   const questions = await prisma.question.findMany({
     where: {
@@ -64,22 +59,11 @@ export async function getQuestionsForManagement(
     orderBy: [{ topic: "asc" }, { created_at: "asc" }],
   })
 
-  return questions.map((q) => {
-    let options: string[] = []
-    try {
-      const parsed = JSON.parse(q.options) as unknown
-      if (Array.isArray(parsed) && parsed.every((o) => typeof o === "string")) {
-        options = parsed
-      }
-    } catch {
-      // ignore
-    }
-    return {
-      ...q,
-      options,
-      visibility: q.visibility === "study_group" ? "study_group" : "private",
-    }
-  })
+  return questions.map((q) => ({
+    ...q,
+    options: safeParseOptions(q.options),
+    visibility: q.visibility === "study_group" ? "study_group" : "private",
+  }))
 }
 
 export async function deleteQuestion(id: string) {
@@ -91,7 +75,7 @@ export async function deleteQuestion(id: string) {
 
   assertOwnedRecord(question, OWNERSHIP_ERROR_MESSAGE)
 
-  await prisma.question.delete({ where: { id } })
+  await prisma.question.delete({ where: { id, user_id: user.id } })
   revalidatePath("/import")
   revalidatePath("/practice")
 }
@@ -109,6 +93,7 @@ export async function getPracticeLogs(): Promise<PracticeLogListItem[]> {
       },
     },
     orderBy: { practice_date: "desc" },
+    take: 50,
   })
 }
 
@@ -179,12 +164,7 @@ export async function getPracticeQuestionTopics(
 ): Promise<{ topic: string; count: number }[]> {
   const user = await getCurrentUserOrThrow()
   const accessibleGroupIds = await getAccessibleStudyGroupIds(user.id)
-
-  const ownSubject = await prisma.subject.findFirst({
-    where: { OR: [{ id: subjectNameOrId, user_id: user.id }, { name: subjectNameOrId, user_id: user.id }] },
-    select: { name: true },
-  })
-  const normalizedSubjectName = ownSubject?.name ?? stripSharedSubjectPrefix(subjectNameOrId)
+  const normalizedSubjectName = await resolveSubjectName(user.id, subjectNameOrId)
 
   const questions = await prisma.question.findMany({
     where: {
@@ -212,20 +192,7 @@ export async function getPracticeQuestions(
   const user = await getCurrentUserOrThrow()
   const accessibleGroupIds = await getAccessibleStudyGroupIds(user.id)
 
-  const ownSubject = await prisma.subject.findFirst({
-    where: {
-      OR: [
-        { id: subjectNameOrId, user_id: user.id },
-        { name: subjectNameOrId, user_id: user.id },
-      ],
-    },
-    select: {
-      id: true,
-      name: true,
-    },
-  })
-
-  const normalizedSubjectName = ownSubject?.name ?? stripSharedSubjectPrefix(subjectNameOrId)
+  const normalizedSubjectName = await resolveSubjectName(user.id, subjectNameOrId)
   const practiceSubjectId = await ensureLocalSubjectId(user.id, normalizedSubjectName)
 
   const questions = await prisma.question.findMany({
@@ -250,31 +217,24 @@ export async function getPracticeQuestions(
   })
 
   const parsedQuestions: PracticeQuestionItem[] = questions.flatMap((question) => {
-    try {
-      const options = JSON.parse(question.options) as unknown
-      if (!Array.isArray(options) || options.some((option) => typeof option !== "string")) {
-        return []
-      }
+    const options = safeParseOptions(question.options)
+    if (options.length === 0) return []
 
-      return [{
-        id: createAnswerKey(question.id, practiceSubjectId),
-        source_question_id: question.id,
-        subject_id: practiceSubjectId,
-        subject_name: normalizedSubjectName,
-        topic: question.topic,
-        question: question.question,
-        options,
-        answer: question.answer,
-        explanation: question.explanation,
-        image_url: question.image_url,
-        visibility: question.visibility === "study_group" ? "study_group" : "private",
-        shared_study_group_id: question.shared_study_group_id,
-        shared_study_group_name: question.shared_study_group?.name ?? null,
-      }]
-    } catch (e) {
-      console.error(`[getPracticeQuestions] Failed to parse options for question ${question.id}:`, e)
-      return []
-    }
+    return [{
+      id: createAnswerKey(question.id, practiceSubjectId),
+      source_question_id: question.id,
+      subject_id: practiceSubjectId,
+      subject_name: normalizedSubjectName,
+      topic: question.topic,
+      question: question.question,
+      options,
+      answer: question.answer,
+      explanation: question.explanation,
+      image_url: question.image_url,
+      visibility: question.visibility === "study_group" ? "study_group" : "private",
+      shared_study_group_id: question.shared_study_group_id,
+      shared_study_group_name: question.shared_study_group?.name ?? null,
+    }]
   })
 
   shuffleInPlace(parsedQuestions)
@@ -371,7 +331,7 @@ export async function addWrongQuestion(data: {
 
   if (wq) {
     wq = await prisma.wrongQuestion.update({
-      where: { id: wq.id },
+      where: { id: wq.id, user_id: user.id },
       data: {
         updated_at: new Date(),
         notes: data.notes ? (wq.notes ? `${wq.notes}\n---\n${data.notes}` : data.notes) : wq.notes,
@@ -543,7 +503,7 @@ export async function submitPracticeQuestionSession(data: {
 
       if (wq) {
         wq = await tx.wrongQuestion.update({
-          where: { id: wq.id },
+          where: { id: wq.id, user_id: user.id },
           data: {
             updated_at: new Date(),
             notes: wq.notes ? `${wq.notes}\n---\n${newNotes}` : newNotes,
@@ -673,6 +633,14 @@ async function ensureLocalSubjectId(userId: string, subjectName: string) {
 
 function stripSharedSubjectPrefix(value: string) {
   return value.startsWith("shared:") ? value.slice("shared:".length) : value
+}
+
+async function resolveSubjectName(userId: string, subjectNameOrId: string): Promise<string> {
+  const ownSubject = await prisma.subject.findFirst({
+    where: { OR: [{ id: subjectNameOrId, user_id: userId }, { name: subjectNameOrId, user_id: userId }] },
+    select: { name: true },
+  })
+  return ownSubject?.name ?? stripSharedSubjectPrefix(subjectNameOrId)
 }
 
 function parseSourceQuestionId(questionId: string) {
