@@ -18,6 +18,84 @@ import type {
   PracticeQuestionSessionResult,
 } from "@/types"
 
+export type QuestionManagementItem = {
+  id: string
+  topic: string
+  question: string
+  options: string[]
+  answer: number
+  explanation: string | null
+  image_url: string | null
+  visibility: "private" | "study_group"
+  shared_study_group_id: string | null
+  created_at: Date
+}
+
+export async function getQuestionsForManagement(
+  subjectNameOrId: string,
+  topic?: string
+): Promise<QuestionManagementItem[]> {
+  const user = await getCurrentUserOrThrow()
+
+  const ownSubject = await prisma.subject.findFirst({
+    where: { OR: [{ id: subjectNameOrId, user_id: user.id }, { name: subjectNameOrId, user_id: user.id }] },
+    select: { name: true },
+  })
+  const normalizedSubjectName = ownSubject?.name ?? stripSharedSubjectPrefix(subjectNameOrId)
+
+  const questions = await prisma.question.findMany({
+    where: {
+      user_id: user.id,
+      subject: { name: normalizedSubjectName },
+      ...(topic ? { topic } : {}),
+    },
+    select: {
+      id: true,
+      topic: true,
+      question: true,
+      options: true,
+      answer: true,
+      explanation: true,
+      image_url: true,
+      visibility: true,
+      shared_study_group_id: true,
+      created_at: true,
+    },
+    orderBy: [{ topic: "asc" }, { created_at: "asc" }],
+  })
+
+  return questions.map((q) => {
+    let options: string[] = []
+    try {
+      const parsed = JSON.parse(q.options) as unknown
+      if (Array.isArray(parsed) && parsed.every((o) => typeof o === "string")) {
+        options = parsed
+      }
+    } catch {
+      // ignore
+    }
+    return {
+      ...q,
+      options,
+      visibility: q.visibility === "study_group" ? "study_group" : "private",
+    }
+  })
+}
+
+export async function deleteQuestion(id: string) {
+  const user = await getCurrentUserOrThrow()
+  const question = await prisma.question.findFirst({
+    where: { id, user_id: user.id },
+    select: { id: true },
+  })
+
+  assertOwnedRecord(question, OWNERSHIP_ERROR_MESSAGE)
+
+  await prisma.question.delete({ where: { id } })
+  revalidatePath("/import")
+  revalidatePath("/practice")
+}
+
 export async function getPracticeLogs(): Promise<PracticeLogListItem[]> {
   const user = await getCurrentUserOrThrow()
   return prisma.practiceLog.findMany({
