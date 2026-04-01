@@ -133,7 +133,6 @@
   body {
     @apply bg-background text-foreground;
     min-height: 100dvh;
-    padding-bottom: env(safe-area-inset-bottom);
     background-image:
       radial-gradient(circle at top, color-mix(in oklab, var(--primary) 9%, transparent) 0%, transparent 34%),
       radial-gradient(circle at 100% 0%, color-mix(in oklab, var(--secondary) 18%, transparent) 0%, transparent 22%);
