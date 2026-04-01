@@ -4,7 +4,7 @@ import type {
   User as PrismaUser,
 } from "../../node_modules/.prisma/client"
 
-export type Subject = Pick<PrismaSubject, "id" | "name" | "target_score">
+export type Subject = Pick<PrismaSubject, "id" | "name" | "target_score" | "exam_weight">
 
 export type SubjectDeletionImpact = {
   subjectId: string
@@ -428,6 +428,36 @@ export type VocabularyReviewLogItem = {
   ease_factor: number
   created_at: Date
 }
+
+// --- Exam Forecast ---
+
+export type UnitForecastItem = {
+  unitName: string
+  weight: number        // 0.0–1.0 (normalised within subject)
+  accuracy: number | null  // null = no practice data
+  isCovered: boolean
+  contribution: number  // weight × accuracy × 100
+}
+
+export type SubjectForecastItem = {
+  subjectId: string
+  subjectName: string
+  examWeight: number | null  // 0.0–1.0, null = not configured
+  targetScore: number        // from Subject.target_score (default 60 if unset)
+  estimatedScore: number     // 0–100
+  units: UnitForecastItem[]
+}
+
+export type ExamForecastData = {
+  isConfigured: boolean        // false if no syllabus units exist for this user
+  estimatedTotalScore: number  // 0–100 weighted total
+  targetTotalScore: number     // Σ(exam_weight × target_score)
+  probability: number          // 0–100 logistic estimate
+  subjectBreakdown: SubjectForecastItem[]
+  highRiskUnits: (UnitForecastItem & { subjectName: string })[]  // high weight, low accuracy
+}
+
+// --- end Exam Forecast ---
 
 export type QuestionVisibility = "private" | "study_group"
 

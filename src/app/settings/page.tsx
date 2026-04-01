@@ -5,14 +5,32 @@ import { ExamDateForm } from "./exam-date-form"
 import { SubjectsList } from "./subjects-list"
 import { UserManagement } from "./user-management"
 import { StudyGroupManagement } from "./study-group-management"
+import { ExamSyllabusManager } from "./exam-syllabus-manager"
 import { getStudyGroupsForCurrentUser } from "@/app/actions/study-group"
 import { resolveCurrentUserContext, toCurrentUserSummary } from "@/lib/current-user"
+import prisma from "@/lib/prisma"
 
 export default async function SettingsPage() {
   const { user } = await resolveCurrentUserContext()
   const currentUser = toCurrentUserSummary(user)
   const subjects = await getSubjects()
   const studyGroups = await getStudyGroupsForCurrentUser()
+
+  // Fetch subjects with their syllabus units for the syllabus manager
+  const subjectsWithUnits = await prisma.subject.findMany({
+    where: { user_id: user.id },
+    orderBy: { created_at: "desc" },
+    select: {
+      id: true,
+      name: true,
+      target_score: true,
+      exam_weight: true,
+      exam_syllabus_units: {
+        select: { id: true, unit_name: true, weight: true },
+        orderBy: { unit_name: "asc" },
+      },
+    },
+  })
 
   return (
     <div className="max-w-4xl space-y-6">
@@ -54,6 +72,18 @@ export default async function SettingsPage() {
               <SubjectsList subjects={subjects} />
             </div>
           </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>考試範圍與單元設定</CardTitle>
+          <CardDescription>
+            設定各科的考試範圍（單元名稱需與練習紀錄的主題相同），並填入各科佔總分比重與目標分數，系統將自動計算預估通過機率。
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <ExamSyllabusManager subjects={subjectsWithUnits} />
         </CardContent>
       </Card>
 

@@ -29,11 +29,16 @@ export async function getSubjects(): Promise<Subject[]> {
       id: true,
       name: true,
       target_score: true,
+      exam_weight: true,
     },
   })
 }
 
-export async function createSubject(data: { name: string; target_score?: number | null }) {
+export async function createSubject(data: {
+  name: string
+  target_score?: number | null
+  exam_weight?: number | null
+}) {
   const user = await getCurrentUserOrThrow()
   const trimmedName = data.name.trim().replace(/\s+/g, " ")
 
@@ -62,12 +67,35 @@ export async function createSubject(data: { name: string; target_score?: number 
     data: {
       name: trimmedName,
       target_score: data.target_score ?? null,
+      exam_weight: data.exam_weight ?? null,
       user_id: user.id,
     },
   })
   revalidatePath("/settings")
   revalidatePath("/dashboard")
   return subject
+}
+
+export async function updateSubjectExamWeight(
+  subjectId: string,
+  examWeight: number | null,
+): Promise<ActionResult> {
+  const user = await getCurrentUserOrThrow()
+
+  const subject = await prisma.subject.findFirst({
+    where: { id: subjectId, user_id: user.id },
+    select: { id: true },
+  })
+  assertOwnedRecord(subject, OWNERSHIP_ERROR_MESSAGE)
+
+  await prisma.subject.update({
+    where: { id: subjectId },
+    data: { exam_weight: examWeight },
+  })
+
+  revalidatePath("/settings")
+  revalidatePath("/dashboard")
+  return { success: true, message: "已更新科目比重。" }
 }
 
 export async function getSubjectDeletionImpact(id: string): Promise<SubjectDeletionImpact> {
