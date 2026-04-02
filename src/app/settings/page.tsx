@@ -1,4 +1,4 @@
-import { getSubjects, getExamUnits } from "@/app/actions/subject"
+import { getSubjects } from "@/app/actions/subject"
 import { SubjectForm } from "./subject-form"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { ExamDateForm } from "./exam-date-form"
@@ -16,10 +16,8 @@ export default async function SettingsPage() {
   const { user } = await resolveCurrentUserContext()
   const currentUser = toCurrentUserSummary(user)
   const subjects = await getSubjects()
-  const examUnits = await getExamUnits()
   const studyGroups = await getStudyGroupsForCurrentUser()
 
-  // Fetch subjects with their syllabus units for the syllabus manager
   const subjectsWithUnits = await prisma.subject.findMany({
     where: { user_id: user.id },
     orderBy: { created_at: "desc" },
@@ -84,11 +82,21 @@ export default async function SettingsPage() {
         <CardHeader>
           <CardTitle>考試範圍與單元設定</CardTitle>
           <CardDescription>
-            預先定義每個科目的考試單元，讓 Dashboard 的覆蓋率計算更準確。貼上 JSON 後點「確認儲存」，會取代該科目原有的單元設定。
+            預先定義每個科目的考試單元與比重，讓 Dashboard 的覆蓋率計算更準確。支援逐筆新增或從 JSON 匯入。
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <ExamScopeForm initialData={examUnits} />
+          <ExamSyllabusManager subjects={subjectsWithUnits} />
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>模擬考紀錄</CardTitle>
+          <CardDescription>記錄每次模擬考成績，追蹤各科進步曲線。</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <MockExamManager subjects={subjects} initialRecords={mockExamRecords} />
         </CardContent>
       </Card>
 
