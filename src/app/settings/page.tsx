@@ -1,4 +1,4 @@
-import { getSubjects } from "@/app/actions/subject"
+import { getSubjects, getExamUnits } from "@/app/actions/subject"
 import { SubjectForm } from "./subject-form"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { ExamDateForm } from "./exam-date-form"
@@ -16,6 +16,7 @@ export default async function SettingsPage() {
   const { user } = await resolveCurrentUserContext()
   const currentUser = toCurrentUserSummary(user)
   const subjects = await getSubjects()
+  const examUnits = await getExamUnits()
   const studyGroups = await getStudyGroupsForCurrentUser()
 
   // Fetch subjects with their syllabus units for the syllabus manager
@@ -70,7 +71,7 @@ export default async function SettingsPage() {
         </CardHeader>
         <CardContent className="space-y-4">
           <SubjectForm />
-          
+
           <div className="mt-6 border rounded-md">
             <div className="p-4">
               <SubjectsList subjects={subjects} />
@@ -83,23 +84,11 @@ export default async function SettingsPage() {
         <CardHeader>
           <CardTitle>考試範圍與單元設定</CardTitle>
           <CardDescription>
-            設定各科的考試範圍（單元名稱需與練習紀錄的主題相同），並填入各科佔總分比重與目標分數，系統將自動計算預估通過機率。
+            預先定義每個科目的考試單元，讓 Dashboard 的覆蓋率計算更準確。貼上 JSON 後點「確認儲存」，會取代該科目原有的單元設定。
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <ExamSyllabusManager subjects={subjectsWithUnits} />
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader>
-          <CardTitle>模考紀錄</CardTitle>
-          <CardDescription>
-            記錄每次模擬考的成績，系統用最近 6 筆計算考古實戰分數、穩定度與進步斜率，影響上榜機率指數。
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <MockExamManager subjects={subjects} initialRecords={mockExamRecords} />
+          <ExamScopeForm initialData={examUnits} />
         </CardContent>
       </Card>
 
