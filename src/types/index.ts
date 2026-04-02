@@ -534,3 +534,87 @@ export type PracticeQuestionSessionResult = ActionResult & {
   correctQuestions: number
   wrongQuestionCount: number
 }
+
+// --- Admission Evaluation v2 ---
+
+export type AdmissionLevel = "high_chance" | "good_chance" | "coin_flip" | "risky" | "very_risky"
+export type ConfidenceLevel = "low" | "medium" | "high"
+
+export type TargetProgramItem = {
+  id: string
+  schoolName: string
+  departmentName: string
+  examYear: number
+  lastYearLine: number
+  safeLine: number
+  idealLine: number
+  notes: string | null
+}
+
+export type PredictionSnapshotItem = {
+  id: string
+  targetProgramId: string
+  snapshotDate: Date
+  estimatedTotalConservative: number
+  estimatedTotalMedian: number
+  estimatedTotalOptimistic: number
+  gapVsLastYearLine: number
+  admissionLevel: AdmissionLevel
+  confidenceLevel: ConfidenceLevel
+}
+
+export type SubjectEvaluationV2Item = {
+  subjectId: string
+  subjectName: string
+  examWeight: number | null
+  // Score components (0–100 each)
+  mockExamScore: number | null
+  recentPracticeScore: number
+  unitMasteryScore: number
+  coverageScore: number
+  stabilityScore: number
+  // Penalties
+  totalPenalty: number
+  penaltyBreakdown: {
+    overdueReview: number
+    wrongQuestions: number
+    inactive: number
+    highWeightWeakUnit: number
+  }
+  // Output
+  estimatedScoreMedian: number
+  estimatedScoreConservative: number
+  estimatedScoreOptimistic: number
+  volatility: number
+  mainPenaltyReason: string | null
+  // Meta
+  mockExamCount: number
+  coverageRate: number // 0–1
+}
+
+export type AdmissionEvaluationV2Data = {
+  isConfigured: boolean
+  subjects: SubjectEvaluationV2Item[]
+  totalScore: {
+    conservative: number
+    median: number
+    optimistic: number
+  }
+  targetProgram: TargetProgramItem | null
+  gaps: {
+    vsLastYearLine: number
+    vsSafeLine: number
+    vsIdealLine: number
+  } | null
+  admissionLevel: AdmissionLevel | null
+  confidenceLevel: ConfidenceLevel
+  scoreGainMetric: {
+    subjectId: string
+    subjectName: string
+    unitName: string | null
+    estimatedPointsPer5Hours: number
+  } | null
+  allTargetPrograms: TargetProgramItem[]
+}
+
+// --- end Admission Evaluation v2 ---

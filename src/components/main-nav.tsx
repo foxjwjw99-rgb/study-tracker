@@ -9,6 +9,7 @@ import {
   CalendarCheck,
   FileUp,
   Gift,
+  GraduationCap,
   Home,
   Languages,
   LineChart,
@@ -27,6 +28,7 @@ const NAV_SECTIONS = [
       { title: "練習歷程", href: "/practice", icon: Brain },
       { title: "英文單字", href: "/vocabulary", icon: Languages },
       { title: "複習與錯題", href: "/review", icon: CalendarCheck },
+      { title: "上榜評估", href: "/admission", icon: GraduationCap },
     ],
   },
   {
