@@ -2,7 +2,7 @@
 
 import { useRef, useState, useTransition } from "react"
 import { useRouter } from "next/navigation"
-import { Trash2, Plus, Upload, Download, FileJson } from "lucide-react"
+import { Trash2, Plus, Upload, Download, FileJson, ClipboardPaste, X } from "lucide-react"
 import { toast } from "sonner"
 
 import { Button } from "@/components/ui/button"
@@ -75,6 +75,9 @@ export function ExamSyllabusManager({ subjects }: Props) {
     return s?.exam_weight != null ? String(Math.round(s.exam_weight * 100)) : ""
   })
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const [showPasteArea, setShowPasteArea] = useState(false)
+  const [pasteText, setPasteText] = useState("")
+  const [pasteError, setPasteError] = useState<string | null>(null)
 
   const selectedSubject = subjects.find((s) => s.id === selectedSubjectId)
   const units = selectedSubject?.exam_syllabus_units ?? []
@@ -191,6 +194,29 @@ export function ExamSyllabusManager({ subjects }: Props) {
     reader.readAsText(file)
   }
 
+  function handlePasteImport() {
+    setPasteError(null)
+    let parsed: unknown
+    try {
+      parsed = JSON.parse(pasteText.trim())
+    } catch {
+      setPasteError("JSON 解析失敗，請確認格式正確。")
+      return
+    }
+    startTransition(async () => {
+      const result = await bulkUpsertSyllabusUnits(selectedSubjectId, parsed)
+      if (result.success) {
+        toast.success(result.message)
+        setPasteText("")
+        setPasteError(null)
+        setShowPasteArea(false)
+        router.refresh()
+      } else {
+        setPasteError(result.message)
+      }
+    })
+  }
+
   function handleSaveSubjectWeight() {
     if (!selectedSubjectId) return
     const w = subjectWeightInput === "" ? null : parseFloat(subjectWeightInput)
@@ -298,12 +324,22 @@ export function ExamSyllabusManager({ subjects }: Props) {
                 <Button
                   variant="outline"
                   size="sm"
+                  onClick={() => { setShowPasteArea((v) => !v); setPasteError(null) }}
+                  disabled={isPending}
+                  title="貼上 JSON 文字"
+                >
+                  <ClipboardPaste className="mr-1 h-3.5 w-3.5" />
+                  貼上 JSON
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
                   onClick={handleImportClick}
                   disabled={isPending}
                   title="從 JSON 檔匯入單元"
                 >
                   <Upload className="mr-1 h-3.5 w-3.5" />
-                  匯入 JSON
+                  匯入檔案
                 </Button>
                 {units.length > 0 && (
                   <Button
@@ -319,6 +355,36 @@ export function ExamSyllabusManager({ subjects }: Props) {
                 )}
               </div>
             </div>
+
+            {showPasteArea && (
+              <div className="rounded-md border bg-muted/30 p-3 space-y-2">
+                <textarea
+                  className="w-full rounded-md border border-input bg-background px-3 py-2 font-mono text-xs min-h-[120px] resize-y focus:outline-none focus:ring-2 focus:ring-ring"
+                  placeholder={`貼上 JSON，例如：\n{\n  "units": [\n    { "unit_name": "極限", "weight": 20 }\n  ]\n}`}
+                  value={pasteText}
+                  onChange={(e) => { setPasteText(e.target.value); setPasteError(null) }}
+                />
+                {pasteError && (
+                  <p className="text-xs text-destructive">{pasteError}</p>
+                )}
+                <div className="flex gap-2">
+                  <Button
+                    size="sm"
+                    onClick={handlePasteImport}
+                    disabled={isPending || !pasteText.trim()}
+                  >
+                    {isPending ? "匯入中..." : "匯入"}
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    onClick={() => { setShowPasteArea(false); setPasteText(""); setPasteError(null) }}
+                  >
+                    <X className="h-3.5 w-3.5" />
+                  </Button>
+                </div>
+              </div>
+            )}
 
             {units.length === 0 ? (
               <p className="text-sm text-muted-foreground">尚未設定任何單元。</p>
