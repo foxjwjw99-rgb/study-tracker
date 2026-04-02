@@ -222,7 +222,9 @@ export function ExamSyllabusManager({ subjects }: Props) {
         <Label>選擇科目</Label>
         <Select value={selectedSubjectId} onValueChange={handleSelectSubject}>
           <SelectTrigger className="w-full sm:w-64">
-            <SelectValue placeholder="選擇科目" />
+            <SelectValue placeholder="選擇科目">
+              {selectedSubject?.name}
+            </SelectValue>
           </SelectTrigger>
           <SelectContent>
             {subjects.map((s) => (
@@ -341,7 +343,11 @@ export function ExamSyllabusManager({ subjects }: Props) {
                         disabled={isPending}
                       >
                         <SelectTrigger className="h-7 w-36 text-xs">
-                          <SelectValue />
+                          <SelectValue>
+                            {MASTERY_OPTIONS.find(
+                              (o) => o.value === (unit.mastery_score?.toString() ?? "null"),
+                            )?.label}
+                          </SelectValue>
                         </SelectTrigger>
                         <SelectContent>
                           {MASTERY_OPTIONS.map((opt) => (

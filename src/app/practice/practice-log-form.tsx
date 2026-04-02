@@ -82,7 +82,11 @@ export function PracticeLogForm({ subjects }: { subjects: Subject[] }) {
           <Label htmlFor="subject_id">科目</Label>
           <Select name="subject_id" required>
             <SelectTrigger>
-              <SelectValue placeholder="選擇科目" />
+              <SelectValue placeholder="選擇科目">
+                {(value: string | null) =>
+                  value ? (subjects.find((s) => s.id === value)?.name ?? null) : null
+                }
+              </SelectValue>
             </SelectTrigger>
             <SelectContent>
               {subjects.map((s) => (
