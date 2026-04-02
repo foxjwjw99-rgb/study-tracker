@@ -253,11 +253,12 @@ export function MathGraph() {
               />
               <Tooltip
                 contentStyle={tooltipStyle}
-                labelFormatter={(v: number) => `x = ${v}`}
-                formatter={(value: number | null, name: string) => {
-                  const idx = parseInt(name.replace("f", ""))
-                  const label = functions[idx]?.expr || name
-                  return [value !== null ? value : "未定義", label]
+                labelFormatter={(v) => `x = ${v}`}
+                formatter={(value, name) => {
+                  const nameStr = String(name ?? "")
+                  const idx = parseInt(nameStr.replace("f", ""))
+                  const label = functions[idx]?.expr || nameStr
+                  return [value != null ? (value as number) : "未定義", label]
                 }}
               />
               <ReferenceLine
