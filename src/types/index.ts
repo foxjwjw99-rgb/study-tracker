@@ -4,7 +4,7 @@ import type {
   User as PrismaUser,
 } from "../../node_modules/.prisma/client"
 
-export type Subject = Pick<PrismaSubject, "id" | "name" | "target_score">
+export type Subject = Pick<PrismaSubject, "id" | "name" | "target_score" | "exam_weight">
 
 export type SubjectDeletionImpact = {
   subjectId: string
@@ -428,6 +428,64 @@ export type VocabularyReviewLogItem = {
   ease_factor: number
   created_at: Date
 }
+
+// --- Exam Forecast ---
+
+export type UnitDangerLevel = "A" | "B" | "C" | "D"
+
+export type UnitForecastItem = {
+  unitName: string
+  weight: number            // 0.0–1.0 (normalised within subject)
+  masteryScore: number | null // 手動評分 0–5
+  accuracy: number | null   // 近 90 天答對率 (0–1)
+  isCovered: boolean
+  dangerLevel: UnitDangerLevel
+  contribution: number      // weight × effective_score × 100
+}
+
+export type SubjectFactorScores = {
+  mastery: number            // 0–100 (combined manual + accuracy)
+  masteryManual: number | null  // 0–100 from manual only
+  masteryAccuracy: number | null // 0–100 from practice accuracy only
+  mockScore: number          // 0–100
+  mockScoreIsEstimated: boolean // true = 用答對率代替，無模考資料
+  correctionRate: number     // 0–100
+  stability: number          // 0–100
+  slope: number              // 0–100
+  composite: number          // 0–100 (加權合計)
+}
+
+export type SubjectForecastItem = {
+  subjectId: string
+  subjectName: string
+  examWeight: number | null  // 0.0–1.0, null = not configured
+  targetScore: number        // from Subject.target_score (default 60 if unset)
+  estimatedScore: number     // 0–100 (= factors.composite)
+  factors: SubjectFactorScores
+  units: UnitForecastItem[]
+}
+
+export type ExamForecastData = {
+  isConfigured: boolean        // false if no syllabus units exist for this user
+  estimatedTotalScore: number  // 0–100 weighted total
+  targetTotalScore: number     // Σ(exam_weight × target_score)
+  probability: number          // 0–100 logistic estimate
+  subjectBreakdown: SubjectForecastItem[]
+  highRiskUnits: (UnitForecastItem & { subjectName: string })[]
+}
+
+export type MockExamRecordItem = {
+  id: string
+  subjectId: string
+  subjectName: string
+  examDate: Date
+  score: number
+  fullScore: number
+  isTimed: boolean
+  notes: string | null
+}
+
+// --- end Exam Forecast ---
 
 export type QuestionVisibility = "private" | "study_group"
 

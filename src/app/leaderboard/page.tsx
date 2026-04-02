@@ -44,14 +44,14 @@ export default async function LeaderboardPage({
 
   return (
     <div className="mx-auto flex max-w-6xl flex-col gap-6 lg:gap-8">
-      <section className="grid gap-4 xl:grid-cols-[1.2fr_0.8fr]">
+      <section className="grid gap-4 lg:grid-cols-[1.2fr_0.8fr]">
         <Card>
-          <CardContent className="space-y-5 px-5 py-6 sm:px-6 sm:py-7">
+          <CardContent className="space-y-4 px-5 py-5 sm:space-y-5 sm:px-6 sm:py-7">
             <div className="inline-flex w-fit items-center gap-2 rounded-full bg-primary/10 px-3 py-1 text-sm font-medium text-primary">
               <Trophy className="h-4 w-4" />
               讀書排行榜
             </div>
-            <div className="space-y-2">
+            <div className="hidden space-y-2 sm:block">
               <h1 className="text-3xl font-semibold tracking-tight text-balance sm:text-4xl">
                 和朋友比的，不只是熱血，是實際累積下來的計時讀書時間。
               </h1>
