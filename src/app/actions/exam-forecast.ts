@@ -489,3 +489,143 @@ export async function deleteMockExamRecord(id: string): Promise<ActionResult> {
   revalidatePath("/dashboard")
   return { success: true, message: "已刪除模考紀錄。" }
 }
+
+// ─── Bulk syllabus import ─────────────────────────────────────────────────────
+
+export type SyllabusImportUnit = {
+  unit_name: string
+  weight: number        // 1–100 (percentage within the subject)
+  mastery_score?: number | null // 0–5
+}
+
+export type SyllabusImportSubject = {
+  subject: string       // must match existing subject name (case-insensitive)
+  exam_weight?: number  // 1–100 (percentage of total exam)
+  units: SyllabusImportUnit[]
+}
+
+/** Accepts either a single-subject object `{ units: [...] }` (writes to `subjectId`)
+ *  or a multi-subject array `[{ subject, units }, ...]` (matches by name).
+ *  Returns a summary of how many units were created/updated.
+ */
+export async function bulkUpsertSyllabusUnits(
+  subjectId: string,
+  raw: unknown,
+): Promise<ActionResult & { created?: number; updated?: number }> {
+  const user = await getCurrentUserOrThrow()
+
+  // Verify ownership of the provided subjectId
+  const ownedSubject = await prisma.subject.findFirst({
+    where: { id: subjectId, user_id: user.id },
+    select: { id: true, name: true },
+  })
+  assertOwnedRecord(ownedSubject, OWNERSHIP_ERROR_MESSAGE)
+
+  // ── Parse & normalise input ──
+  let entries: Array<{ subjectId: string; units: SyllabusImportUnit[]; examWeight?: number }> = []
+
+  if (Array.isArray(raw)) {
+    // Multi-subject format: [{ subject, exam_weight?, units }]
+    const allSubjects = await prisma.subject.findMany({
+      where: { user_id: user.id },
+      select: { id: true, name: true },
+    })
+    const nameMap = new Map(allSubjects.map((s) => [s.name.toLowerCase(), s.id]))
+
+    for (const item of raw) {
+      if (typeof item !== "object" || item === null || !("subject" in item)) continue
+      const parsed = item as SyllabusImportSubject
+      const sid = nameMap.get(String(parsed.subject).toLowerCase())
+      if (!sid) continue // skip unknown subjects
+      if (!Array.isArray(parsed.units)) continue
+      entries.push({ subjectId: sid, units: parsed.units, examWeight: parsed.exam_weight })
+    }
+
+    if (entries.length === 0) {
+      return {
+        success: false,
+        message: "找不到符合的科目名稱，請確認科目名稱與系統中的科目一致。",
+      }
+    }
+  } else if (typeof raw === "object" && raw !== null && "units" in raw) {
+    // Single-subject format: { units, exam_weight? }
+    const parsed = raw as { units: unknown; exam_weight?: number }
+    if (!Array.isArray(parsed.units)) {
+      return { success: false, message: "JSON 格式錯誤：units 欄位必須為陣列。" }
+    }
+    entries.push({
+      subjectId,
+      units: parsed.units as SyllabusImportUnit[],
+      examWeight: parsed.exam_weight,
+    })
+  } else {
+    return { success: false, message: "JSON 格式無法識別，請參考說明文件。" }
+  }
+
+  // ── Validate & upsert ──
+  let created = 0
+  let updated = 0
+
+  for (const entry of entries) {
+    if (entry.examWeight != null) {
+      const w = Number(entry.examWeight)
+      if (!isNaN(w) && w > 0 && w <= 100) {
+        await prisma.subject.update({
+          where: { id: entry.subjectId },
+          data: { exam_weight: w / 100 },
+        })
+      }
+    }
+
+    for (const unit of entry.units) {
+      const name = String(unit.unit_name ?? "").trim()
+      if (!name) continue
+
+      const weight = Number(unit.weight)
+      if (isNaN(weight) || weight <= 0 || weight > 100) continue
+
+      const masteryRaw = unit.mastery_score
+      const mastery =
+        masteryRaw == null
+          ? undefined
+          : Math.min(5, Math.max(0, Math.round(Number(masteryRaw))))
+
+      const existing = await prisma.examSyllabusUnit.findUnique({
+        where: { subject_id_unit_name: { subject_id: entry.subjectId, unit_name: name } },
+        select: { id: true },
+      })
+
+      await prisma.examSyllabusUnit.upsert({
+        where: { subject_id_unit_name: { subject_id: entry.subjectId, unit_name: name } },
+        create: {
+          user_id: user.id,
+          subject_id: entry.subjectId,
+          unit_name: name,
+          weight: weight / 100,
+          mastery_score: mastery ?? null,
+        },
+        update: {
+          weight: weight / 100,
+          ...(mastery !== undefined && { mastery_score: mastery }),
+        },
+      })
+
+      if (existing) updated++
+      else created++
+    }
+  }
+
+  revalidatePath("/settings")
+  revalidatePath("/dashboard")
+  revalidatePath("/admission")
+
+  const parts: string[] = []
+  if (created > 0) parts.push(`新增 ${created} 個單元`)
+  if (updated > 0) parts.push(`更新 ${updated} 個單元`)
+  return {
+    success: true,
+    message: parts.length > 0 ? parts.join("、") + "。" : "沒有可匯入的單元。",
+    created,
+    updated,
+  }
+}
