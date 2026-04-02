@@ -13,6 +13,7 @@ import {
 } from "lucide-react"
 
 import { getDashboardData } from "@/app/actions/dashboard"
+import { ExamForecastSection } from "./exam-forecast-section"
 import { TrendChart, SubjectChart } from "@/components/dashboard-charts"
 import {
   readinessLabel,
@@ -270,6 +271,8 @@ export default async function DashboardPage() {
           </Card>
         )}
       </section>
+
+      <ExamForecastSection />
 
       <section className="space-y-4">
         <div className="space-y-1">

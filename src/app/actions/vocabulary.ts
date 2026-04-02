@@ -6,6 +6,7 @@ import { endOfDay } from "date-fns"
 import { vocabularyImportSchema } from "@/app/import/vocabulary-schema"
 import { getCurrentUserOrThrow } from "@/lib/current-user"
 import prisma from "@/lib/prisma"
+import { VocabularyWordStatus } from "@prisma/client"
 import { applyVocabularyReview } from "@/lib/vocabulary-review"
 import {
   formatVocabularyStatus,
@@ -140,7 +141,7 @@ export async function importVocabularyWords(
           meaning: item.meaning.trim(),
           example_sentence: item.example_sentence.trim(),
           example_sentence_translation: item.example_sentence_translation?.trim() || null,
-          status: "NEW",
+          status: VocabularyWordStatus.NEW,
         })
       }
 
@@ -364,9 +365,9 @@ export async function updateVocabularyReviewStatus(
 }
 
 function buildStatusFilter(status: VocabularyStatusFilter, todayEnd: Date) {
-  if (status === "new") return { status: "NEW" }
-  if (status === "learning") return { status: "LEARNING" }
-  if (status === "familiar") return { status: "FAMILIAR" }
+  if (status === "new") return { status: VocabularyWordStatus.NEW }
+  if (status === "learning") return { status: VocabularyWordStatus.LEARNING }
+  if (status === "familiar") return { status: VocabularyWordStatus.FAMILIAR }
   if (status === "due") return { next_review_date: { lte: todayEnd } }
   return {}
 }
@@ -423,6 +424,42 @@ function toVocabularyQueueItem(word: VocabularyWordItem): VocabularyQueueItem {
     average_response_ms: word.average_response_ms,
     average_confidence: word.average_confidence,
   }
+}
+
+export async function recordVocabularySessionStudyLog(
+  subjectId: string,
+  durationMinutes: number,
+  reviewedCount: number
+): Promise<void> {
+  const MAX_DURATION_MINUTES = 720
+  const clampedDuration = Math.min(Math.max(1, Math.round(durationMinutes)), MAX_DURATION_MINUTES)
+
+  const user = await getCurrentUserOrThrow()
+  const subject = await prisma.subject.findFirst({
+    where: { id: subjectId, user_id: user.id },
+    select: { id: true },
+  })
+
+  if (!subject) {
+    return
+  }
+
+  await prisma.studyLog.create({
+    data: {
+      user_id: user.id,
+      subject_id: subjectId,
+      topic: `英文單字複習（${reviewedCount} 個）`,
+      study_date: new Date(),
+      duration_minutes: clampedDuration,
+      study_type: "複習",
+      focus_score: 3,
+      planned_done: true,
+      source_type: "vocabulary_review",
+    },
+  })
+
+  revalidatePath("/study-log")
+  revalidatePath("/dashboard")
 }
 
 export async function deleteVocabularyWord(id: string): Promise<void> {

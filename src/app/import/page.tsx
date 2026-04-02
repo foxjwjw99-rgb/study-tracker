@@ -1,10 +1,15 @@
 import { ImportClient } from "./import-client"
+import { QuestionManagementClient } from "./question-management-client"
 import { VocabularyImportClient } from "./vocabulary-import-client"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { getStudyGroupsForCurrentUser } from "@/app/actions/study-group"
+import { getPracticeQuestionBank } from "@/app/actions/practice-log"
 
 export default async function ImportPage() {
-  const studyGroups = await getStudyGroupsForCurrentUser()
+  const [studyGroups, questionBank] = await Promise.all([
+    getStudyGroupsForCurrentUser(),
+    getPracticeQuestionBank(),
+  ])
 
   return (
     <div className="max-w-4xl space-y-6">
@@ -16,6 +21,7 @@ export default async function ImportPage() {
       <Tabs defaultValue="questions" className="space-y-6">
         <TabsList className="w-full sm:w-auto">
           <TabsTrigger value="questions">練習題目</TabsTrigger>
+          <TabsTrigger value="manage">管理題目</TabsTrigger>
           <TabsTrigger value="vocabulary">英文單字</TabsTrigger>
         </TabsList>
 
@@ -46,6 +52,10 @@ export default async function ImportPage() {
           </div>
         </TabsContent>
 
+        <TabsContent value="manage" className="space-y-6">
+          <QuestionManagementClient questionBank={questionBank} />
+        </TabsContent>
+
         <TabsContent value="vocabulary" className="space-y-6">
           <VocabularyImportClient studyGroups={studyGroups} />
           <div className="prose max-w-none prose-sm dark:prose-invert">
@@ -64,7 +74,7 @@ export default async function ImportPage() {
             <ul>
               <li><strong>subject</strong>, <strong>word</strong>, <strong>meaning</strong>, <strong>example_sentence</strong> 為必填。</li>
               <li><strong>part_of_speech</strong>、<strong>example_sentence_translation</strong> 為選填。</li>
-              <li><strong>part_of_speech</strong> 目前接受：<code>n.</code>、<code>v.</code>、<code>adj.</code>、<code>adv.</code>、<code>prep.</code>、<code>conj.</code>、<code>pron.</code>、<code>interj.</code>、<code>phrase</code>。</li>
+              <li><strong>part_of_speech</strong> 目前接受：<code>n.</code>、<code>v.</code>、<code>adj.</code>、<code>adv.</code>、<code>prep.</code>、<code>conj.</code>、<code>pron.</code>、<code>interj.</code>、<code>phrase</code>、<code>常用搭配詞</code>。</li>
               <li>同一使用者、同一科目、同一單字若已存在，匯入時會自動跳過。</li>
               <li>若選擇分享到讀書房，會把這批單字分發給目前房內成員；每個人的複習進度仍各自獨立。</li>
             </ul>

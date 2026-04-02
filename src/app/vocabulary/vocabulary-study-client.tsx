@@ -6,7 +6,7 @@ import { format } from "date-fns"
 import { BookOpenText, Check, CheckCircle2, Keyboard, Sparkles, Trash2, X, XCircle } from "lucide-react"
 import { toast } from "sonner"
 
-import { deleteVocabularyWord, getVocabularySession, updateVocabularyReviewStatus } from "@/app/actions/vocabulary"
+import { deleteVocabularyWord, getVocabularySession, recordVocabularySessionStudyLog, updateVocabularyReviewStatus } from "@/app/actions/vocabulary"
 import { VocabularyPronunciationButton } from "@/components/vocabulary-pronunciation-button"
 import { Badge } from "@/components/ui/badge"
 import { Button, buttonVariants } from "@/components/ui/button"
@@ -99,6 +99,7 @@ export function VocabularyStudyClient({
   const [isStarting, setIsStarting] = useState(false)
   const [isUpdating, setIsUpdating] = useState(false)
   const spellingInputRef = useRef<HTMLInputElement>(null)
+  const sessionStartedAtRef = useRef<number | null>(null)
 
   const handleDeleteWord = async (id: string, wordStr: string) => {
     if (!confirm(`確定要刪除單字「${wordStr}」嗎？`)) {
@@ -150,6 +151,7 @@ export function VocabularyStudyClient({
         return
       }
 
+      sessionStartedAtRef.current = Date.now()
       setSession(buildSessionState(result, studyMode))
     } catch {
       toast.error("載入單字卡失敗。")
@@ -236,17 +238,41 @@ export function VocabularyStudyClient({
     })
   }
 
-  const handleNextWord = async () => {
+  const handleNextWord = useCallback(async () => {
     if (!session?.pendingRating) {
       return
     }
 
     await rateCurrentWord(session.pendingRating)
-  }
+  }, [session, rateCurrentWord])
 
-  const endSession = () => {
+  const endSession = useCallback((completedSession?: VocabularySessionState) => {
+    const activeSession = completedSession ?? session
+    if (activeSession && activeSession.reviewedCount > 0 && sessionStartedAtRef.current !== null) {
+      const elapsedMs = Date.now() - sessionStartedAtRef.current
+      const durationMinutes = elapsedMs / 60000
+
+      if (durationMinutes >= 1) {
+        // Determine the dominant subject from reviewed words
+        const reviewedWords = activeSession.words.slice(0, activeSession.reviewedCount)
+        const subjectCounts = new Map<string, { id: string; count: number }>()
+        for (const word of reviewedWords) {
+          const entry = subjectCounts.get(word.subject_id)
+          if (entry) {
+            entry.count += 1
+          } else {
+            subjectCounts.set(word.subject_id, { id: word.subject_id, count: 1 })
+          }
+        }
+        const dominantSubjectId = Array.from(subjectCounts.values()).sort((a, b) => b.count - a.count)[0]?.id
+        if (dominantSubjectId) {
+          void recordVocabularySessionStudyLog(dominantSubjectId, durationMinutes, activeSession.reviewedCount)
+        }
+      }
+    }
+    sessionStartedAtRef.current = null
     setSession(null)
-  }
+  }, [session])
 
   useEffect(() => {
     if (session?.mode === "spelling" && !session.spellingSubmitted && spellingInputRef.current) {
@@ -254,6 +280,47 @@ export function VocabularyStudyClient({
       return () => clearTimeout(timer)
     }
   }, [session?.currentIndex, session?.mode, session?.spellingSubmitted])
+
+  // Keyboard shortcuts for flashcard mode
+  useEffect(() => {
+    if (!session || session.mode !== "flashcard" || isUpdating) {
+      return
+    }
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Ignore if user is typing in an input
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) {
+        return
+      }
+
+      if (!session.flashcardRevealed) {
+        if (e.key === " " || e.key === "Enter") {
+          e.preventDefault()
+          setSession((s) => s ? { ...s, flashcardRevealed: true } : s)
+        }
+        return
+      }
+
+      if (session.pendingRating === null) {
+        if (e.key === "1") {
+          setSession((s) => s ? { ...s, pendingRating: "hard" } : s)
+        } else if (e.key === "2") {
+          setSession((s) => s ? { ...s, pendingRating: "okay" } : s)
+        } else if (e.key === "3") {
+          setSession((s) => s ? { ...s, pendingRating: "easy" } : s)
+        }
+        return
+      }
+
+      if (e.key === " " || e.key === "Enter") {
+        e.preventDefault()
+        void handleNextWord()
+      }
+    }
+
+    window.addEventListener("keydown", handleKeyDown)
+    return () => window.removeEventListener("keydown", handleKeyDown)
+  }, [session, isUpdating, handleNextWord])
 
   useEffect(() => {
     if (!session) {
@@ -435,7 +502,7 @@ export function VocabularyStudyClient({
           <div className="relative mx-auto flex w-full max-w-lg items-center gap-3 px-5 pt-[max(1.5rem,env(safe-area-inset-top))]">
             <button
               type="button"
-              onClick={endSession}
+              onClick={() => endSession()}
               className="rounded-full p-2 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
               aria-label="結束練習"
             >
@@ -471,12 +538,12 @@ export function VocabularyStudyClient({
                       <div className="space-y-4 rounded-2xl border border-border/40 bg-card/50 p-5 backdrop-blur-sm">
                         <div className="flex flex-wrap items-center gap-2">
                           {currentWord.part_of_speech ? (
-                            <span className="rounded bg-primary/10 px-1.5 py-0.5 text-xs font-mono font-semibold text-primary">
+                            <span className="rounded bg-primary/10 px-1.5 py-0.5 text-xs font-semibold text-primary">
                               {currentWord.part_of_speech}
                             </span>
                           ) : null}
                           <span className="text-lg font-semibold">{currentWord.word}</span>
-                          <VocabularyPronunciationButton text={currentWord.word} />
+                          <VocabularyPronunciationButton text={currentWord.word} showPhonetic />
                         </div>
 
                         {currentWord.example_sentence ? (
@@ -504,9 +571,10 @@ export function VocabularyStudyClient({
                     <button
                       type="button"
                       onClick={() => setSession({ ...session, flashcardRevealed: true })}
-                      className="h-12 w-full rounded-2xl bg-primary/90 text-sm font-medium text-primary-foreground transition-all hover:bg-primary active:scale-[0.98]"
+                      className="flex h-12 w-full items-center justify-center gap-2 rounded-2xl bg-primary/90 text-sm font-medium text-primary-foreground transition-all hover:bg-primary active:scale-[0.98]"
                     >
                       翻開答案
+                      <kbd className="rounded border border-primary-foreground/20 bg-primary-foreground/10 px-1.5 text-xs font-mono opacity-70">Space</kbd>
                     </button>
                   ) : null}
 
@@ -520,6 +588,7 @@ export function VocabularyStudyClient({
                         className="h-12 border-red-200 bg-red-50 text-red-700 hover:bg-red-100 hover:text-red-800 dark:border-red-900/50 dark:bg-red-950/30 dark:text-red-300"
                       >
                         不熟
+                        <kbd className="ml-1.5 rounded border border-red-200/80 bg-red-100/60 px-1 text-xs font-mono opacity-60 dark:border-red-900/50 dark:bg-red-900/20">1</kbd>
                       </Button>
                       <Button
                         type="button"
@@ -529,6 +598,7 @@ export function VocabularyStudyClient({
                         className="h-12"
                       >
                         普通
+                        <kbd className="ml-1.5 rounded border border-border/80 bg-muted/60 px-1 text-xs font-mono opacity-60">2</kbd>
                       </Button>
                       <Button
                         type="button"
@@ -537,6 +607,7 @@ export function VocabularyStudyClient({
                         className="h-12 bg-emerald-600 hover:bg-emerald-700"
                       >
                         熟悉
+                        <kbd className="ml-1.5 rounded border border-emerald-400/50 bg-emerald-500/30 px-1 text-xs font-mono opacity-70">3</kbd>
                       </Button>
                     </div>
                   ) : null}
@@ -689,8 +760,11 @@ export function VocabularyStudyClient({
               <p className="text-sm text-muted-foreground">
                 你已完成 {session.reviewedCount} 個單字的複習。
               </p>
+              {sessionStartedAtRef.current !== null && Date.now() - sessionStartedAtRef.current >= 60000 ? (
+                <p className="text-xs text-muted-foreground/70">學習時間已自動記錄至讀書記錄。</p>
+              ) : null}
             </div>
-            <Button type="button" onClick={endSession} className="rounded-2xl px-6">
+            <Button type="button" onClick={() => endSession(session)} className="rounded-2xl px-6">
               <Sparkles className="mr-2 h-4 w-4" />
               回到單字列表
             </Button>
@@ -716,7 +790,7 @@ export function VocabularyStudyClient({
                     <div className="flex flex-wrap items-center gap-2">
                       <div className="font-semibold">{word.word}</div>
                       {word.part_of_speech ? (
-                        <span className="rounded bg-primary/10 px-1.5 py-0.5 text-xs font-mono font-semibold text-primary">
+                        <span className="rounded bg-primary/10 px-1.5 py-0.5 text-xs font-semibold text-primary">
                           {word.part_of_speech}
                         </span>
                       ) : null}
@@ -726,6 +800,7 @@ export function VocabularyStudyClient({
                         size="sm"
                         variant="ghost"
                         className="h-7 px-2"
+                        showPhonetic
                       />
                     </div>
                     <div className="text-sm text-muted-foreground">{word.meaning}</div>
@@ -806,12 +881,12 @@ function AnsweredWordCard({
 
       <div className="flex flex-wrap items-center gap-2">
         {currentWord.part_of_speech ? (
-          <span className="rounded bg-primary/10 px-1.5 py-0.5 text-xs font-mono font-semibold text-primary">
+          <span className="rounded bg-primary/10 px-1.5 py-0.5 text-xs font-semibold text-primary">
             {currentWord.part_of_speech}
           </span>
         ) : null}
         <span className="text-lg font-semibold">{currentWord.word}</span>
-        <VocabularyPronunciationButton text={currentWord.word} />
+        <VocabularyPronunciationButton text={currentWord.word} showPhonetic />
       </div>
 
       {currentWord.example_sentence ? (

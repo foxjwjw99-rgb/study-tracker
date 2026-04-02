@@ -9,8 +9,10 @@ import {
   CalendarCheck,
   FileUp,
   Gift,
+  GraduationCap,
   Home,
   Languages,
+  LineChart,
   Settings,
   Trophy,
 } from "lucide-react"
@@ -26,6 +28,7 @@ const NAV_SECTIONS = [
       { title: "練習歷程", href: "/practice", icon: Brain },
       { title: "英文單字", href: "/vocabulary", icon: Languages },
       { title: "複習與錯題", href: "/review", icon: CalendarCheck },
+      { title: "上榜評估", href: "/admission", icon: GraduationCap },
     ],
   },
   {
@@ -39,6 +42,7 @@ const NAV_SECTIONS = [
   {
     label: "其他",
     items: [
+      { title: "函數圖形", href: "/math-graph", icon: LineChart },
       { title: "匯入題目", href: "/import", icon: FileUp },
       { title: "設定", href: "/settings", icon: Settings },
     ],

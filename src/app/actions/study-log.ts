@@ -24,6 +24,7 @@ export async function getStudyLogs(): Promise<StudyLogListItem[]> {
       },
     },
     orderBy: { study_date: "desc" },
+    take: 50,
   })
 }
 

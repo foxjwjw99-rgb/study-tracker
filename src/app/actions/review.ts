@@ -66,6 +66,7 @@ export async function getWrongQuestions(): Promise<WrongQuestionItem[]> {
       },
     },
     orderBy: { first_wrong_date: "desc" },
+    take: 100,
   })
 }
 
@@ -97,6 +98,24 @@ export async function createManualReviewTask(data: {
   })
 
   const ownedSubject = assertOwnedRecord(subject, OWNERSHIP_ERROR_MESSAGE)
+
+  const existing = await prisma.reviewTask.findFirst({
+    where: {
+      user_id: user.id,
+      subject_id: ownedSubject.id,
+      topic: trimmedTopic,
+      completed: false,
+      source_type: REVIEW_TASK_SOURCE_TYPES.manual,
+    },
+    select: { id: true },
+  })
+
+  if (existing) {
+    return {
+      success: false,
+      message: `${ownedSubject.name}「${trimmedTopic}」已有未完成的複習任務。`,
+    }
+  }
 
   await prisma.reviewTask.create({
     data: {

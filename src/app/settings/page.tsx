@@ -5,9 +5,12 @@ import { ExamDateForm } from "./exam-date-form"
 import { SubjectsList } from "./subjects-list"
 import { UserManagement } from "./user-management"
 import { StudyGroupManagement } from "./study-group-management"
-import { ExamScopeForm } from "./exam-scope-form"
+import { ExamSyllabusManager } from "./exam-syllabus-manager"
+import { MockExamManager } from "./mock-exam-manager"
 import { getStudyGroupsForCurrentUser } from "@/app/actions/study-group"
+import { getMockExamRecords } from "@/app/actions/exam-forecast"
 import { resolveCurrentUserContext, toCurrentUserSummary } from "@/lib/current-user"
+import prisma from "@/lib/prisma"
 
 export default async function SettingsPage() {
   const { user } = await resolveCurrentUserContext()
@@ -16,11 +19,29 @@ export default async function SettingsPage() {
   const examUnits = await getExamUnits()
   const studyGroups = await getStudyGroupsForCurrentUser()
 
+  // Fetch subjects with their syllabus units for the syllabus manager
+  const subjectsWithUnits = await prisma.subject.findMany({
+    where: { user_id: user.id },
+    orderBy: { created_at: "desc" },
+    select: {
+      id: true,
+      name: true,
+      target_score: true,
+      exam_weight: true,
+      exam_syllabus_units: {
+        select: { id: true, unit_name: true, weight: true, mastery_score: true },
+        orderBy: { unit_name: "asc" },
+      },
+    },
+  })
+
+  const mockExamRecords = await getMockExamRecords()
+
   return (
     <div className="max-w-4xl space-y-6">
       <div>
         <h1 className="mb-2 text-3xl font-bold tracking-tight">設定</h1>
-        <p className="text-muted-foreground">管理帳號、科目與讀書房。考試日期已移到 Dashboard 可直接調整。</p>
+        <p className="text-muted-foreground">管理帳號、科目與讀書房。</p>
       </div>
 
       <Card>

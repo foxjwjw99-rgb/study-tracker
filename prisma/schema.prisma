@@ -13,6 +13,12 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+enum VocabularyWordStatus {
+  NEW
+  LEARNING
+  FAMILIAR
+}
+
 model User {
   id            String    @id @default(cuid())
   name          String
@@ -34,6 +40,10 @@ model User {
   reward_draws        RewardDraw[]
   owned_study_groups  StudyGroup[]       @relation("StudyGroupOwner")
   study_group_members StudyGroupMember[]
+  exam_syllabus_units  ExamSyllabusUnit[]
+  mock_exam_records    MockExamRecord[]
+  target_programs      TargetProgram[]
+  prediction_snapshots PredictionSnapshot[]
 
   created_at DateTime @default(now())
   updated_at DateTime @updatedAt
@@ -45,6 +55,7 @@ model Subject {
   user         User     @relation(fields: [user_id], references: [id])
   name         String
   target_score Int?
+  exam_weight  Float?   // 佔總分比重 (0.0–1.0)，e.g. 0.4 = 40%
 
   study_logs    StudyLog[]
   practice_logs PracticeLog[]
@@ -53,10 +64,46 @@ model Subject {
   questions     Question[]
   vocabulary_words VocabularyWord[]
   vocabulary_review_logs VocabularyReviewLog[]
-  exam_units    ExamUnit[]
+  exam_syllabus_units ExamSyllabusUnit[]
+  mock_exam_records   MockExamRecord[]
 
   created_at DateTime @default(now())
   updated_at DateTime @updatedAt
+}
+
+model MockExamRecord {
+  id         String   @id @default(cuid())
+  user_id    String
+  user       User     @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  subject_id String
+  subject    Subject  @relation(fields: [subject_id], references: [id], onDelete: Cascade)
+  exam_date  DateTime
+  score      Float
+  full_score Float    @default(100)
+  is_timed   Boolean  @default(false)
+  notes      String?
+
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  @@index([user_id, subject_id, exam_date])
+}
+
+model ExamSyllabusUnit {
+  id         String   @id @default(cuid())
+  user_id    String
+  user       User     @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  subject_id String
+  subject    Subject  @relation(fields: [subject_id], references: [id], onDelete: Cascade)
+  unit_name  String   // 對應 PracticeLog.topic
+  weight     Float    // 佔該科比重 (0.0–1.0)
+  mastery_score Int?  // 手動評分 0–5
+
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  @@unique([subject_id, unit_name])
+  @@index([user_id, subject_id])
 }
 
 model ExamUnit {
@@ -186,6 +233,7 @@ model ReviewTask {
   updated_at DateTime @updatedAt
 
   @@index([user_id, review_date, completed])
+  @@index([user_id, subject_id])
 }
 
 model Question {
@@ -197,8 +245,10 @@ model Question {
   topic                 String
   external_id           String?
   question              String
-  options               String      // Stored as JSON string e.g. '["A", "B", "C", "D"]'
-  answer                Int         // Index of the correct option
+  question_type         String      @default("multiple_choice") // "multiple_choice" | "fill_in_blank"
+  options               String      // Stored as JSON string e.g. '["A", "B", "C", "D"]'; empty "[]" for FIB
+  answer                Int         // Index of correct option (MC); 0 for FIB
+  text_answer           String?     // Pipe-separated accepted answers for FIB, e.g. "光合作用|photosynthesis"
   explanation           String?
   image_url             String?
   visibility            String      @default("private") // private / study_group
@@ -207,7 +257,7 @@ model Question {
 
   created_at  DateTime @default(now())
   updated_at  DateTime @updatedAt
-  
+
   @@unique([user_id, subject_id, question]) // Prevent import duplicates
 }
 
@@ -222,7 +272,7 @@ model VocabularyWord {
   meaning                     String
   example_sentence            String
   example_sentence_translation String? // 例句中文翻譯
-  status                      String   // NEW / LEARNING / FAMILIAR
+  status                      VocabularyWordStatus
   ease_factor      Float    @default(2.5)
   interval_days    Float    @default(0)
   review_count     Int      @default(0)
@@ -239,6 +289,8 @@ model VocabularyWord {
   updated_at DateTime @updatedAt
 
   @@unique([user_id, subject_id, word])
+  @@index([user_id, next_review_date])
+  @@index([user_id, status])
 }
 
 model VocabularyReviewLog {
@@ -320,4 +372,43 @@ model VerificationToken {
   expires    DateTime
 
   @@id([identifier, token])
+}
+
+model TargetProgram {
+  id              String   @id @default(cuid())
+  user_id         String
+  user            User     @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  school_name     String
+  department_name String
+  exam_year       Int
+  last_year_line  Float
+  safe_line       Float
+  ideal_line      Float
+  notes           String?
+
+  prediction_snapshots PredictionSnapshot[]
+
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  @@index([user_id])
+}
+
+model PredictionSnapshot {
+  id                           String        @id @default(cuid())
+  user_id                      String
+  user                         User          @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  target_program_id            String
+  target_program               TargetProgram @relation(fields: [target_program_id], references: [id], onDelete: Cascade)
+  snapshot_date                DateTime      @default(now())
+  estimated_total_conservative Float
+  estimated_total_median       Float
+  estimated_total_optimistic   Float
+  gap_vs_last_year_line        Float
+  admission_level              String        // high_chance/good_chance/coin_flip/risky/very_risky
+  confidence_level             String        // low/medium/high
+
+  created_at DateTime @default(now())
+
+  @@index([user_id, target_program_id, snapshot_date])
 }

@@ -417,8 +417,8 @@ export function ImportClient({ studyGroups }: ImportClientProps) {
                       <TableCell>{q.subject}</TableCell>
                       <TableCell>{q.topic}</TableCell>
                       <TableCell className="max-w-[200px] truncate" title={q.question}>{q.question}</TableCell>
-                      <TableCell>{q.options.length}</TableCell>
-                      <TableCell>{q.answer}</TableCell>
+                      <TableCell>{"options" in q ? q.options.length : "填空"}</TableCell>
+                      <TableCell>{"answer" in q ? q.answer : q.text_answer}</TableCell>
                       <TableCell>
                         {q.image ? (
                           <Image

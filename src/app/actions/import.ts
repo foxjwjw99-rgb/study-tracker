@@ -125,14 +125,17 @@ export async function importQuestions(
 
     existingQuestionsSet.add(dedupKey)
 
+    const isFib = "question_type" in q && q.question_type === "fill_in_blank"
     newQuestionsData.push({
       user_id: user.id,
       subject_id: subjectId,
       topic: q.topic,
       external_id: q.external_id,
       question: q.question,
-      options: JSON.stringify(q.options),
-      answer: q.answer,
+      question_type: isFib ? "fill_in_blank" : "multiple_choice",
+      options: isFib ? "[]" : JSON.stringify((q as { options: string[] }).options),
+      answer: isFib ? 0 : (q as { answer: number }).answer,
+      text_answer: isFib ? (q as { text_answer: string }).text_answer : null,
       explanation: q.explanation,
       image_url: q.image ?? null,
       visibility: normalizedTarget.target.visibility,
