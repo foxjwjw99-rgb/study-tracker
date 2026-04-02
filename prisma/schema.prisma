@@ -41,6 +41,7 @@ model User {
   owned_study_groups  StudyGroup[]       @relation("StudyGroupOwner")
   study_group_members StudyGroupMember[]
   exam_syllabus_units ExamSyllabusUnit[]
+  mock_exam_records   MockExamRecord[]
 
   created_at DateTime @default(now())
   updated_at DateTime @updatedAt
@@ -62,9 +63,28 @@ model Subject {
   vocabulary_words VocabularyWord[]
   vocabulary_review_logs VocabularyReviewLog[]
   exam_syllabus_units ExamSyllabusUnit[]
+  mock_exam_records   MockExamRecord[]
 
   created_at DateTime @default(now())
   updated_at DateTime @updatedAt
+}
+
+model MockExamRecord {
+  id         String   @id @default(cuid())
+  user_id    String
+  user       User     @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  subject_id String
+  subject    Subject  @relation(fields: [subject_id], references: [id], onDelete: Cascade)
+  exam_date  DateTime
+  score      Float
+  full_score Float    @default(100)
+  is_timed   Boolean  @default(false)
+  notes      String?
+
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  @@index([user_id, subject_id, exam_date])
 }
 
 model ExamSyllabusUnit {
@@ -75,6 +95,7 @@ model ExamSyllabusUnit {
   subject    Subject  @relation(fields: [subject_id], references: [id], onDelete: Cascade)
   unit_name  String   // 對應 PracticeLog.topic
   weight     Float    // 佔該科比重 (0.0–1.0)
+  mastery_score Int?  // 手動評分 0–5
 
   created_at DateTime @default(now())
   updated_at DateTime @updatedAt

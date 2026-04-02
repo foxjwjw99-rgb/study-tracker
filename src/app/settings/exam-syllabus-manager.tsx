@@ -19,14 +19,16 @@ import { Badge } from "@/components/ui/badge"
 import {
   upsertExamSyllabusUnit,
   deleteExamSyllabusUnit,
+  updateUnitMastery,
 } from "@/app/actions/exam-forecast"
 import { updateSubjectExamWeight } from "@/app/actions/subject"
-import type { Subject } from "@/types"
+import type { Subject, UnitDangerLevel } from "@/types"
 
 type SyllabusUnit = {
   id: string
   unit_name: string
-  weight: number  // stored 0.0–1.0
+  weight: number        // stored 0.0–1.0
+  mastery_score: number | null
 }
 
 type SubjectWithUnits = Subject & {
@@ -37,13 +39,40 @@ type Props = {
   subjects: SubjectWithUnits[]
 }
 
+const MASTERY_OPTIONS = [
+  { value: "null", label: "未評估" },
+  { value: "0",   label: "0 — 完全不會" },
+  { value: "1",   label: "1 — 大概知道" },
+  { value: "2",   label: "2 — 了解概念" },
+  { value: "3",   label: "3 — 會做多數題" },
+  { value: "4",   label: "4 — 幾乎全對" },
+  { value: "5",   label: "5 — 完全掌握" },
+]
+
+function getDangerLevel(masteryScore: number | null): UnitDangerLevel {
+  if (masteryScore == null || masteryScore === 0) return "D"
+  if (masteryScore <= 2) return "C"
+  if (masteryScore === 3) return "B"
+  return "A"
+}
+
+const DANGER_BADGE: Record<UnitDangerLevel, { label: string; className: string }> = {
+  A: { label: "A 掌握",   className: "border-emerald-500 text-emerald-600 bg-emerald-50" },
+  B: { label: "B 穩定",   className: "border-blue-400 text-blue-600 bg-blue-50" },
+  C: { label: "C 待加強", className: "border-amber-400 text-amber-600 bg-amber-50" },
+  D: { label: "D 危險",   className: "border-destructive text-destructive bg-destructive/5" },
+}
+
 export function ExamSyllabusManager({ subjects }: Props) {
   const router = useRouter()
   const [isPending, startTransition] = useTransition()
   const [selectedSubjectId, setSelectedSubjectId] = useState<string>(subjects[0]?.id ?? "")
   const [unitName, setUnitName] = useState("")
   const [unitWeight, setUnitWeight] = useState("")
-  const [subjectWeightInput, setSubjectWeightInput] = useState<string>("")
+  const [subjectWeightInput, setSubjectWeightInput] = useState<string>(() => {
+    const s = subjects[0]
+    return s?.exam_weight != null ? String(Math.round(s.exam_weight * 100)) : ""
+  })
 
   const selectedSubject = subjects.find((s) => s.id === selectedSubjectId)
   const units = selectedSubject?.exam_syllabus_units ?? []
@@ -90,6 +119,18 @@ export function ExamSyllabusManager({ subjects }: Props) {
       const result = await deleteExamSyllabusUnit(id)
       if (result.success) {
         toast.success(result.message)
+        router.refresh()
+      } else {
+        toast.error(result.message)
+      }
+    })
+  }
+
+  function handleMasteryChange(unitId: string, value: string) {
+    const score = value === "null" ? null : parseInt(value, 10)
+    startTransition(async () => {
+      const result = await updateUnitMastery(unitId, score)
+      if (result.success) {
         router.refresh()
       } else {
         toast.error(result.message)
@@ -147,8 +188,8 @@ export function ExamSyllabusManager({ subjects }: Props) {
 
       {selectedSubject && (
         <>
-          {/* Subject exam weight */}
-          <div className="flex items-end gap-3">
+          {/* Subject exam weight + target score display */}
+          <div className="flex flex-wrap items-end gap-3">
             <div className="space-y-2">
               <Label htmlFor="subject-weight">此科佔總分比重 %</Label>
               <Input
@@ -162,36 +203,75 @@ export function ExamSyllabusManager({ subjects }: Props) {
                 className="w-36"
               />
             </div>
-            <Button variant="outline" size="sm" onClick={handleSaveSubjectWeight} disabled={isPending}>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleSaveSubjectWeight}
+              disabled={isPending}
+            >
               儲存
             </Button>
+            {selectedSubject.target_score != null && (
+              <p className="text-xs text-muted-foreground self-end pb-1">
+                目標分數：{selectedSubject.target_score} 分
+                （可至「學習科目」區修改）
+              </p>
+            )}
           </div>
 
           {/* Units list */}
           <div className="space-y-2">
             <div className="flex items-center gap-2">
               <span className="text-sm font-medium">考試單元</span>
-              {isOverweight && (
+              {isOverweight ? (
                 <Badge variant="destructive" className="text-xs">
-                  比重合計 {Math.round(totalWeight)}%（超過 100%，系統計算時會自動正規化）
+                  合計 {Math.round(totalWeight)}% — 超過 100%，系統會自動正規化
                 </Badge>
-              )}
-              {!isOverweight && units.length > 0 && (
-                <span className="text-xs text-muted-foreground">
-                  合計 {Math.round(totalWeight)}%
-                </span>
-              )}
+              ) : units.length > 0 ? (
+                <span className="text-xs text-muted-foreground">合計 {Math.round(totalWeight)}%</span>
+              ) : null}
             </div>
 
             {units.length === 0 ? (
               <p className="text-sm text-muted-foreground">尚未設定任何單元。</p>
             ) : (
               <ul className="divide-y rounded-md border">
-                {units.map((unit) => (
-                  <li key={unit.id} className="flex items-center justify-between px-3 py-2 text-sm">
-                    <span>{unit.unit_name}</span>
-                    <div className="flex items-center gap-3">
-                      <span className="text-muted-foreground">{Math.round(unit.weight * 100)}%</span>
+                {units.map((unit) => {
+                  const dl = getDangerLevel(unit.mastery_score)
+                  const badge = DANGER_BADGE[dl]
+                  return (
+                    <li
+                      key={unit.id}
+                      className="flex flex-wrap items-center gap-x-3 gap-y-2 px-3 py-2 text-sm"
+                    >
+                      <span className="flex-1 font-medium">{unit.unit_name}</span>
+                      <span className="text-xs text-muted-foreground w-10 text-right">
+                        {Math.round(unit.weight * 100)}%
+                      </span>
+                      {/* Mastery selector */}
+                      <Select
+                        value={unit.mastery_score?.toString() ?? "null"}
+                        onValueChange={(v) => { if (v) handleMasteryChange(unit.id, v) }}
+                        disabled={isPending}
+                      >
+                        <SelectTrigger className="h-7 w-36 text-xs">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {MASTERY_OPTIONS.map((opt) => (
+                            <SelectItem key={opt.value} value={opt.value} className="text-xs">
+                              {opt.label}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      {/* Danger badge */}
+                      <Badge
+                        variant="outline"
+                        className={`text-xs ${badge.className}`}
+                      >
+                        {badge.label}
+                      </Badge>
                       <Button
                         variant="ghost"
                         size="icon"
@@ -201,9 +281,9 @@ export function ExamSyllabusManager({ subjects }: Props) {
                       >
                         <Trash2 className="h-3.5 w-3.5" />
                       </Button>
-                    </div>
-                  </li>
-                ))}
+                    </li>
+                  )
+                })}
               </ul>
             )}
           </div>
@@ -246,7 +326,7 @@ export function ExamSyllabusManager({ subjects }: Props) {
             </Button>
           </div>
           <p className="text-xs text-muted-foreground">
-            單元名稱需與「練習紀錄」的主題名稱相同，系統才能自動對應你的答對率。
+            單元名稱需與「練習紀錄」的主題名稱相同，系統才能自動對應答對率。新增後可點選掌握度下拉調整自評分數。
           </p>
         </>
       )}
