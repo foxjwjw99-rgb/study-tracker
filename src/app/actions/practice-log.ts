@@ -216,7 +216,29 @@ export async function getPracticeQuestions(
     },
   })
 
-  const parsedQuestions: PracticeQuestionItem[] = questions.flatMap((question) => {
+  const parsedQuestions: PracticeQuestionItem[] = questions.flatMap((question): PracticeQuestionItem[] => {
+    const isFib = question.question_type === "fill_in_blank"
+
+    if (isFib) {
+      return [{
+        id: createAnswerKey(question.id, practiceSubjectId),
+        source_question_id: question.id,
+        subject_id: practiceSubjectId,
+        subject_name: normalizedSubjectName,
+        topic: question.topic,
+        question: question.question,
+        question_type: "fill_in_blank" as const,
+        options: [],
+        answer: 0,
+        text_answer: question.text_answer ?? null,
+        explanation: question.explanation,
+        image_url: question.image_url,
+        visibility: question.visibility === "study_group" ? "study_group" : "private",
+        shared_study_group_id: question.shared_study_group_id,
+        shared_study_group_name: question.shared_study_group?.name ?? null,
+      }]
+    }
+
     const options = safeParseOptions(question.options)
     if (options.length === 0) return []
 
@@ -227,8 +249,10 @@ export async function getPracticeQuestions(
       subject_name: normalizedSubjectName,
       topic: question.topic,
       question: question.question,
+      question_type: "multiple_choice" as const,
       options,
       answer: question.answer,
+      text_answer: null,
       explanation: question.explanation,
       image_url: question.image_url,
       visibility: question.visibility === "study_group" ? "study_group" : "private",
@@ -417,7 +441,7 @@ export async function submitPracticeQuestionSession(data: {
   }
 
   const answerMap = new Map(
-    data.answers.map((answer) => [answer.question_id, answer.selected_answer])
+    data.answers.map((answer) => [answer.question_id, answer])
   )
   const sourceQuestionIds = Array.from(
     new Set(data.answers.map((answer) => parseSourceQuestionId(answer.question_id)))
@@ -447,8 +471,11 @@ export async function submitPracticeQuestionSession(data: {
   }
 
   const wrongQuestions = questions.filter((question) => {
-    const selectedAnswer = answerMap.get(createAnswerKey(question.id, ownedSubject.id))
-    return selectedAnswer !== question.answer
+    const answer = answerMap.get(createAnswerKey(question.id, ownedSubject.id))
+    if (question.question_type === "fill_in_blank") {
+      return answer?.is_user_correct !== true
+    }
+    return answer?.selected_answer !== question.answer
   })
   const correctQuestions = questions.length - wrongQuestions.length
   const durationMinutes = Math.max(1, Math.round(data.duration_seconds / 60))
@@ -480,14 +507,22 @@ export async function submitPracticeQuestionSession(data: {
       const nextReviewDate = new Date(practiceDate)
       nextReviewDate.setDate(nextReviewDate.getDate() + 1)
 
-      const selectedAnswer = answerMap.get(createAnswerKey(wrongQuestion.id, ownedSubject.id))
-      const parsedOptions = safeParseOptions(wrongQuestion.options)
-      const selectedAnswerText =
-        selectedAnswer === null || selectedAnswer === undefined
-          ? "未作答"
-          : parsedOptions[selectedAnswer] || `選項 ${selectedAnswer + 1}`
-      const correctAnswerText =
-        parsedOptions[wrongQuestion.answer] || `選項 ${wrongQuestion.answer + 1}`
+      const answer = answerMap.get(createAnswerKey(wrongQuestion.id, ownedSubject.id))
+      let selectedAnswerText: string
+      let correctAnswerText: string
+      if (wrongQuestion.question_type === "fill_in_blank") {
+        selectedAnswerText = answer?.text_answer || "未作答"
+        correctAnswerText = wrongQuestion.text_answer ?? "（見題目）"
+      } else {
+        const parsedOptions = safeParseOptions(wrongQuestion.options)
+        const selectedIdx = answer?.selected_answer
+        selectedAnswerText =
+          selectedIdx === null || selectedIdx === undefined
+            ? "未作答"
+            : parsedOptions[selectedIdx] || `選項 ${selectedIdx + 1}`
+        correctAnswerText =
+          parsedOptions[wrongQuestion.answer] || `選項 ${wrongQuestion.answer + 1}`
+      }
 
       let wq = await tx.wrongQuestion.findFirst({
         where: {

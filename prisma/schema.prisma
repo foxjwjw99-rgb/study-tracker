@@ -230,8 +230,10 @@ model Question {
   topic                 String
   external_id           String?
   question              String
-  options               String      // Stored as JSON string e.g. '["A", "B", "C", "D"]'
-  answer                Int         // Index of the correct option
+  question_type         String      @default("multiple_choice") // "multiple_choice" | "fill_in_blank"
+  options               String      // Stored as JSON string e.g. '["A", "B", "C", "D"]'; empty "[]" for FIB
+  answer                Int         // Index of correct option (MC); 0 for FIB
+  text_answer           String?     // Pipe-separated accepted answers for FIB, e.g. "光合作用|photosynthesis"
   explanation           String?
   image_url             String?
   visibility            String      @default("private") // private / study_group
@@ -240,7 +242,7 @@ model Question {
 
   created_at  DateTime @default(now())
   updated_at  DateTime @updatedAt
-  
+
   @@unique([user_id, subject_id, question]) // Prevent import duplicates
 }
 

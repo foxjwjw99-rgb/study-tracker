@@ -40,7 +40,9 @@ type SessionState = {
   questions: PracticeQuestionItem[]
   startedAt: number
   currentIndex: number
-  selectedAnswer: number | null
+  selectedAnswer: number | null   // MC only
+  textAnswer: string              // FIB only
+  userCorrectOverride: boolean | null  // FIB: null = not yet checked, true/false = result
   answers: PracticeQuestionAnswerInput[]
   isAnswerChecked: boolean
 }
@@ -106,6 +108,7 @@ export function QuestionPractice({ questionBank, initialSubjectId, initialTopic 
     ? session?.answers.find((answer) => answer.question_id === currentQuestion.id) ?? null
     : null
   const selectedAnswerValue = session?.selectedAnswer ?? currentAnswer?.selected_answer ?? null
+  const isFibQuestion = currentQuestion?.question_type === "fill_in_blank"
   const isLastQuestion = session ? session.currentIndex === session.questions.length - 1 : false
   const correctCount = result ? result.correctQuestions : 0
   const answeredCount = session?.answers.length ?? 0
@@ -167,6 +170,8 @@ export function QuestionPractice({ questionBank, initialSubjectId, initialTopic 
         startedAt: Date.now(),
         currentIndex: 0,
         selectedAnswer: null,
+        textAnswer: "",
+        userCorrectOverride: null,
         answers: [],
         isAnswerChecked: false,
       })
@@ -178,7 +183,31 @@ export function QuestionPractice({ questionBank, initialSubjectId, initialTopic 
   }
 
   const checkAnswer = () => {
-    if (!session || !currentQuestion || selectedAnswerValue === null) {
+    if (!session || !currentQuestion) return
+
+    if (isFibQuestion) {
+      if (!session.textAnswer.trim()) {
+        toast.error("請先輸入答案。")
+        return
+      }
+      const autoCorrect = checkFibAnswer(session.textAnswer, currentQuestion.text_answer ?? "")
+      const nextAnswers = session.answers.filter((a) => a.question_id !== currentQuestion.id)
+      nextAnswers.push({
+        question_id: currentQuestion.id,
+        selected_answer: null,
+        text_answer: session.textAnswer,
+        is_user_correct: autoCorrect,
+      })
+      setSession({
+        ...session,
+        userCorrectOverride: autoCorrect,
+        answers: nextAnswers,
+        isAnswerChecked: true,
+      })
+      return
+    }
+
+    if (selectedAnswerValue === null) {
       toast.error("請先選擇答案。")
       return
     }
@@ -196,6 +225,18 @@ export function QuestionPractice({ questionBank, initialSubjectId, initialTopic 
       answers: nextAnswers,
       isAnswerChecked: true,
     })
+  }
+
+  const overrideFibResult = (isCorrect: boolean) => {
+    if (!session || !currentQuestion) return
+    const nextAnswers = session.answers.filter((a) => a.question_id !== currentQuestion.id)
+    nextAnswers.push({
+      question_id: currentQuestion.id,
+      selected_answer: null,
+      text_answer: session.textAnswer,
+      is_user_correct: isCorrect,
+    })
+    setSession({ ...session, userCorrectOverride: isCorrect, answers: nextAnswers })
   }
 
   const moveToNextQuestion = async () => {
@@ -249,6 +290,8 @@ export function QuestionPractice({ questionBank, initialSubjectId, initialTopic 
       ...session,
       currentIndex: session.currentIndex + 1,
       selectedAnswer: savedNextAnswer?.selected_answer ?? null,
+      textAnswer: savedNextAnswer?.text_answer ?? "",
+      userCorrectOverride: savedNextAnswer?.is_user_correct ?? null,
       isAnswerChecked: false,
     })
   }
@@ -436,61 +479,130 @@ export function QuestionPractice({ questionBank, initialSubjectId, initialTopic 
             <CardDescription>先做完一輪，再回頭看哪個單元最需要補強。</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
-            <div className="space-y-3">
-              {currentQuestion.options.map((option, index) => {
-                const isSelected = selectedAnswerValue === index
-                const isCorrect = currentQuestion.answer === index
-                const isWrongSelection =
-                  session.isAnswerChecked && isSelected && !isCorrect
-
-                return (
-                  <button
-                    key={`${currentQuestion.id}-${index}`}
-                    type="button"
-                    className={[
-                      "w-full rounded-lg border px-4 py-3 text-left transition-colors",
-                      isSelected ? "border-primary bg-primary/5" : "border-border hover:bg-muted/50",
-                      session.isAnswerChecked && isCorrect ? "border-green-500 bg-green-50" : "",
-                      isWrongSelection ? "border-destructive bg-destructive/5" : "",
-                    ].join(" ")}
-                    disabled={session.isAnswerChecked}
-                    onClick={() => setSession({ ...session, selectedAnswer: index })}
-                  >
-                    <span className="font-medium">{String.fromCharCode(65 + index)}.</span>{" "}
-                    <MathText text={option} className="inline break-words" />
-                  </button>
-                )
-              })}
-            </div>
-
-            {session.isAnswerChecked ? (
-              <div className="space-y-3 rounded-lg border bg-muted/40 p-4">
-                <div className="flex items-start gap-2">
-                  {selectedAnswerValue === currentQuestion.answer ? (
-                    <CheckCircle2 className="mt-0.5 h-4 w-4 text-green-600" />
-                  ) : (
-                    <CircleHelp className="mt-0.5 h-4 w-4 text-amber-600" />
-                  )}
-                  <div className="space-y-1 text-sm">
-                    <p className="font-medium">
-                      {selectedAnswerValue === currentQuestion.answer ? "答對了" : "這題答錯了"}
-                    </p>
-                    <p className="text-muted-foreground">
-                      正確答案：{String.fromCharCode(65 + currentQuestion.answer)}.{" "}
-                      <MathText
-                        text={currentQuestion.options[currentQuestion.answer]}
-                        className="inline"
-                      />
-                    </p>
-                    {currentQuestion.explanation ? (
-                      <p className="break-words text-muted-foreground">
-                        解析：<MathText text={currentQuestion.explanation} className="inline" />
-                      </p>
-                    ) : null}
+            {isFibQuestion ? (
+              /* ── Fill-in-the-blank UI ── */
+              <div className="space-y-3">
+                <input
+                  type="text"
+                  className="w-full rounded-lg border border-border bg-background px-4 py-3 text-sm outline-none focus:border-primary focus:ring-1 focus:ring-primary disabled:opacity-50"
+                  placeholder="輸入你的答案…"
+                  value={session.textAnswer}
+                  disabled={session.isAnswerChecked}
+                  onChange={(e) => setSession({ ...session, textAnswer: e.target.value })}
+                  onKeyDown={(e) => e.key === "Enter" && !session.isAnswerChecked && checkAnswer()}
+                />
+                {session.isAnswerChecked && (
+                  <div className="space-y-3 rounded-lg border bg-muted/40 p-4">
+                    <div className="flex items-start gap-2">
+                      {session.userCorrectOverride ? (
+                        <CheckCircle2 className="mt-0.5 h-4 w-4 text-green-600" />
+                      ) : (
+                        <CircleHelp className="mt-0.5 h-4 w-4 text-amber-600" />
+                      )}
+                      <div className="space-y-1.5 text-sm">
+                        <p className="font-medium">
+                          {session.userCorrectOverride ? "答對了" : "系統判斷為答錯"}
+                        </p>
+                        <p className="text-muted-foreground">
+                          參考答案：
+                          <span className="font-medium text-foreground">
+                            {currentQuestion.text_answer?.replace(/\|/g, " / ") ?? ""}
+                          </span>
+                        </p>
+                        {currentQuestion.explanation ? (
+                          <p className="break-words text-muted-foreground">
+                            解析：<MathText text={currentQuestion.explanation} className="inline" />
+                          </p>
+                        ) : null}
+                        <div className="flex gap-2 pt-1">
+                          <button
+                            type="button"
+                            className={[
+                              "rounded-md border px-3 py-1 text-xs font-medium transition-colors",
+                              session.userCorrectOverride
+                                ? "border-green-500 bg-green-50 text-green-700"
+                                : "border-border text-muted-foreground hover:border-green-400 hover:text-green-700",
+                            ].join(" ")}
+                            onClick={() => overrideFibResult(true)}
+                          >
+                            ✓ 標記為答對
+                          </button>
+                          <button
+                            type="button"
+                            className={[
+                              "rounded-md border px-3 py-1 text-xs font-medium transition-colors",
+                              !session.userCorrectOverride
+                                ? "border-destructive bg-destructive/5 text-destructive"
+                                : "border-border text-muted-foreground hover:border-destructive/60 hover:text-destructive",
+                            ].join(" ")}
+                            onClick={() => overrideFibResult(false)}
+                          >
+                            ✗ 標記為答錯
+                          </button>
+                        </div>
+                      </div>
+                    </div>
                   </div>
-                </div>
+                )}
               </div>
-            ) : null}
+            ) : (
+              /* ── Multiple-choice UI ── */
+              <div className="space-y-3">
+                {currentQuestion.options.map((option, index) => {
+                  const isSelected = selectedAnswerValue === index
+                  const isCorrect = currentQuestion.answer === index
+                  const isWrongSelection =
+                    session.isAnswerChecked && isSelected && !isCorrect
+
+                  return (
+                    <button
+                      key={`${currentQuestion.id}-${index}`}
+                      type="button"
+                      className={[
+                        "w-full rounded-lg border px-4 py-3 text-left transition-colors",
+                        isSelected ? "border-primary bg-primary/5" : "border-border hover:bg-muted/50",
+                        session.isAnswerChecked && isCorrect ? "border-green-500 bg-green-50" : "",
+                        isWrongSelection ? "border-destructive bg-destructive/5" : "",
+                      ].join(" ")}
+                      disabled={session.isAnswerChecked}
+                      onClick={() => setSession({ ...session, selectedAnswer: index })}
+                    >
+                      <span className="font-medium">{String.fromCharCode(65 + index)}.</span>{" "}
+                      <MathText text={option} className="inline break-words" />
+                    </button>
+                  )
+                })}
+
+                {session.isAnswerChecked ? (
+                  <div className="space-y-3 rounded-lg border bg-muted/40 p-4">
+                    <div className="flex items-start gap-2">
+                      {selectedAnswerValue === currentQuestion.answer ? (
+                        <CheckCircle2 className="mt-0.5 h-4 w-4 text-green-600" />
+                      ) : (
+                        <CircleHelp className="mt-0.5 h-4 w-4 text-amber-600" />
+                      )}
+                      <div className="space-y-1 text-sm">
+                        <p className="font-medium">
+                          {selectedAnswerValue === currentQuestion.answer ? "答對了" : "這題答錯了"}
+                        </p>
+                        <p className="text-muted-foreground">
+                          正確答案：{String.fromCharCode(65 + currentQuestion.answer)}.{" "}
+                          <MathText
+                            text={currentQuestion.options[currentQuestion.answer]}
+                            className="inline"
+                          />
+                        </p>
+                        {currentQuestion.explanation ? (
+                          <p className="break-words text-muted-foreground">
+                            解析：<MathText text={currentQuestion.explanation} className="inline" />
+                          </p>
+                        ) : null}
+                      </div>
+                    </div>
+                  </div>
+                ) : null}
+              </div>
+            )}
 
             <div className="flex flex-col gap-2 sm:flex-row sm:justify-between">
               <Button type="button" variant="outline" onClick={restartPractice}>
@@ -626,13 +738,17 @@ function buildCompletionSummary(
   answers: PracticeQuestionAnswerInput[],
   result: PracticeQuestionSessionResult
 ): PracticeCompletionSummary {
-  const answerMap = new Map(answers.map((answer) => [answer.question_id, answer.selected_answer]))
+  const answerMap = new Map(answers.map((answer) => [answer.question_id, answer]))
   const wrongTopicCount = new Map<string, number>()
   const correctTopicCount = new Map<string, number>()
 
   for (const question of questions) {
-    const selectedAnswer = answerMap.get(question.id)
-    const targetMap = selectedAnswer === question.answer ? correctTopicCount : wrongTopicCount
+    const answer = answerMap.get(question.id)
+    const isCorrect =
+      question.question_type === "fill_in_blank"
+        ? answer?.is_user_correct === true
+        : answer?.selected_answer === question.answer
+    const targetMap = isCorrect ? correctTopicCount : wrongTopicCount
     targetMap.set(question.topic, (targetMap.get(question.topic) ?? 0) + 1)
   }
 
@@ -656,4 +772,16 @@ function getAccuracyMessage(accuracy: number) {
   if (accuracy >= 70) return "有抓到主線，但還能再補"
   if (accuracy >= 60) return "還行，但需要回頭整理"
   return "先補觀念再硬刷會更划算"
+}
+
+function normalizeFib(text: string) {
+  return text.trim().toLowerCase().replace(/\s+/g, " ")
+}
+
+function checkFibAnswer(userAnswer: string, acceptedAnswer: string): boolean {
+  const normalized = normalizeFib(userAnswer)
+  return acceptedAnswer
+    .split("|")
+    .map((s) => normalizeFib(s))
+    .some((s) => s === normalized)
 }

@@ -489,6 +489,8 @@ export type MockExamRecordItem = {
 
 export type QuestionVisibility = "private" | "study_group"
 
+export type QuestionType = "multiple_choice" | "fill_in_blank"
+
 export type QuestionImportTarget = {
   visibility: QuestionVisibility
   shared_study_group_id?: string
@@ -509,8 +511,10 @@ export type PracticeQuestionItem = {
   subject_name: string
   topic: string
   question: string
+  question_type: QuestionType
   options: string[]
   answer: number
+  text_answer: string | null  // pipe-separated accepted answers for FIB
   explanation: string | null
   image_url?: string | null
   visibility?: QuestionVisibility
@@ -520,7 +524,9 @@ export type PracticeQuestionItem = {
 
 export type PracticeQuestionAnswerInput = {
   question_id: string
-  selected_answer: number | null
+  selected_answer: number | null  // MC: index; FIB: null
+  text_answer?: string | null     // FIB: user's typed answer
+  is_user_correct?: boolean | null // FIB: final correctness verdict (auto or overridden)
 }
 
 export type PracticeQuestionSessionResult = ActionResult & {
