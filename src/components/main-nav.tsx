@@ -11,6 +11,7 @@ import {
   Gift,
   Home,
   Languages,
+  LineChart,
   Settings,
   Trophy,
 } from "lucide-react"
@@ -39,6 +40,7 @@ const NAV_SECTIONS = [
   {
     label: "其他",
     items: [
+      { title: "函數圖形", href: "/math-graph", icon: LineChart },
       { title: "匯入題目", href: "/import", icon: FileUp },
       { title: "設定", href: "/settings", icon: Settings },
     ],
