@@ -93,7 +93,9 @@ export function MockExamManager({ subjects, initialRecords }: Props) {
           onValueChange={(v) => { if (v) setSelectedSubjectId(v) }}
         >
           <SelectTrigger className="w-full sm:w-64">
-            <SelectValue placeholder="選擇科目" />
+            <SelectValue placeholder="選擇科目">
+              {subjects.find((s) => s.id === selectedSubjectId)?.name}
+            </SelectValue>
           </SelectTrigger>
           <SelectContent>
             {subjects.map((s) => (
