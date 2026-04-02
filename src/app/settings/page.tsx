@@ -1,10 +1,11 @@
-import { getSubjects } from "@/app/actions/subject"
+import { getSubjects, getExamUnits } from "@/app/actions/subject"
 import { SubjectForm } from "./subject-form"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { ExamDateForm } from "./exam-date-form"
 import { SubjectsList } from "./subjects-list"
 import { UserManagement } from "./user-management"
 import { StudyGroupManagement } from "./study-group-management"
+import { ExamScopeForm } from "./exam-scope-form"
 import { getStudyGroupsForCurrentUser } from "@/app/actions/study-group"
 import { resolveCurrentUserContext, toCurrentUserSummary } from "@/lib/current-user"
 
@@ -12,6 +13,7 @@ export default async function SettingsPage() {
   const { user } = await resolveCurrentUserContext()
   const currentUser = toCurrentUserSummary(user)
   const subjects = await getSubjects()
+  const examUnits = await getExamUnits()
   const studyGroups = await getStudyGroupsForCurrentUser()
 
   return (
@@ -48,12 +50,24 @@ export default async function SettingsPage() {
         </CardHeader>
         <CardContent className="space-y-4">
           <SubjectForm />
-          
+
           <div className="mt-6 border rounded-md">
             <div className="p-4">
               <SubjectsList subjects={subjects} />
             </div>
           </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>考試範圍與單元設定</CardTitle>
+          <CardDescription>
+            預先定義每個科目的考試單元，讓 Dashboard 的覆蓋率計算更準確。貼上 JSON 後點「確認儲存」，會取代該科目原有的單元設定。
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <ExamScopeForm initialData={examUnits} />
         </CardContent>
       </Card>
 

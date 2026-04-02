@@ -53,9 +53,23 @@ model Subject {
   questions     Question[]
   vocabulary_words VocabularyWord[]
   vocabulary_review_logs VocabularyReviewLog[]
+  exam_units    ExamUnit[]
 
   created_at DateTime @default(now())
   updated_at DateTime @updatedAt
+}
+
+model ExamUnit {
+  id         String  @id @default(cuid())
+  subject_id String
+  subject    Subject @relation(fields: [subject_id], references: [id], onDelete: Cascade)
+  name       String
+  order      Int     @default(0)
+
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  @@index([subject_id])
 }
 
 model StudyLog {
