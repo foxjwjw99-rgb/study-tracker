@@ -111,7 +111,7 @@ model ExamUnit {
   subject_id String
   subject    Subject @relation(fields: [subject_id], references: [id], onDelete: Cascade)
   name       String
-  order      Int     @default(0)
+  sort_order Int     @default(0)
 
   created_at DateTime @default(now())
   updated_at DateTime @updatedAt

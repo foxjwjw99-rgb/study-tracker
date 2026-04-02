@@ -3,7 +3,7 @@ CREATE TABLE "ExamUnit" (
     "id" TEXT NOT NULL,
     "subject_id" TEXT NOT NULL,
     "name" TEXT NOT NULL,
-    "order" INTEGER NOT NULL DEFAULT 0,
+    "sort_order" INTEGER NOT NULL DEFAULT 0,
     "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updated_at" TIMESTAMP(3) NOT NULL,
 

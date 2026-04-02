@@ -174,7 +174,7 @@ export async function deleteSubject(id: string): Promise<ActionResult> {
 export type ExamUnitSubjectEntry = {
   subjectId: string
   subjectName: string
-  units: { id: string; name: string; order: number }[]
+  units: { id: string; name: string; sort_order: number }[]
 }
 
 export async function getExamUnits(): Promise<ExamUnitSubjectEntry[]> {
@@ -186,8 +186,8 @@ export async function getExamUnits(): Promise<ExamUnitSubjectEntry[]> {
       id: true,
       name: true,
       exam_units: {
-        orderBy: { order: "asc" },
-        select: { id: true, name: true, order: true },
+        orderBy: { sort_order: "asc" },
+        select: { id: true, name: true, sort_order: true },
       },
     },
   })
@@ -231,7 +231,7 @@ export async function upsertExamUnits(
       const subjectId = subjectMap.get(entry.subjectName)!
       return entry.units.map((name, idx) =>
         prisma.examUnit.create({
-          data: { subject_id: subjectId, name, order: idx },
+          data: { subject_id: subjectId, name, sort_order: idx },
         })
       )
     })
