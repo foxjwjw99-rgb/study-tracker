@@ -40,8 +40,10 @@ model User {
   reward_draws        RewardDraw[]
   owned_study_groups  StudyGroup[]       @relation("StudyGroupOwner")
   study_group_members StudyGroupMember[]
-  exam_syllabus_units ExamSyllabusUnit[]
-  mock_exam_records   MockExamRecord[]
+  exam_syllabus_units  ExamSyllabusUnit[]
+  mock_exam_records    MockExamRecord[]
+  target_programs      TargetProgram[]
+  prediction_snapshots PredictionSnapshot[]
 
   created_at DateTime @default(now())
   updated_at DateTime @updatedAt
@@ -357,4 +359,43 @@ model VerificationToken {
   expires    DateTime
 
   @@id([identifier, token])
+}
+
+model TargetProgram {
+  id              String   @id @default(cuid())
+  user_id         String
+  user            User     @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  school_name     String
+  department_name String
+  exam_year       Int
+  last_year_line  Float
+  safe_line       Float
+  ideal_line      Float
+  notes           String?
+
+  prediction_snapshots PredictionSnapshot[]
+
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  @@index([user_id])
+}
+
+model PredictionSnapshot {
+  id                           String        @id @default(cuid())
+  user_id                      String
+  user                         User          @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  target_program_id            String
+  target_program               TargetProgram @relation(fields: [target_program_id], references: [id], onDelete: Cascade)
+  snapshot_date                DateTime      @default(now())
+  estimated_total_conservative Float
+  estimated_total_median       Float
+  estimated_total_optimistic   Float
+  gap_vs_last_year_line        Float
+  admission_level              String        // high_chance/good_chance/coin_flip/risky/very_risky
+  confidence_level             String        // low/medium/high
+
+  created_at DateTime @default(now())
+
+  @@index([user_id, target_program_id, snapshot_date])
 }
