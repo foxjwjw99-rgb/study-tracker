@@ -1,8 +1,8 @@
 "use client"
 
-import { useState, useTransition } from "react"
+import { useRef, useState, useTransition } from "react"
 import { useRouter } from "next/navigation"
-import { Trash2, Plus } from "lucide-react"
+import { Trash2, Plus, Upload, Download, FileJson } from "lucide-react"
 import { toast } from "sonner"
 
 import { Button } from "@/components/ui/button"
@@ -20,6 +20,7 @@ import {
   upsertExamSyllabusUnit,
   deleteExamSyllabusUnit,
   updateUnitMastery,
+  bulkUpsertSyllabusUnits,
 } from "@/app/actions/exam-forecast"
 import { updateSubjectExamWeight } from "@/app/actions/subject"
 import type { Subject, UnitDangerLevel } from "@/types"
@@ -73,6 +74,7 @@ export function ExamSyllabusManager({ subjects }: Props) {
     const s = subjects[0]
     return s?.exam_weight != null ? String(Math.round(s.exam_weight * 100)) : ""
   })
+  const fileInputRef = useRef<HTMLInputElement>(null)
 
   const selectedSubject = subjects.find((s) => s.id === selectedSubjectId)
   const units = selectedSubject?.exam_syllabus_units ?? []
@@ -136,6 +138,57 @@ export function ExamSyllabusManager({ subjects }: Props) {
         toast.error(result.message)
       }
     })
+  }
+
+  function handleExportJson() {
+    const sub = subjects.find((s) => s.id === selectedSubjectId)
+    if (!sub) return
+    const data = {
+      subject: sub.name,
+      exam_weight: sub.exam_weight != null ? Math.round(sub.exam_weight * 100) : undefined,
+      units: sub.exam_syllabus_units.map((u) => ({
+        unit_name: u.unit_name,
+        weight: Math.round(u.weight * 100),
+        ...(u.mastery_score != null && { mastery_score: u.mastery_score }),
+      })),
+    }
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement("a")
+    a.href = url
+    a.download = `syllabus-${sub.name}.json`
+    a.click()
+    URL.revokeObjectURL(url)
+  }
+
+  function handleImportClick() {
+    fileInputRef.current?.click()
+  }
+
+  function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    if (!file) return
+    // Reset so the same file can be re-selected
+    e.target.value = ""
+
+    const reader = new FileReader()
+    reader.onload = (ev) => {
+      try {
+        const parsed: unknown = JSON.parse(ev.target?.result as string)
+        startTransition(async () => {
+          const result = await bulkUpsertSyllabusUnits(selectedSubjectId, parsed)
+          if (result.success) {
+            toast.success(result.message)
+            router.refresh()
+          } else {
+            toast.error(result.message)
+          }
+        })
+      } catch {
+        toast.error("JSON 解析失敗，請確認檔案格式正確。")
+      }
+    }
+    reader.readAsText(file)
   }
 
   function handleSaveSubjectWeight() {
@@ -219,9 +272,18 @@ export function ExamSyllabusManager({ subjects }: Props) {
             )}
           </div>
 
+          {/* Hidden file input for JSON import */}
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept=".json,application/json"
+            className="hidden"
+            onChange={handleFileChange}
+          />
+
           {/* Units list */}
           <div className="space-y-2">
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
               <span className="text-sm font-medium">考試單元</span>
               {isOverweight ? (
                 <Badge variant="destructive" className="text-xs">
@@ -230,6 +292,30 @@ export function ExamSyllabusManager({ subjects }: Props) {
               ) : units.length > 0 ? (
                 <span className="text-xs text-muted-foreground">合計 {Math.round(totalWeight)}%</span>
               ) : null}
+              <div className="ml-auto flex gap-1.5">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleImportClick}
+                  disabled={isPending}
+                  title="從 JSON 檔匯入單元"
+                >
+                  <Upload className="mr-1 h-3.5 w-3.5" />
+                  匯入 JSON
+                </Button>
+                {units.length > 0 && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={handleExportJson}
+                    disabled={isPending}
+                    title="將目前設定匯出為 JSON 檔"
+                  >
+                    <Download className="mr-1 h-3.5 w-3.5" />
+                    匯出
+                  </Button>
+                )}
+              </div>
             </div>
 
             {units.length === 0 ? (
@@ -328,6 +414,50 @@ export function ExamSyllabusManager({ subjects }: Props) {
           <p className="text-xs text-muted-foreground">
             單元名稱需與「練習紀錄」的主題名稱相同，系統才能自動對應答對率。新增後可點選掌握度下拉調整自評分數。
           </p>
+
+          {/* JSON format hint */}
+          <details className="group">
+            <summary className="flex cursor-pointer items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground">
+              <FileJson className="h-3.5 w-3.5" />
+              查看 JSON 匯入格式說明
+            </summary>
+            <div className="mt-2 rounded-lg border bg-muted/40 p-3 text-xs text-muted-foreground">
+              <p className="mb-1 font-medium text-foreground">單科格式（匯入到目前選取的科目）：</p>
+              <pre className="mb-3 overflow-x-auto rounded bg-background p-2 text-[11px]">{`{
+  "exam_weight": 34,
+  "units": [
+    { "unit_name": "極限與連續", "weight": 15 },
+    { "unit_name": "微分", "weight": 25, "mastery_score": 3 },
+    { "unit_name": "積分", "weight": 30 }
+  ]
+}`}</pre>
+              <p className="mb-1 font-medium text-foreground">多科格式（依科目名稱自動對應）：</p>
+              <pre className="overflow-x-auto rounded bg-background p-2 text-[11px]">{`[
+  {
+    "subject": "微積分",
+    "exam_weight": 34,
+    "units": [
+      { "unit_name": "極限", "weight": 20 },
+      { "unit_name": "微分", "weight": 30 }
+    ]
+  },
+  {
+    "subject": "英文",
+    "exam_weight": 33,
+    "units": [
+      { "unit_name": "閱讀測驗", "weight": 40 },
+      { "unit_name": "文法", "weight": 30 }
+    ]
+  }
+]`}</pre>
+              <p className="mt-2">
+                <code className="rounded bg-background px-1">weight</code>：佔該科的百分比（1–100）；
+                <code className="ml-1 rounded bg-background px-1">mastery_score</code>：選填，0–5；
+                <code className="ml-1 rounded bg-background px-1">exam_weight</code>：選填，佔總分百分比。
+                匯入會以單元名稱做 upsert（已存在則更新，不存在則新增）。
+              </p>
+            </div>
+          </details>
         </>
       )}
     </div>
