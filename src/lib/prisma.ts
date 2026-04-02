@@ -1,28 +1,11 @@
-import { PrismaClient } from "../../node_modules/.prisma/client"
+import { PrismaClient } from "@prisma/client"
 
-const REQUIRED_DELEGATES = [
-  "vocabularyWord",
-  "vocabularyReviewLog",
-] as const satisfies readonly (keyof PrismaClient)[]
+const globalForPrisma = globalThis as unknown as { prisma?: PrismaClient }
 
-const prismaClientSingleton = () => new PrismaClient()
-
-function hasRequiredDelegates(client: PrismaClient) {
-  return REQUIRED_DELEGATES.every((delegate) => delegate in client)
-}
-
-declare global {
-  var prismaGlobal: PrismaClient | undefined
-}
-
-const existingClient = globalThis.prismaGlobal
-const prisma =
-  existingClient && hasRequiredDelegates(existingClient)
-    ? existingClient
-    : prismaClientSingleton()
-
-export default prisma
+const prisma = globalForPrisma.prisma ?? new PrismaClient()
 
 if (process.env.NODE_ENV !== "production") {
-  globalThis.prismaGlobal = prisma
+  globalForPrisma.prisma = prisma
 }
+
+export default prisma
