@@ -21,6 +21,18 @@ import { importQuestions, ImportResult } from "@/app/actions/import"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import type { QuestionVisibility, StudyGroupSummary } from "@/types"
 
+const EXAMPLE_JSON = `[
+  {
+    "subject": "數學",
+    "topic": "代數",
+    "question": "2 + 2 等於多少？",
+    "options": ["3", "4", "5", "6"],
+    "answer": 1,
+    "explanation": "因為 2 加 2 等於 4。"
+  }
+]`
+
+
 type ImportClientProps = {
   studyGroups: StudyGroupSummary[]
 }
@@ -39,6 +51,84 @@ function formatIssues(error: z.ZodError) {
       return `${issue.path.join(".") || "資料"}：${issue.message}`
     })
     .join("\n")
+}
+
+function parseCsvRow(row: string): string[] {
+  const result: string[] = []
+  let current = ""
+  let inQuotes = false
+  for (let i = 0; i < row.length; i++) {
+    const ch = row[i]
+    if (ch === '"') {
+      if (inQuotes && row[i + 1] === '"') {
+        current += '"'
+        i++
+      } else {
+        inQuotes = !inQuotes
+      }
+    } else if (ch === ',' && !inQuotes) {
+      result.push(current)
+      current = ""
+    } else {
+      current += ch
+    }
+  }
+  result.push(current)
+  return result
+}
+
+function parseCsvInput(rawText: string): ParseSuccess | { error: string } {
+  const lines = rawText.trim().split(/\r?\n/)
+  if (lines.length < 2) return { error: "CSV 至少需要標題行與一筆資料。" }
+
+  const headers = parseCsvRow(lines[0]).map((h) => h.trim().toLowerCase())
+  const required = ["subject", "topic", "question", "option_a", "option_b", "answer"]
+  const missing = required.filter((h) => !headers.includes(h))
+  if (missing.length > 0) return { error: `CSV 缺少必要欄位：${missing.join(", ")}` }
+
+  const idx = (name: string) => headers.indexOf(name)
+
+  const questions: ImportedQuestion[] = []
+  for (let i = 1; i < lines.length; i++) {
+    const line = lines[i].trim()
+    if (!line) continue
+    const cols = parseCsvRow(line)
+    const get = (name: string) => (cols[idx(name)] ?? "").trim()
+
+    const options: string[] = []
+    const optA = get("option_a"); if (optA) options.push(optA)
+    const optB = get("option_b"); if (optB) options.push(optB)
+    const optC = get("option_c"); if (optC) options.push(optC)
+    const optD = get("option_d"); if (optD) options.push(optD)
+
+    const rawAnswer = get("answer").toUpperCase()
+    let answerIdx: number
+    if (rawAnswer === "A") answerIdx = 0
+    else if (rawAnswer === "B") answerIdx = 1
+    else if (rawAnswer === "C") answerIdx = 2
+    else if (rawAnswer === "D") answerIdx = 3
+    else {
+      const n = parseInt(rawAnswer, 10)
+      if (isNaN(n)) return { error: `第 ${i} 行的 answer 格式不正確（應為 A/B/C/D 或 0/1/2/3）。` }
+      answerIdx = n
+    }
+
+    if (answerIdx >= options.length) {
+      return { error: `第 ${i} 行的 answer 超出選項範圍。` }
+    }
+
+    questions.push({
+      subject: get("subject"),
+      topic: get("topic"),
+      question: get("question"),
+      options,
+      answer: answerIdx,
+      explanation: get("explanation") || undefined,
+    } as ImportedQuestion)
+  }
+
+  if (questions.length === 0) return { error: "CSV 沒有有效的題目資料。" }
+  return { data: questions, rawText }
 }
 
 function parseQuestionsInput(rawText: string): ParseSuccess | { error: string } {
@@ -132,11 +222,28 @@ export function ImportClient({ studyGroups }: ImportClientProps) {
     const file = event.target.files?.[0]
     if (!file) return
 
+    const isCsv = file.name.toLowerCase().endsWith(".csv")
     const reader = new FileReader()
     reader.onload = (loadEvent) => {
-      applyParsedInput(loadEvent.target?.result as string)
+      const text = loadEvent.target?.result as string
+      if (isCsv) {
+        resetPreviewState()
+        const parsed = parseCsvInput(text)
+        if ("error" in parsed) {
+          setParsingError(parsed.error)
+        } else {
+          setPreviewData(parsed.data)
+        }
+      } else {
+        applyParsedInput(text)
+      }
     }
     reader.readAsText(file)
+  }
+
+  const handleFillExample = () => {
+    setInputText(EXAMPLE_JSON)
+    resetPreviewState()
   }
 
   const handlePreview = () => {
@@ -227,30 +334,32 @@ export function ImportClient({ studyGroups }: ImportClientProps) {
               </Select>
             </div>
 
-            <div className="space-y-2">
-              <Label>讀書房</Label>
-              <Select
-                value={sharedStudyGroupId}
-                disabled={visibility !== "study_group" || !canShareToGroup}
-                onValueChange={(value) => setSharedStudyGroupId(value ?? "")}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder={canShareToGroup ? "選擇讀書房" : "目前尚未加入讀書房"}>
-                    {(() => {
-                      const group = studyGroups.find((g) => g.id === sharedStudyGroupId)
-                      return group ? `${group.name} (${group.memberCount} 人)` : undefined
-                    })()}
-                  </SelectValue>
-                </SelectTrigger>
-                <SelectContent>
-                  {studyGroups.map((group) => (
-                    <SelectItem key={group.id} value={group.id}>
-                      {group.name} ({group.memberCount} 人)
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
+            {visibility === "study_group" && (
+              <div className="space-y-2">
+                <Label>讀書房</Label>
+                <Select
+                  value={sharedStudyGroupId}
+                  disabled={!canShareToGroup}
+                  onValueChange={(value) => setSharedStudyGroupId(value ?? "")}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder={canShareToGroup ? "選擇讀書房" : "目前尚未加入讀書房"}>
+                      {(() => {
+                        const group = studyGroups.find((g) => g.id === sharedStudyGroupId)
+                        return group ? `${group.name} (${group.memberCount} 人)` : undefined
+                      })()}
+                    </SelectValue>
+                  </SelectTrigger>
+                  <SelectContent>
+                    {studyGroups.map((group) => (
+                      <SelectItem key={group.id} value={group.id}>
+                        {group.name} ({group.memberCount} 人)
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
           </div>
 
           {visibility === "study_group" ? (
@@ -264,9 +373,14 @@ export function ImportClient({ studyGroups }: ImportClientProps) {
           ) : null}
 
           <div className="space-y-2">
-            <div className="flex items-center gap-2 text-sm font-medium">
-              <ClipboardPaste className="h-4 w-4" />
-              直接貼上 JSON
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2 text-sm font-medium">
+                <ClipboardPaste className="h-4 w-4" />
+                直接貼上 JSON
+              </div>
+              <Button type="button" variant="ghost" size="sm" onClick={handleFillExample} className="text-xs h-7 px-2">
+                填入範例
+              </Button>
             </div>
             <textarea
               value={inputText}
@@ -280,14 +394,17 @@ export function ImportClient({ studyGroups }: ImportClientProps) {
           <div className="space-y-2 border-t pt-4">
             <div className="flex items-center gap-2 text-sm font-medium">
               <FileJson className="h-4 w-4" />
-              或上傳 JSON 檔案
+              或上傳 JSON / CSV 檔案
             </div>
             <input
               type="file"
-              accept=".json"
+              accept=".json,.csv"
               onChange={handleFileUpload}
               className="block w-full text-sm text-slate-500 file:mr-4 file:rounded-md file:border-0 file:bg-primary/10 file:px-4 file:py-2 file:text-sm file:font-semibold file:text-primary hover:file:bg-primary/20"
             />
+            <p className="text-xs text-muted-foreground">
+              CSV 格式：<code>subject,topic,question,option_a,option_b,option_c,option_d,answer,explanation</code>，answer 填 A/B/C/D。
+            </p>
           </div>
 
           <div className="flex flex-wrap justify-end gap-2">

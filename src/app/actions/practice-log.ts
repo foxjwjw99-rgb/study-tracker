@@ -22,8 +22,10 @@ export type QuestionManagementItem = {
   id: string
   topic: string
   question: string
+  question_type: "multiple_choice" | "fill_in_blank"
   options: string[]
   answer: number
+  text_answer: string | null
   explanation: string | null
   image_url: string | null
   visibility: "private" | "study_group"
@@ -38,7 +40,8 @@ export async function getQuestionsForManagement(
   const user = await getCurrentUserOrThrow()
   const normalizedSubjectName = await resolveSubjectName(user.id, subjectNameOrId)
 
-  const questions = await prisma.question.findMany({
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const questions: any[] = await (prisma.question as any).findMany({
     where: {
       user_id: user.id,
       subject: { name: normalizedSubjectName },
@@ -48,8 +51,10 @@ export async function getQuestionsForManagement(
       id: true,
       topic: true,
       question: true,
+      question_type: true,
       options: true,
       answer: true,
+      text_answer: true,
       explanation: true,
       image_url: true,
       visibility: true,
@@ -60,9 +65,18 @@ export async function getQuestionsForManagement(
   })
 
   return questions.map((q) => ({
-    ...q,
+    id: q.id,
+    topic: q.topic,
+    question: q.question,
+    question_type: (q.question_type === "fill_in_blank" ? "fill_in_blank" : "multiple_choice") as "multiple_choice" | "fill_in_blank",
     options: safeParseOptions(q.options),
-    visibility: q.visibility === "study_group" ? "study_group" : "private",
+    answer: q.answer,
+    text_answer: (q.text_answer ?? null) as string | null,
+    explanation: q.explanation ?? null,
+    image_url: q.image_url ?? null,
+    visibility: (q.visibility === "study_group" ? "study_group" : "private") as "private" | "study_group",
+    shared_study_group_id: q.shared_study_group_id ?? null,
+    created_at: q.created_at,
   }))
 }
 
@@ -76,6 +90,47 @@ export async function deleteQuestion(id: string) {
   assertOwnedRecord(question, OWNERSHIP_ERROR_MESSAGE)
 
   await prisma.question.delete({ where: { id, user_id: user.id } })
+  revalidatePath("/import")
+  revalidatePath("/practice")
+}
+
+export async function deleteQuestions(ids: string[]) {
+  if (ids.length === 0) return
+  const user = await getCurrentUserOrThrow()
+  await prisma.question.deleteMany({
+    where: { id: { in: ids }, user_id: user.id },
+  })
+  revalidatePath("/import")
+  revalidatePath("/practice")
+}
+
+export type UpdateQuestionInput = {
+  topic: string
+  question: string
+  options: string[]
+  answer: number
+  explanation: string | null
+}
+
+export async function updateQuestion(id: string, data: UpdateQuestionInput) {
+  const user = await getCurrentUserOrThrow()
+  const existing = await prisma.question.findFirst({
+    where: { id, user_id: user.id },
+    select: { id: true },
+  })
+
+  assertOwnedRecord(existing, OWNERSHIP_ERROR_MESSAGE)
+
+  await prisma.question.update({
+    where: { id },
+    data: {
+      topic: data.topic,
+      question: data.question,
+      options: JSON.stringify(data.options),
+      answer: data.answer,
+      explanation: data.explanation,
+    },
+  })
   revalidatePath("/import")
   revalidatePath("/practice")
 }
@@ -268,6 +323,106 @@ export async function getPracticeQuestions(
   }
 
   return parsedQuestions.slice(0, requestedCount)
+}
+
+export async function getPracticeQuestionsWeakFirst(
+  subjectNameOrId: string,
+  requestedCount: number
+): Promise<PracticeQuestionItem[]> {
+  const user = await getCurrentUserOrThrow()
+  const accessibleGroupIds = await getAccessibleStudyGroupIds(user.id)
+  const normalizedSubjectName = await resolveSubjectName(user.id, subjectNameOrId)
+  const practiceSubjectId = await ensureLocalSubjectId(user.id, normalizedSubjectName)
+
+  // Get topics with unresolved wrong questions
+  const wrongTopics = await prisma.wrongQuestion.findMany({
+    where: {
+      user_id: user.id,
+      subject: { name: normalizedSubjectName },
+      status: { not: "已掌握" },
+    },
+    select: { topic: true },
+    distinct: ["topic"],
+  })
+  const weakTopicSet = new Set(wrongTopics.map((wq) => wq.topic))
+
+  const allQuestions = await prisma.question.findMany({
+    where: {
+      ...buildAccessibleQuestionWhere(user.id, accessibleGroupIds),
+      subject: { name: normalizedSubjectName },
+    },
+    include: {
+      shared_study_group: { select: { id: true, name: true } },
+    },
+    orderBy: { created_at: "desc" },
+  })
+
+  const toItem = (question: (typeof allQuestions)[number]): PracticeQuestionItem | null => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const q = question as any
+    const isFib = q.question_type === "fill_in_blank"
+    if (isFib) {
+      return {
+        id: createAnswerKey(question.id, practiceSubjectId),
+        source_question_id: question.id,
+        subject_id: practiceSubjectId,
+        subject_name: normalizedSubjectName,
+        topic: question.topic,
+        question: question.question,
+        question_type: "fill_in_blank" as const,
+        options: [],
+        answer: 0,
+        text_answer: (q.text_answer ?? null) as string | null,
+        explanation: question.explanation,
+        image_url: question.image_url,
+        visibility: question.visibility === "study_group" ? "study_group" : "private",
+        shared_study_group_id: question.shared_study_group_id,
+        shared_study_group_name: question.shared_study_group?.name ?? null,
+      }
+    }
+    const options = safeParseOptions(question.options)
+    if (options.length === 0) return null
+    return {
+      id: createAnswerKey(question.id, practiceSubjectId),
+      source_question_id: question.id,
+      subject_id: practiceSubjectId,
+      subject_name: normalizedSubjectName,
+      topic: question.topic,
+      question: question.question,
+      question_type: "multiple_choice" as const,
+      options,
+      answer: question.answer,
+      text_answer: null,
+      explanation: question.explanation,
+      image_url: question.image_url,
+      visibility: question.visibility === "study_group" ? "study_group" : "private",
+      shared_study_group_id: question.shared_study_group_id,
+      shared_study_group_name: question.shared_study_group?.name ?? null,
+    }
+  }
+
+  const weakQuestions: PracticeQuestionItem[] = []
+  const otherQuestions: PracticeQuestionItem[] = []
+
+  for (const q of allQuestions) {
+    const item = toItem(q)
+    if (!item) continue
+    if (weakTopicSet.has(q.topic)) {
+      weakQuestions.push(item)
+    } else {
+      otherQuestions.push(item)
+    }
+  }
+
+  shuffleInPlace(weakQuestions)
+  shuffleInPlace(otherQuestions)
+
+  const result = [...weakQuestions, ...otherQuestions]
+
+  if (requestedCount <= 0 || requestedCount >= result.length) {
+    return result
+  }
+  return result.slice(0, requestedCount)
 }
 
 export async function createPracticeLog(data: {

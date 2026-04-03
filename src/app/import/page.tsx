@@ -1,6 +1,7 @@
 import { ImportClient } from "./import-client"
 import { QuestionManagementClient } from "./question-management-client"
 import { VocabularyImportClient } from "./vocabulary-import-client"
+import { CopyPromptButton } from "./copy-prompt-button"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { getStudyGroupsForCurrentUser } from "@/app/actions/study-group"
 import { getPracticeQuestionBank } from "@/app/actions/practice-log"
@@ -28,7 +29,10 @@ export default async function ImportPage() {
         <TabsContent value="questions" className="space-y-6">
           <ImportClient studyGroups={studyGroups} />
           <div className="prose max-w-none prose-sm dark:prose-invert">
-            <h3>題目 JSON 格式要求</h3>
+            <div className="not-prose flex items-center justify-between mb-2">
+              <h3 className="text-base font-semibold">題目 JSON 格式要求</h3>
+              <CopyPromptButton />
+            </div>
             <p>你的 JSON 必須是一個物件陣列，結構如下：</p>
             <pre className="overflow-x-auto"><code>{`[
   {
