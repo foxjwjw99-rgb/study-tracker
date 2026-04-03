@@ -67,7 +67,6 @@ model Subject {
   vocabulary_words VocabularyWord[]
   vocabulary_review_logs VocabularyReviewLog[]
   exam_syllabus_units ExamSyllabusUnit[]
-  exam_units          ExamUnit[]
   mock_exam_records   MockExamRecord[]
 
   created_at DateTime @default(now())
