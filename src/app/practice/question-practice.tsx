@@ -9,6 +9,7 @@ import { toast } from "sonner"
 
 import {
   getPracticeQuestions,
+  getPracticeQuestionsWeakFirst,
   getPracticeQuestionTopics,
   submitPracticeQuestionSession,
 } from "@/app/actions/practice-log"
@@ -65,6 +66,7 @@ export function QuestionPractice({ questionBank, initialSubjectId, initialTopic 
   const [selectedTopic, setSelectedTopic] = useState(initialTopic ?? "")
   const [topics, setTopics] = useState<{ topic: string; count: number }[]>([])
   const [requestedCount, setRequestedCount] = useState<string>("10")
+  const [quizMode, setQuizMode] = useState<"random" | "weak_first">("random")
   const [session, setSession] = useState<SessionState | null>(null)
   const [result, setResult] = useState<PracticeQuestionSessionResult | null>(null)
   const [completionSummary, setCompletionSummary] = useState<PracticeCompletionSummary | null>(null)
@@ -156,7 +158,9 @@ export function QuestionPractice({ questionBank, initialSubjectId, initialTopic 
       const count = requestedCount === "all"
         ? selectedSubject?.question_count ?? 0
         : Number.parseInt(requestedCount, 10)
-      const questions = await getPracticeQuestions(selectedSubjectId, count, selectedTopic || undefined)
+      const questions = quizMode === "weak_first"
+        ? await getPracticeQuestionsWeakFirst(selectedSubjectId, count)
+        : await getPracticeQuestions(selectedSubjectId, count, selectedTopic || undefined)
 
       if (questions.length === 0) {
         toast.error("這個科目目前沒有可用題目。")
@@ -325,7 +329,21 @@ export function QuestionPractice({ questionBank, initialSubjectId, initialTopic 
             <CardDescription>從自己的題目與讀書房共享題目中抽題作答，完成後會自動寫入個人練習紀錄。</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
-            <div className="grid gap-4 sm:grid-cols-3">
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+              <div className="space-y-2">
+                <label className="text-sm font-medium">出題模式</label>
+                <Select value={quizMode} onValueChange={(v) => setQuizMode(v as "random" | "weak_first")}>
+                  <SelectTrigger className="w-full">
+                    <SelectValue>
+                      {quizMode === "weak_first" ? "弱點優先" : "隨機抽題"}
+                    </SelectValue>
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="random">隨機抽題</SelectItem>
+                    <SelectItem value="weak_first">弱點優先</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
               <div className="space-y-2">
                 <label className="text-sm font-medium">科目</label>
                 <Select
@@ -406,8 +424,14 @@ export function QuestionPractice({ questionBank, initialSubjectId, initialTopic 
                 </div>
                 <div className="rounded-lg border bg-muted/40 p-3 text-sm">
                   <div className="text-muted-foreground">練習模式</div>
-                  <div className="mt-1 font-medium text-foreground">單科隨機抽題</div>
-                  <div className="mt-1 text-muted-foreground">依照目前科目題庫隨機出題</div>
+                  <div className="mt-1 font-medium text-foreground">
+                    {quizMode === "weak_first" ? "弱點優先" : "隨機抽題"}
+                  </div>
+                  <div className="mt-1 text-muted-foreground">
+                    {quizMode === "weak_first"
+                      ? "優先出現有錯題紀錄的單元"
+                      : "依照目前科目題庫隨機出題"}
+                  </div>
                 </div>
                 <div className="rounded-lg border bg-muted/40 p-3 text-sm">
                   <div className="text-muted-foreground">預估時間</div>

@@ -7,12 +7,24 @@ import type { HighEffortLowReturnItem, SubjectStatsItem } from "@/types"
 export default async function AnalyticsPage() {
   const data = await getAnalyticsData()
 
+  const totalPracticeQuestions = data.subjectStats.reduce(
+    (sum: number, s: SubjectStatsItem) => sum + s.totalQuestions,
+    0
+  )
+  const hasInsufficientData = totalPracticeQuestions < 10
+
   return (
     <div className="max-w-6xl space-y-6">
       <div>
         <h1 className="mb-2 text-3xl font-bold tracking-tight">數據分析</h1>
         <p className="text-muted-foreground">專注看你的讀書投入、刷題表現與整體學習效率。</p>
       </div>
+
+      {hasInsufficientData && (
+        <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-300">
+          <strong>資料尚不足：</strong>目前練習題數過少（共 {totalPracticeQuestions} 題），圖表參考價值有限。建議先到<a href="/practice" className="mx-1 underline underline-offset-2">練習頁</a>完成幾組題目後再回來查看。
+        </div>
+      )}
 
       <div className="grid gap-6 md:grid-cols-2">
         <Card>
