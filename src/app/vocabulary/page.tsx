@@ -7,10 +7,11 @@ import { VocabularyStudyClient } from "./vocabulary-study-client"
 export default async function VocabularyPage({
   searchParams,
 }: {
-  searchParams?: Promise<{ tab?: string }>
+  searchParams?: Promise<{ tab?: string; subject?: string }>
 }) {
   const params = (await searchParams) ?? {}
   const activeTab = params.tab === "insights" ? "insights" : "study"
+  const initialSubjectId = params.subject ?? "all"
 
   const [bank, words, analyticsData] = await Promise.all([
     getVocabularyBank(),
@@ -34,6 +35,7 @@ export default async function VocabularyPage({
         <TabsContent value="study" className="space-y-6">
           <VocabularyStudyClient
             bank={bank}
+            initialSubjectId={initialSubjectId}
             initialWords={words.map((word) => ({
               id: word.id,
               word: word.word,

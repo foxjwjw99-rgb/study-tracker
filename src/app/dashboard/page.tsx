@@ -808,7 +808,7 @@ function VocabularyProgressSection({
 
 function VocabularySubjectCard({ item }: { item: DashboardSubjectReadinessItem }) {
   const familiarity = item.vocabularyFamiliarRate ?? 0
-  const ctaHref = item.vocabularyDue > 0 ? "/review" : "/vocabulary"
+  const ctaHref = item.vocabularyDue > 0 ? "/review" : `/vocabulary?subject=${item.subjectId}`
 
   return (
     <Card>
