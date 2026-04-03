@@ -25,6 +25,7 @@ import type {
 type VocabularyStudyClientProps = {
   bank: VocabularyBankItem[]
   initialWords: VocabularyQueueItem[]
+  initialSubjectId?: string
 }
 
 type StudyMode = "flashcard" | "quiz" | "spelling"
@@ -89,8 +90,9 @@ function buildSessionState(words: VocabularyQueueItem[], mode: StudyMode): Vocab
 export function VocabularyStudyClient({
   bank,
   initialWords,
+  initialSubjectId,
 }: VocabularyStudyClientProps) {
-  const [selectedSubjectId, setSelectedSubjectId] = useState<string>("all")
+  const [selectedSubjectId, setSelectedSubjectId] = useState<string>(initialSubjectId ?? "all")
   const [statusFilter, setStatusFilter] = useState<VocabularyStatusFilter>("all")
   const [sessionLimit, setSessionLimit] = useState<string>("10")
   const [studyMode, setStudyMode] = useState<StudyMode>("flashcard")

@@ -40,6 +40,7 @@ model User {
   reward_draws        RewardDraw[]
   owned_study_groups  StudyGroup[]       @relation("StudyGroupOwner")
   study_group_members StudyGroupMember[]
+  question_groups      QuestionGroup[]
   exam_syllabus_units  ExamSyllabusUnit[]
   mock_exam_records    MockExamRecord[]
   target_programs      TargetProgram[]
@@ -62,6 +63,7 @@ model Subject {
   wrong_qs      WrongQuestion[]
   review_tasks  ReviewTask[]
   questions     Question[]
+  question_groups QuestionGroup[]
   vocabulary_words VocabularyWord[]
   vocabulary_review_logs VocabularyReviewLog[]
   exam_syllabus_units ExamSyllabusUnit[]
@@ -104,19 +106,6 @@ model ExamSyllabusUnit {
 
   @@unique([subject_id, unit_name])
   @@index([user_id, subject_id])
-}
-
-model ExamUnit {
-  id         String  @id @default(cuid())
-  subject_id String
-  subject    Subject @relation(fields: [subject_id], references: [id], onDelete: Cascade)
-  name       String
-  order      Int     @default(0)
-
-  created_at DateTime @default(now())
-  updated_at DateTime @updatedAt
-
-  @@index([subject_id])
 }
 
 model StudyLog {
@@ -236,24 +225,45 @@ model ReviewTask {
   @@index([user_id, subject_id])
 }
 
+model QuestionGroup {
+  id         String     @id @default(cuid())
+  user_id    String
+  user       User       @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  subject_id String
+  subject    Subject    @relation(fields: [subject_id], references: [id], onDelete: Cascade)
+  topic      String
+  title      String?
+  context    String     // 共同題幹 / 情境段落
+
+  questions  Question[]
+
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  @@index([user_id, subject_id])
+}
+
 model Question {
-  id                    String      @id @default(cuid())
+  id                    String         @id @default(cuid())
   user_id               String
-  user                  User        @relation(fields: [user_id], references: [id])
+  user                  User           @relation(fields: [user_id], references: [id])
   subject_id            String
-  subject               Subject     @relation(fields: [subject_id], references: [id])
+  subject               Subject        @relation(fields: [subject_id], references: [id])
   topic                 String
   external_id           String?
   question              String
-  question_type         String      @default("multiple_choice") // "multiple_choice" | "fill_in_blank"
-  options               String      // Stored as JSON string e.g. '["A", "B", "C", "D"]'; empty "[]" for FIB
-  answer                Int         // Index of correct option (MC); 0 for FIB
-  text_answer           String?     // Pipe-separated accepted answers for FIB, e.g. "光合作用|photosynthesis"
+  question_type         String         @default("multiple_choice") // "multiple_choice" | "fill_in_blank"
+  options               String         // Stored as JSON string e.g. '["A", "B", "C", "D"]'; empty "[]" for FIB
+  answer                Int            // Index of correct option (MC); 0 for FIB
+  text_answer           String?        // Pipe-separated accepted answers for FIB, e.g. "光合作用|photosynthesis"
   explanation           String?
   image_url             String?
-  visibility            String      @default("private") // private / study_group
+  visibility            String         @default("private") // private / study_group
   shared_study_group_id String?
-  shared_study_group    StudyGroup? @relation(fields: [shared_study_group_id], references: [id], onDelete: SetNull)
+  shared_study_group    StudyGroup?    @relation(fields: [shared_study_group_id], references: [id], onDelete: SetNull)
+  group_id              String?
+  group_order           Int?
+  group                 QuestionGroup? @relation(fields: [group_id], references: [id], onDelete: SetNull)
 
   created_at  DateTime @default(now())
   updated_at  DateTime @updatedAt

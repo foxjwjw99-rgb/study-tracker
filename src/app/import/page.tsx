@@ -2,6 +2,7 @@ import { ImportClient } from "./import-client"
 import { QuestionManagementClient } from "./question-management-client"
 import { VocabularyImportClient } from "./vocabulary-import-client"
 import { CopyPromptButton } from "./copy-prompt-button"
+import { QuestionGroupImportClient } from "./question-group-import-client"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { getStudyGroupsForCurrentUser } from "@/app/actions/study-group"
 import { getPracticeQuestionBank } from "@/app/actions/practice-log"
@@ -16,12 +17,13 @@ export default async function ImportPage() {
     <div className="max-w-4xl space-y-6">
       <div>
         <h1 className="text-3xl font-bold tracking-tight mb-2">匯入資料</h1>
-        <p className="text-muted-foreground">使用 JSON 批次匯入練習題目或英文單字，支援直接貼上與檔案上傳。</p>
+        <p className="text-muted-foreground">批次匯入練習題目、題組或英文單字，支援 JSON 與表格格式。</p>
       </div>
 
       <Tabs defaultValue="questions" className="space-y-6">
         <TabsList className="w-full sm:w-auto">
           <TabsTrigger value="questions">練習題目</TabsTrigger>
+          <TabsTrigger value="question-groups">題組</TabsTrigger>
           <TabsTrigger value="manage">管理題目</TabsTrigger>
           <TabsTrigger value="vocabulary">英文單字</TabsTrigger>
         </TabsList>
@@ -52,6 +54,42 @@ export default async function ImportPage() {
               <li>重複的題目（相同使用者 + 相同科目 + 相同題目內容）將會自動跳過。</li>
               <li>可選擇匯入為<strong>私人題庫</strong>，或直接分享到你所在的<strong>讀書房</strong>。</li>
               <li><strong>請直接貼原始 JSON</strong>；不要貼 base64、不要額外加引號。</li>
+            </ul>
+          </div>
+        </TabsContent>
+
+        <TabsContent value="question-groups" className="space-y-6">
+          <QuestionGroupImportClient studyGroups={studyGroups} />
+          <div className="prose max-w-none prose-sm dark:prose-invert">
+            <h3>題組格式說明</h3>
+            <p><strong>JSON 格式</strong>：一個物件陣列，每個物件代表一個題組：</p>
+            <pre className="overflow-x-auto"><code>{`[
+  {
+    "subject": "國文",
+    "topic": "閱讀測驗",
+    "title": "第一題組（選填）",
+    "context": "閱讀下文，回答第 1–2 題...",
+    "questions": [
+      {
+        "question": "第一小題題目",
+        "options": ["選項A", "選項B", "選項C", "選項D"],
+        "answer": 0,
+        "explanation": "選填解析"
+      },
+      {
+        "question": "第二小題（填空）",
+        "question_type": "fill_in_blank",
+        "text_answer": "答案1|答案2"
+      }
+    ]
+  }
+]`}</code></pre>
+            <p><strong>表格格式（CSV / Excel）</strong>：需包含以下欄位標題：</p>
+            <pre className="overflow-x-auto"><code>{`subject, topic, group_title, group_context, question, option_A, option_B, option_C, option_D, answer, explanation`}</code></pre>
+            <ul>
+              <li>相同 <strong>subject + topic + group_context</strong> 的列會自動歸為同一題組。</li>
+              <li><strong>answer</strong> 填 A/B/C/D 或 1/2/3/4；若無選項欄位則視為填空題。</li>
+              <li>重複的題組（相同科目 + 相同情境）將自動跳過。</li>
             </ul>
           </div>
         </TabsContent>

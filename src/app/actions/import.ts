@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache"
 import prisma from "@/lib/prisma"
 import { getCurrentUserOrThrow } from "@/lib/current-user"
-import { importQuestionsSchema } from "@/app/import/schema"
+import { importQuestionsSchema, importQuestionGroupsSchema } from "@/app/import/schema"
 import type { QuestionImportTarget } from "@/types"
 
 export type ImportResult = {
@@ -210,5 +210,168 @@ async function resolveImportTarget(userId: string, importTarget: QuestionImportT
       visibility: "study_group" as const,
       shared_study_group_id: membership.study_group_id,
     },
+  }
+}
+
+export type ImportGroupResult = {
+  success: boolean
+  message: string
+  groupCount: number
+  questionCount: number
+  duplicateGroupCount: number
+  errorCount: number
+}
+
+export async function importQuestionGroups(
+  data: unknown,
+  importTarget: QuestionImportTarget = DEFAULT_IMPORT_TARGET
+): Promise<ImportGroupResult> {
+  const user = await getCurrentUserOrThrow()
+
+  const parsed = importQuestionGroupsSchema.safeParse(data)
+  if (!parsed.success) {
+    return {
+      success: false,
+      message: "格式錯誤。請檢查題組格式要求。",
+      groupCount: 0,
+      questionCount: 0,
+      duplicateGroupCount: 0,
+      errorCount: 0,
+    }
+  }
+
+  const normalizedTarget = await resolveImportTarget(user.id, importTarget)
+  if (!normalizedTarget.success) {
+    return {
+      success: false,
+      message: normalizedTarget.message,
+      groupCount: 0,
+      questionCount: 0,
+      duplicateGroupCount: 0,
+      errorCount: 0,
+    }
+  }
+
+  const groups = parsed.data
+
+  // Ensure subjects exist
+  const dbSubjects = await prisma.subject.findMany({ where: { user_id: user.id } })
+  const subjectMap = new Map<string, string>(dbSubjects.map((s) => [s.name, s.id]))
+
+  const uniqueSubjects = Array.from(new Set(groups.map((g) => g.subject)))
+  const missingSubjects = uniqueSubjects.filter((name) => !subjectMap.has(name))
+
+  if (missingSubjects.length > 0) {
+    await prisma.subject.createMany({
+      data: missingSubjects.map((name) => ({ user_id: user.id, name })),
+    })
+    const newSubjects = await prisma.subject.findMany({
+      where: { user_id: user.id, name: { in: missingSubjects } },
+    })
+    for (const sub of newSubjects) {
+      subjectMap.set(sub.name, sub.id)
+    }
+  }
+
+  // Load existing groups for dedup (keyed by user_id + subject_id + context)
+  const existingGroups = await prisma.questionGroup.findMany({
+    where: { user_id: user.id },
+    select: { subject_id: true, context: true },
+  })
+  const existingGroupKeys = new Set(
+    existingGroups.map((g) => JSON.stringify([g.subject_id, g.context]))
+  )
+
+  // Load existing questions for dedup
+  const existingQs = await prisma.question.findMany({
+    where: { user_id: user.id },
+    select: { subject_id: true, question: true },
+  })
+  const existingQKeys = new Set(existingQs.map((q) => JSON.stringify([q.subject_id, q.question])))
+
+  let groupCount = 0
+  let questionCount = 0
+  let duplicateGroupCount = 0
+  let errorCount = 0
+
+  for (const group of groups) {
+    const subjectId = subjectMap.get(group.subject)
+    if (!subjectId) {
+      errorCount += group.questions.length
+      continue
+    }
+
+    const groupKey = JSON.stringify([subjectId, group.context])
+    if (existingGroupKeys.has(groupKey)) {
+      duplicateGroupCount += 1
+      continue
+    }
+    existingGroupKeys.add(groupKey)
+
+    try {
+      const createdGroup = await prisma.questionGroup.create({
+        data: {
+          user_id: user.id,
+          subject_id: subjectId,
+          topic: group.topic,
+          title: group.title ?? null,
+          context: group.context,
+        },
+      })
+      groupCount += 1
+
+      const questionsToCreate = []
+      for (let i = 0; i < group.questions.length; i++) {
+        const q = group.questions[i]
+        const qKey = JSON.stringify([subjectId, q.question])
+        if (existingQKeys.has(qKey)) continue
+        existingQKeys.add(qKey)
+
+        const isFib = "question_type" in q && q.question_type === "fill_in_blank"
+        questionsToCreate.push({
+          user_id: user.id,
+          subject_id: subjectId,
+          topic: group.topic,
+          external_id: q.external_id ?? null,
+          question: q.question,
+          question_type: isFib ? "fill_in_blank" : "multiple_choice",
+          options: isFib ? "[]" : JSON.stringify((q as { options: string[] }).options),
+          answer: isFib ? 0 : (q as { answer: number }).answer,
+          text_answer: isFib ? (q as { text_answer: string }).text_answer : null,
+          explanation: q.explanation ?? null,
+          image_url: null,
+          visibility: normalizedTarget.target.visibility,
+          shared_study_group_id:
+            normalizedTarget.target.visibility === "study_group"
+              ? normalizedTarget.target.shared_study_group_id
+              : null,
+          group_id: createdGroup.id,
+          group_order: i,
+        })
+      }
+
+      if (questionsToCreate.length > 0) {
+        const result = await prisma.question.createMany({ data: questionsToCreate })
+        questionCount += result.count
+      }
+    } catch (e) {
+      console.error("Error creating question group", e)
+      errorCount += group.questions.length
+    }
+  }
+
+  revalidatePath("/practice")
+  revalidatePath("/import")
+
+  return {
+    success: true,
+    message:
+      normalizedTarget.target.visibility === "study_group"
+        ? "題組匯入完成，已分享到讀書房。"
+        : "題組匯入完成。",
+    groupCount,
+    questionCount,
+    duplicateGroupCount,
+    errorCount,
   }
 }
