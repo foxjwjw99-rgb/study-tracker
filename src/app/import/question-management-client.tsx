@@ -65,27 +65,38 @@ export function QuestionManagementClient({ questionBank }: QuestionManagementCli
   const [editAnswer, setEditAnswer] = useState(0)
   const [editExplanation, setEditExplanation] = useState("")
 
+  async function loadTopics(subjectId: string) {
+    setIsLoadingTopics(true)
+    try {
+      const nextTopics = await getPracticeQuestionTopics(subjectId)
+      setTopics(nextTopics)
+    } catch {
+      toast.error("載入單元失敗。")
+    } finally {
+      setIsLoadingTopics(false)
+    }
+  }
+
+  async function loadQuestions(subjectId: string, topic?: string) {
+    setIsLoadingQuestions(true)
+    try {
+      const nextQuestions = await getQuestionsForManagement(subjectId, topic)
+      setQuestions(nextQuestions)
+    } catch {
+      toast.error("載入題目失敗。")
+    } finally {
+      setIsLoadingQuestions(false)
+    }
+  }
+
   useEffect(() => {
     if (!selectedSubjectId) return
-    setSelectedTopic("")
-    setTopics([])
-    setQuestions([])
-    setSelectedIds(new Set())
-    setIsLoadingTopics(true)
-    getPracticeQuestionTopics(selectedSubjectId)
-      .then(setTopics)
-      .catch(() => toast.error("載入單元失敗。"))
-      .finally(() => setIsLoadingTopics(false))
+    void loadTopics(selectedSubjectId)
   }, [selectedSubjectId])
 
   useEffect(() => {
     if (!selectedSubjectId) return
-    setIsLoadingQuestions(true)
-    setSelectedIds(new Set())
-    getQuestionsForManagement(selectedSubjectId, selectedTopic || undefined)
-      .then(setQuestions)
-      .catch(() => toast.error("載入題目失敗。"))
-      .finally(() => setIsLoadingQuestions(false))
+    void loadQuestions(selectedSubjectId, selectedTopic || undefined)
   }, [selectedSubjectId, selectedTopic])
 
   const filteredQuestions = searchText.trim()
@@ -210,7 +221,13 @@ export function QuestionManagementClient({ questionBank }: QuestionManagementCli
               <label className="text-sm font-medium">科目</label>
               <Select
                 value={selectedSubjectId}
-                onValueChange={(value) => setSelectedSubjectId(value ?? ownedBank[0]?.subject_id ?? "")}
+                onValueChange={(value) => {
+                  setSelectedSubjectId(value ?? ownedBank[0]?.subject_id ?? "")
+                  setSelectedTopic("")
+                  setTopics([])
+                  setQuestions([])
+                  setSelectedIds(new Set())
+                }}
               >
                 <SelectTrigger className="w-full">
                   <SelectValue>
@@ -232,7 +249,10 @@ export function QuestionManagementClient({ questionBank }: QuestionManagementCli
               <label className="text-sm font-medium">單元（選填）</label>
               <Select
                 value={selectedTopic || "__all__"}
-                onValueChange={(value) => setSelectedTopic(value === "__all__" ? "" : (value ?? ""))}
+                onValueChange={(value) => {
+                  setSelectedTopic(value === "__all__" ? "" : (value ?? ""))
+                  setSelectedIds(new Set())
+                }}
                 disabled={isLoadingTopics || topics.length === 0}
               >
                 <SelectTrigger className="w-full">

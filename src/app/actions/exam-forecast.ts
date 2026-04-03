@@ -522,7 +522,7 @@ export async function bulkUpsertSyllabusUnits(
   assertOwnedRecord(ownedSubject, OWNERSHIP_ERROR_MESSAGE)
 
   // ── Parse & normalise input ──
-  let entries: Array<{ subjectId: string; units: SyllabusImportUnit[]; examWeight?: number }> = []
+  const entries: Array<{ subjectId: string; units: SyllabusImportUnit[]; examWeight?: number }> = []
 
   if (Array.isArray(raw)) {
     // Multi-subject format: [{ subject, exam_weight?, units }]

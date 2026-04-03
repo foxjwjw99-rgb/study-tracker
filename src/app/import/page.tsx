@@ -17,13 +17,13 @@ export default async function ImportPage() {
     <div className="max-w-4xl space-y-6">
       <div>
         <h1 className="text-3xl font-bold tracking-tight mb-2">匯入資料</h1>
-        <p className="text-muted-foreground">批次匯入練習題目、題組或英文單字，支援 JSON 與表格格式。</p>
+        <p className="text-muted-foreground">題目匯入現在以統一 JSON 管線為主：貼上 / 上傳 → 驗證 → 預覽 → 去重 → 寫入。題組表格匯入與英文單字匯入則保留在下方。</p>
       </div>
 
       <Tabs defaultValue="questions" className="space-y-6">
         <TabsList className="w-full sm:w-auto">
-          <TabsTrigger value="questions">練習題目</TabsTrigger>
-          <TabsTrigger value="question-groups">題組</TabsTrigger>
+          <TabsTrigger value="questions">題目匯入</TabsTrigger>
+          <TabsTrigger value="question-groups">題組表格匯入</TabsTrigger>
           <TabsTrigger value="manage">管理題目</TabsTrigger>
           <TabsTrigger value="vocabulary">英文單字</TabsTrigger>
         </TabsList>
@@ -32,28 +32,50 @@ export default async function ImportPage() {
           <ImportClient studyGroups={studyGroups} />
           <div className="prose max-w-none prose-sm dark:prose-invert">
             <div className="not-prose flex items-center justify-between mb-2">
-              <h3 className="text-base font-semibold">題目 JSON 格式要求</h3>
+              <h3 className="text-base font-semibold">統一題目 JSON 格式要求</h3>
               <CopyPromptButton />
             </div>
-            <p>你的 JSON 必須是一個物件陣列，結構如下：</p>
+            <p>同一個 JSON 陣列裡，可以混合放入單題、填充題與題組：</p>
             <pre className="overflow-x-auto"><code>{`[
   {
-    "external_id": "選填字串",
+    "external_id": "math-basic-001",
     "subject": "數學",
     "topic": "代數",
     "question": "2 + 2 等於多少？",
+    "question_type": "multiple_choice",
     "options": ["3", "4", "5", "6"],
     "answer": 1,
     "explanation": "因為 2 加 2 等於 4。"
+  },
+  {
+    "subject": "英文",
+    "topic": "文法",
+    "question": "The process is called ___.",
+    "question_type": "fill_in_blank",
+    "text_answer": "photosynthesis|光合作用"
+  },
+  {
+    "external_id": "cn-group-001",
+    "subject": "國文",
+    "topic": "閱讀測驗",
+    "group_title": "第一題組",
+    "group_context": "閱讀下文，回答第 1–2 題...",
+    "questions": [
+      {
+        "question": "第一小題題目",
+        "options": ["A", "B", "C", "D"],
+        "answer": 0
+      }
+    ]
   }
 ]`}</code></pre>
             <ul>
-              <li><strong>subject</strong>, <strong>topic</strong>, <strong>question</strong>, <strong>options</strong>, <strong>answer</strong> 為必填。</li>
-              <li><strong>options</strong> 必須是至少包含 2 個項目的字串陣列。</li>
-              <li><strong>answer</strong> 是正確選項的索引（從 0 開始，例如 1 代表第二個選項）。</li>
-              <li>重複的題目（相同使用者 + 相同科目 + 相同題目內容）將會自動跳過。</li>
-              <li>可選擇匯入為<strong>私人題庫</strong>，或直接分享到你所在的<strong>讀書房</strong>。</li>
-              <li><strong>請直接貼原始 JSON</strong>；不要貼 base64、不要額外加引號。</li>
+              <li><strong>單題欄位</strong>：<code>subject</code>、<code>topic</code>、<code>question</code>、<code>question_type</code>、<code>options</code>、<code>answer</code>、<code>text_answer</code>、<code>explanation</code>、<code>external_id</code>。</li>
+              <li><strong>題組欄位</strong>：<code>subject</code>、<code>topic</code>、<code>group_title</code>、<code>group_context</code>、<code>external_id</code>、<code>questions</code>。</li>
+              <li>判斷規則：有 <code>questions</code> 或 <code>group_context</code> 就視為題組，否則視為單題。</li>
+              <li><strong>answer</strong> 使用 0-based index（0=A, 1=B, 2=C...）。</li>
+              <li>匯入時會優先用 <strong>external_id</strong> 做去重；沒有 external_id 才退回題目文字或題組情境比對。</li>
+              <li><strong>請直接貼原始 JSON 陣列</strong>，不要加說明文字；如果有 markdown code fence，系統會先自動去掉。</li>
             </ul>
           </div>
         </TabsContent>
@@ -61,14 +83,14 @@ export default async function ImportPage() {
         <TabsContent value="question-groups" className="space-y-6">
           <QuestionGroupImportClient studyGroups={studyGroups} />
           <div className="prose max-w-none prose-sm dark:prose-invert">
-            <h3>題組格式說明</h3>
-            <p><strong>JSON 格式</strong>：一個物件陣列，每個物件代表一個題組：</p>
+            <h3>題組表格 / 補充格式說明</h3>
+            <p><strong>JSON 格式</strong>：若你只想匯入題組，也可在這裡使用一個題組物件陣列：</p>
             <pre className="overflow-x-auto"><code>{`[
   {
     "subject": "國文",
     "topic": "閱讀測驗",
-    "title": "第一題組（選填）",
-    "context": "閱讀下文，回答第 1–2 題...",
+    "group_title": "第一題組（選填）",
+    "group_context": "閱讀下文，回答第 1–2 題...",
     "questions": [
       {
         "question": "第一小題題目",

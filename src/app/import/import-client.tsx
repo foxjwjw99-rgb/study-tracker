@@ -2,7 +2,6 @@
 
 import Image from "next/image"
 import { useRef, useMemo, useState } from "react"
-import { z } from "zod"
 import { toast } from "sonner"
 import { CheckCircle2, AlertCircle, Users, ClipboardPaste, FileJson, RefreshCcw, ImageIcon, Copy, ChevronDown, ChevronUp } from "lucide-react"
 
@@ -16,7 +15,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import { importQuestionsSchema, ImportedQuestion } from "./schema"
+import { type ImportedQuestionImportItem, isImportedQuestionGroup } from "./schema"
+import { parseImportInput, summarizeImportPreview } from "./parser"
 import { importQuestions, ImportResult } from "@/app/actions/import"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import type { QuestionVisibility, StudyGroupSummary } from "@/types"
@@ -26,9 +26,38 @@ const EXAMPLE_JSON = `[
     "subject": "數學",
     "topic": "代數",
     "question": "2 + 2 等於多少？",
+    "question_type": "multiple_choice",
     "options": ["3", "4", "5", "6"],
     "answer": 1,
-    "explanation": "因為 2 加 2 等於 4。"
+    "explanation": "因為 2 加 2 等於 4。",
+    "external_id": "math-basic-001"
+  },
+  {
+    "subject": "英文",
+    "topic": "文法",
+    "question": "The process is called ___.",
+    "question_type": "fill_in_blank",
+    "text_answer": "photosynthesis|光合作用",
+    "explanation": "多個接受答案可用 | 分隔。"
+  },
+  {
+    "subject": "國文",
+    "topic": "閱讀測驗",
+    "group_title": "閱讀題組 1",
+    "group_context": "閱讀下文，回答第 1–2 題。",
+    "external_id": "cn-group-001",
+    "questions": [
+      {
+        "question": "下列敘述何者正確？",
+        "options": ["A", "B", "C", "D"],
+        "answer": 2
+      },
+      {
+        "question": "本文主旨是 ___。",
+        "question_type": "fill_in_blank",
+        "text_answer": "珍惜時間|把握當下"
+      }
+    ]
   }
 ]`
 
@@ -38,19 +67,8 @@ type ImportClientProps = {
 }
 
 type ParseSuccess = {
-  data: ImportedQuestion[]
+  data: ImportedQuestionImportItem[]
   rawText: string
-}
-
-function formatIssues(error: z.ZodError) {
-  return error.issues
-    .map((issue) => {
-      if (typeof issue.path[0] === "number") {
-        return `第 ${issue.path[0] + 1} 題，${issue.path.slice(1).join(".") || "資料"}：${issue.message}`
-      }
-      return `${issue.path.join(".") || "資料"}：${issue.message}`
-    })
-    .join("\n")
 }
 
 function parseCsvRow(row: string): string[] {
@@ -88,7 +106,7 @@ function parseCsvInput(rawText: string): ParseSuccess | { error: string } {
 
   const idx = (name: string) => headers.indexOf(name)
 
-  const questions: ImportedQuestion[] = []
+  const questions: ImportedQuestionImportItem[] = []
   for (let i = 1; i < lines.length; i++) {
     const line = lines[i].trim()
     if (!line) continue
@@ -121,10 +139,11 @@ function parseCsvInput(rawText: string): ParseSuccess | { error: string } {
       subject: get("subject"),
       topic: get("topic"),
       question: get("question"),
+      question_type: "multiple_choice",
       options,
       answer: answerIdx,
       explanation: get("explanation") || undefined,
-    } as ImportedQuestion)
+    })
   }
 
   if (questions.length === 0) return { error: "CSV 沒有有效的題目資料。" }
@@ -132,34 +151,12 @@ function parseCsvInput(rawText: string): ParseSuccess | { error: string } {
 }
 
 function parseQuestionsInput(rawText: string): ParseSuccess | { error: string } {
-  const trimmed = rawText.trim()
-
-  if (!trimmed) {
-    return { error: "請先貼上 JSON，或選擇一個 .json 檔案。" }
-  }
-
-  try {
-    const json = JSON.parse(trimmed)
-    const parsed = importQuestionsSchema.safeParse(json)
-
-    if (!parsed.success) {
-      return {
-        error: `JSON 格式不符。\n${formatIssues(parsed.error)}`,
-      }
-    }
-
-    return {
-      data: parsed.data,
-      rawText: trimmed,
-    }
-  } catch {
-    return { error: "解析失敗。請確認內容是有效的 JSON 陣列。" }
-  }
+  return parseImportInput(rawText)
 }
 
 export function ImportClient({ studyGroups }: ImportClientProps) {
   const [inputText, setInputText] = useState("")
-  const [previewData, setPreviewData] = useState<ImportedQuestion[] | null>(null)
+  const [previewData, setPreviewData] = useState<ImportedQuestionImportItem[] | null>(null)
   const [parsingError, setParsingError] = useState<string | null>(null)
   const [isImporting, setIsImporting] = useState(false)
   const [result, setResult] = useState<ImportResult | null>(null)
@@ -178,25 +175,7 @@ export function ImportClient({ studyGroups }: ImportClientProps) {
 
   const previewSummary = useMemo(() => {
     if (!previewData) return null
-
-    const subjects = new Set(previewData.map((item) => item.subject))
-    const seenKeys = new Set<string>()
-    let duplicateCount = 0
-
-    for (const item of previewData) {
-      const key = `${item.subject}::${item.question}`
-      if (seenKeys.has(key)) {
-        duplicateCount += 1
-      } else {
-        seenKeys.add(key)
-      }
-    }
-
-    return {
-      total: previewData.length,
-      subjectCount: subjects.size,
-      duplicateCount,
-    }
+    return summarizeImportPreview(previewData)
   }, [previewData])
 
   const resetPreviewState = () => {
@@ -309,7 +288,7 @@ export function ImportClient({ studyGroups }: ImportClientProps) {
         <CardHeader>
           <CardTitle>貼上或上傳題目 JSON</CardTitle>
           <CardDescription>
-            直接貼上原始 JSON 陣列，或上傳 .json 檔案即可；不需要轉成 base64，也不用額外包成文字格式。送出前會先做格式驗證與預覽。
+            單題、填充題、題組都可以放在同一個 JSON 陣列裡一起匯入。送出前會先做標準化、格式驗證與預覽。
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -385,7 +364,7 @@ export function ImportClient({ studyGroups }: ImportClientProps) {
             <textarea
               value={inputText}
               onChange={(event) => setInputText(event.target.value)}
-              placeholder={`[\n  {\n    "subject": "數學",\n    "topic": "代數",\n    "question": "2 + 2 等於多少？",\n    "options": ["3", "4", "5", "6"],\n    "answer": 1,\n    "explanation": "選填解析",\n    "image": "選填，貼入 base64 或圖片 URL"\n  }\n]`}
+              placeholder={`[\n  {\n    "subject": "數學",\n    "topic": "代數",\n    "question": "2 + 2 等於多少？",\n    "question_type": "multiple_choice",\n    "options": ["3", "4", "5", "6"],\n    "answer": 1\n  },\n  {\n    "subject": "國文",\n    "topic": "閱讀測驗",\n    "group_title": "第一題組",\n    "group_context": "閱讀下文，回答第 1–2 題...",\n    "questions": [\n      {\n        "question": "第一小題",\n        "options": ["A", "B", "C", "D"],\n        "answer": 0\n      }\n    ]\n  }\n]`}
               className="min-h-[220px] w-full rounded-md border bg-transparent px-3 py-2 text-sm shadow-xs outline-none transition placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50"
               spellCheck={false}
             />
@@ -403,7 +382,7 @@ export function ImportClient({ studyGroups }: ImportClientProps) {
               className="block w-full text-sm text-slate-500 file:mr-4 file:rounded-md file:border-0 file:bg-primary/10 file:px-4 file:py-2 file:text-sm file:font-semibold file:text-primary hover:file:bg-primary/20"
             />
             <p className="text-xs text-muted-foreground">
-              CSV 格式：<code>subject,topic,question,option_a,option_b,option_c,option_d,answer,explanation</code>，answer 填 A/B/C/D。
+              CSV 目前仍以單題選擇題為主：<code>subject,topic,question,option_a,option_b,option_c,option_d,answer,explanation</code>，answer 填 A/B/C/D。
             </p>
           </div>
 
@@ -493,69 +472,88 @@ export function ImportClient({ studyGroups }: ImportClientProps) {
       {previewData && previewSummary ? (
         <Card>
           <CardHeader>
-            <CardTitle>預覽 ({previewSummary.total} 個項目)</CardTitle>
-            <CardDescription>在匯入到資料庫之前請先確認題目內容。</CardDescription>
+            <CardTitle>預覽 ({previewSummary.totalItems} 個項目)</CardTitle>
+            <CardDescription>在匯入到資料庫之前，先確認單題 / 題組數量、疑似重複與內容。</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
-            <div className="grid gap-3 sm:grid-cols-3">
+            <div className="grid gap-3 sm:grid-cols-5">
               <div className="rounded-lg border p-3">
-                <div className="text-sm text-muted-foreground">題目總數</div>
-                <div className="mt-1 text-2xl font-semibold">{previewSummary.total}</div>
+                <div className="text-sm text-muted-foreground">單題數</div>
+                <div className="mt-1 text-2xl font-semibold">{previewSummary.singleQuestionCount}</div>
+              </div>
+              <div className="rounded-lg border p-3">
+                <div className="text-sm text-muted-foreground">題組數</div>
+                <div className="mt-1 text-2xl font-semibold">{previewSummary.groupCount}</div>
+              </div>
+              <div className="rounded-lg border p-3">
+                <div className="text-sm text-muted-foreground">題組內總題數</div>
+                <div className="mt-1 text-2xl font-semibold">{previewSummary.nestedGroupQuestionCount}</div>
               </div>
               <div className="rounded-lg border p-3">
                 <div className="text-sm text-muted-foreground">涉及科目</div>
                 <div className="mt-1 text-2xl font-semibold">{previewSummary.subjectCount}</div>
               </div>
               <div className="rounded-lg border p-3">
-                <div className="text-sm text-muted-foreground">匯入包內重複</div>
-                <div className="mt-1 text-2xl font-semibold">{previewSummary.duplicateCount}</div>
+                <div className="text-sm text-muted-foreground">疑似重複</div>
+                <div className="mt-1 text-2xl font-semibold">{previewSummary.duplicateSuspectCount}</div>
               </div>
             </div>
 
             <div className="rounded-md bg-muted/50 p-3 text-sm text-muted-foreground">
-              同一份資料中若出現「相同科目 + 相同題目內容」，匯入時後面的重複題目會被跳過；資料庫裡已存在的重複題目也會自動略過。
+              會優先用 external_id 判斷重複；沒有 external_id 時，才退回題目文字或題組情境做比對。
             </div>
 
-            <div className="max-h-[400px] overflow-auto rounded-md border">
+            <div className="max-h-[420px] overflow-auto rounded-md border">
               <Table>
                 <TableHeader>
                   <TableRow>
+                    <TableHead>類型</TableHead>
                     <TableHead>科目</TableHead>
                     <TableHead>單元</TableHead>
-                    <TableHead>題目</TableHead>
-                    <TableHead>選項</TableHead>
-                    <TableHead>答案</TableHead>
+                    <TableHead>內容</TableHead>
+                    <TableHead>題數 / 答案</TableHead>
                     <TableHead>圖片</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {previewData.slice(0, 10).map((q, idx) => (
-                    <TableRow key={`${q.subject}-${q.question}-${idx}`}>
-                      <TableCell>{q.subject}</TableCell>
-                      <TableCell>{q.topic}</TableCell>
-                      <TableCell className="max-w-[200px] truncate" title={q.question}>{q.question}</TableCell>
-                      <TableCell>{"options" in q ? q.options.length : "填空"}</TableCell>
-                      <TableCell>{"answer" in q ? q.answer : q.text_answer}</TableCell>
-                      <TableCell>
-                        {q.image ? (
-                          <Image
-                            src={q.image}
-                            alt="題目圖片"
-                            width={32}
-                            height={32}
-                            unoptimized
-                            className="h-8 w-8 rounded object-cover"
-                          />
-                        ) : (
-                          <span className="text-muted-foreground">—</span>
-                        )}
-                      </TableCell>
-                    </TableRow>
-                  ))}
+                  {previewData.slice(0, 10).map((item, idx) => {
+                    const isGroup = isImportedQuestionGroup(item)
+                    return (
+                      <TableRow key={`${item.subject}-${idx}`}>
+                        <TableCell>{isGroup ? "題組" : item.question_type === "fill_in_blank" ? "填充" : "單題"}</TableCell>
+                        <TableCell>{item.subject}</TableCell>
+                        <TableCell>{item.topic}</TableCell>
+                        <TableCell className="max-w-[240px] truncate" title={isGroup ? item.group_context : item.question}>
+                          {isGroup ? (item.group_title ?? item.group_context) : item.question}
+                        </TableCell>
+                        <TableCell>
+                          {isGroup
+                            ? `${item.questions.length} 題`
+                            : item.question_type === "fill_in_blank"
+                              ? item.text_answer
+                              : item.answer}
+                        </TableCell>
+                        <TableCell>
+                          {!isGroup && item.image ? (
+                            <Image
+                              src={item.image}
+                              alt="題目圖片"
+                              width={32}
+                              height={32}
+                              unoptimized
+                              className="h-8 w-8 rounded object-cover"
+                            />
+                          ) : (
+                            <span className="text-muted-foreground">—</span>
+                          )}
+                        </TableCell>
+                      </TableRow>
+                    )
+                  })}
                   {previewData.length > 10 ? (
                     <TableRow>
                       <TableCell colSpan={6} className="text-center text-muted-foreground">
-                        ... 同時還有其他 {previewData.length - 10} 個題目
+                        ... 同時還有其他 {previewData.length - 10} 個匯入項目
                       </TableCell>
                     </TableRow>
                   ) : null}
@@ -568,8 +566,8 @@ export function ImportClient({ studyGroups }: ImportClientProps) {
                 {isImporting
                   ? "匯入中..."
                   : visibility === "study_group"
-                    ? `確認匯入並分享 ${previewData.length} 個題目`
-                    : `確認匯入 ${previewData.length} 個題目`}
+                    ? `確認匯入並分享 ${previewSummary.totalItems} 個項目`
+                    : `確認匯入 ${previewSummary.totalItems} 個項目`}
               </Button>
             </div>
           </CardContent>
@@ -584,8 +582,11 @@ export function ImportClient({ studyGroups }: ImportClientProps) {
               <div>
                 <h3 className="font-bold text-green-800 dark:text-green-400">{result.message}</h3>
                 <ul className="mt-2 space-y-1 text-sm text-green-700 dark:text-green-500">
-                  <li>✅ 成功匯入：{result.validCount}</li>
-                  <li>⏩ 已跳過 (重複)：{result.duplicateCount}</li>
+                  <li>✅ 成功匯入單題：{result.validCount}</li>
+                  <li>✅ 成功匯入題組：{result.groupCount ?? 0}</li>
+                  <li>✅ 題組內成功匯入題目：{result.groupQuestionCount ?? 0}</li>
+                  <li>⏩ 已跳過（重複）：{result.duplicateCount}</li>
+                  <li>⏩ 已跳過（重複題組）：{result.duplicateGroupCount ?? 0}</li>
                   <li>❌ 錯誤：{result.errorCount}</li>
                 </ul>
               </div>

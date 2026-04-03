@@ -74,8 +74,8 @@ function parseRows(rows: Record<string, string>[]): ImportedQuestionGroup[] {
       groupMap.set(groupKey, {
         subject,
         topic,
-        title: groupTitle,
-        context: groupContext,
+        group_title: groupTitle,
+        group_context: groupContext,
         questions: [parsedQuestion],
       })
     }

@@ -278,7 +278,14 @@ SQLITE_PATH=prisma/dev.db npm run db:migrate:data -- --force-clear
 
 ## JSON 匯入格式
 
-### 選擇題
+題目匯入現在採用**統一 JSON 管線**，支援：
+
+- 一般選擇題
+- 一般填充題
+- 題組
+- **同一個 JSON 陣列混合匯入**
+
+### 單題（選擇題）
 
 ```json
 [
@@ -286,15 +293,16 @@ SQLITE_PATH=prisma/dev.db npm run db:migrate:data -- --force-clear
     "subject": "歷史",
     "topic": "台灣史",
     "question": "請問...",
+    "question_type": "multiple_choice",
     "options": ["A", "B", "C", "D"],
     "answer": 0,
     "explanation": "因為...",
-    "external_id": "123"
+    "external_id": "history-tw-001"
   }
 ]
 ```
 
-### 填充題
+### 單題（填充題）
 
 ```json
 [
@@ -303,13 +311,85 @@ SQLITE_PATH=prisma/dev.db npm run db:migrate:data -- --force-clear
     "topic": "文法",
     "question": "The process is called ___.",
     "question_type": "fill_in_blank",
-    "options": [],
-    "answer": 0,
     "text_answer": "photosynthesis|光合作用",
     "explanation": "多個接受答案用 | 分隔。"
   }
 ]
 ```
+
+### 題組
+
+```json
+[
+  {
+    "subject": "國文",
+    "topic": "閱讀測驗",
+    "group_title": "第一題組",
+    "group_context": "閱讀下文，回答第 1–2 題。",
+    "external_id": "cn-group-001",
+    "questions": [
+      {
+        "question": "第一小題題目",
+        "question_type": "multiple_choice",
+        "options": ["A", "B", "C", "D"],
+        "answer": 0,
+        "external_id": "q1"
+      },
+      {
+        "question": "第二小題（填空）",
+        "question_type": "fill_in_blank",
+        "text_answer": "答案1|答案2"
+      }
+    ]
+  }
+]
+```
+
+### 混合匯入
+
+```json
+[
+  {
+    "subject": "數學",
+    "topic": "函數",
+    "question": "f(x)=x^2 在 x=2 時是多少？",
+    "question_type": "multiple_choice",
+    "options": ["2", "4", "6", "8"],
+    "answer": 1,
+    "external_id": "math-func-001"
+  },
+  {
+    "subject": "英文",
+    "topic": "文法",
+    "question": "The process is called ___.",
+    "question_type": "fill_in_blank",
+    "text_answer": "photosynthesis|光合作用"
+  },
+  {
+    "subject": "國文",
+    "topic": "閱讀測驗",
+    "group_title": "閱讀題組 1",
+    "group_context": "閱讀下文，回答問題。",
+    "questions": [
+      {
+        "question": "下列何者正確？",
+        "options": ["A", "B", "C", "D"],
+        "answer": 2
+      }
+    ]
+  }
+]
+```
+
+### 匯入規則
+
+- 最外層必須是 **JSON 陣列**
+- 若物件包含 `questions` 或 `group_context`，系統會視為**題組**
+- 否則視為**單題**
+- `answer` 使用 **0-based index**（0=A, 1=B, 2=C...）
+- 建議提供 `external_id`，系統會優先用它做去重
+- 沒有 `external_id` 時，才會退回用題目文字 / 題組情境做重複判斷
+- 若是填充題，`text_answer` 可用 `|` 分隔多個接受答案
 
 ## Git 注意事項
 

@@ -181,9 +181,9 @@ export function QuestionGroupImportClient({ studyGroups }: Props) {
     <div className="space-y-6">
       <Card>
         <CardHeader>
-          <CardTitle>匯入題組</CardTitle>
+          <CardTitle>題組表格 / JSON 匯入</CardTitle>
           <CardDescription>
-            題組是一組共用情境段落（如閱讀測驗）的多個子題。支援 JSON 格式與表格（CSV / Excel）上傳。
+            如果你要批次匯入題組，可以在這裡使用 JSON、CSV 或 Excel。JSON 建議優先走上方的統一匯入入口；這裡保留給題組批次整理使用。
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -262,7 +262,7 @@ export function QuestionGroupImportClient({ studyGroups }: Props) {
               <textarea
                 value={jsonText}
                 onChange={(e) => setJsonText(e.target.value)}
-                placeholder={`[\n  {\n    "subject": "國文",\n    "topic": "閱讀測驗",\n    "title": "第一題組（選填）",\n    "context": "閱讀下文，回答問題...",\n    "questions": [\n      {\n        "question": "第一小題",\n        "options": ["選項A", "選項B", "選項C", "選項D"],\n        "answer": 0,\n        "explanation": "選填解析"\n      }\n    ]\n  }\n]`}
+                placeholder={`[\n  {\n    "subject": "國文",\n    "topic": "閱讀測驗",\n    "group_title": "第一題組（選填）",\n    "group_context": "閱讀下文，回答問題...",\n    "questions": [\n      {\n        "question": "第一小題",\n        "options": ["選項A", "選項B", "選項C", "選項D"],\n        "answer": 0,\n        "explanation": "選填解析"\n      }\n    ]\n  }\n]`}
                 className="min-h-[240px] w-full rounded-md border bg-transparent px-3 py-2 text-sm shadow-xs outline-none transition placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50"
                 spellCheck={false}
               />
@@ -350,12 +350,12 @@ export function QuestionGroupImportClient({ studyGroups }: Props) {
                     <TableRow key={idx}>
                       <TableCell>{group.subject}</TableCell>
                       <TableCell>{group.topic}</TableCell>
-                      <TableCell>{group.title ?? "—"}</TableCell>
+                      <TableCell>{group.group_title ?? "—"}</TableCell>
                       <TableCell
                         className="max-w-[200px] truncate"
-                        title={group.context}
+                        title={group.group_context}
                       >
-                        {group.context.slice(0, 30)}{group.context.length > 30 ? "…" : ""}
+                        {group.group_context.slice(0, 30)}{group.group_context.length > 30 ? "…" : ""}
                       </TableCell>
                       <TableCell>{group.questions.length}</TableCell>
                     </TableRow>
