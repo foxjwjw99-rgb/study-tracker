@@ -171,6 +171,124 @@ export async function deleteSubject(id: string): Promise<ActionResult> {
   }
 }
 
+export type ExamUnitSubjectEntry = {
+  subjectId: string
+  subjectName: string
+  units: { id: string; name: string; order: number }[]
+}
+
+function normalizeUnitAlias(input: string) {
+  return input
+    .normalize("NFKC")
+    .trim()
+    .toLowerCase()
+    .replace(/[()（）\[\]{}【】「」『』]/g, "")
+    .replace(/[&＆]/g, "與")
+    .replace(/[\/／]/g, "/")
+    .replace(/[，,、]/g, "")
+    .replace(/\s+/g, "")
+}
+
+function buildUnitSlug(input: string) {
+  const slug = input
+    .normalize("NFKC")
+    .trim()
+    .toLowerCase()
+    .replace(/[()（）\[\]{}【】「」『』]/g, "")
+    .replace(/[&＆]/g, " and ")
+    .replace(/[\/／，,、]+/g, " ")
+    .replace(/\s+/g, "-")
+    .replace(/[^a-z0-9\u4e00-\u9fff-]/g, "-")
+    .replace(/-+/g, "-")
+    .replace(/^-|-$/g, "")
+
+  return slug || "unit"
+}
+
+export async function getExamUnits(): Promise<ExamUnitSubjectEntry[]> {
+  const user = await getCurrentUserOrThrow()
+  const subjects = await prisma.subject.findMany({
+    where: { user_id: user.id },
+    orderBy: { created_at: "desc" },
+    select: {
+      id: true,
+      name: true,
+      exam_units: {
+        orderBy: { display_order: "asc" },
+        select: { id: true, name: true, display_order: true },
+      },
+    },
+  })
+  return subjects.map((s) => ({
+    subjectId: s.id,
+    subjectName: s.name,
+    units: s.exam_units.map((u) => ({ id: u.id, name: u.name, order: u.display_order })),
+  }))
+}
+
+export async function upsertExamUnits(
+  entries: { subjectName: string; units: string[] }[]
+): Promise<ActionResult> {
+  const user = await getCurrentUserOrThrow()
+
+  const subjectNames = entries.map((e) => e.subjectName)
+  const subjects = await prisma.subject.findMany({
+    where: { user_id: user.id, name: { in: subjectNames } },
+    select: { id: true, name: true },
+  })
+
+  const subjectMap = new Map(subjects.map((s) => [s.name, s.id]))
+  const missing = subjectNames.filter((n) => !subjectMap.has(n))
+
+  if (missing.length > 0) {
+    return {
+      success: false,
+      message: `找不到科目：${missing.join("、")}。請先在「學習科目」新增這些科目。`,
+    }
+  }
+
+  const normalizedEntries = entries.map((entry) => ({
+    ...entry,
+    units: Array.from(new Set(entry.units.map((unit) => unit.trim()).filter(Boolean))),
+  }))
+
+  await prisma.$transaction(
+    normalizedEntries.map((entry) => {
+      const subjectId = subjectMap.get(entry.subjectName)!
+      return prisma.subjectUnit.deleteMany({ where: { subject_id: subjectId } })
+    })
+  )
+
+  await prisma.$transaction(
+    normalizedEntries.flatMap((entry) => {
+      const subjectId = subjectMap.get(entry.subjectName)!
+      return entry.units.map((name, idx) =>
+        prisma.subjectUnit.create({
+          data: {
+            subject_id: subjectId,
+            name,
+            slug: buildUnitSlug(name),
+            display_order: idx,
+            source: "MANUAL",
+            aliases: {
+              create: {
+                subject_id: subjectId,
+                alias: name,
+                normalized_alias: normalizeUnitAlias(name),
+              },
+            },
+          },
+        })
+      )
+    })
+  )
+
+  revalidatePath("/settings")
+  revalidatePath("/dashboard")
+
+  return { success: true, message: "考試範圍已儲存。" }
+}
+
 export async function deleteSubjectCascade(id: string): Promise<ActionResult> {
   const user = await getCurrentUserOrThrow()
   const impact = await getSubjectDeletionImpact(id)
