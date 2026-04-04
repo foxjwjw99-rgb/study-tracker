@@ -4,7 +4,7 @@ import Image from "next/image"
 import Link from "next/link"
 import { useEffect, useMemo, useState } from "react"
 import { useRouter } from "next/navigation"
-import { CheckCircle2, CircleHelp, Clock3, PlayCircle, RotateCcw, Target } from "lucide-react"
+import { Check, CheckCircle2, CircleHelp, Clock3, PlayCircle, RotateCcw, Target, X } from "lucide-react"
 import { toast } from "sonner"
 
 import {
@@ -468,11 +468,16 @@ export function QuestionPractice({ questionBank, initialSubjectId, initialTopic 
               <Badge variant="outline">{currentQuestion.topic}</Badge>
             </div>
             <div className="space-y-2">
-              <div className="h-2 w-full overflow-hidden rounded-full bg-muted">
-                <div
-                  className="h-full rounded-full bg-primary transition-all"
-                  style={{ width: `${((session.currentIndex + 1) / session.questions.length) * 100}%` }}
-                />
+              <div className="flex items-center gap-3">
+                <div className="h-2 flex-1 overflow-hidden rounded-full bg-muted">
+                  <div
+                    className="h-full rounded-full bg-primary transition-all duration-300"
+                    style={{ width: `${((session.currentIndex + 1) / session.questions.length) * 100}%` }}
+                  />
+                </div>
+                <span className="flex-shrink-0 text-xs font-medium tabular-nums text-muted-foreground">
+                  {session.currentIndex + 1} / {session.questions.length}
+                </span>
               </div>
               <div className="flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
                 <span className="inline-flex items-center gap-1">
@@ -497,7 +502,7 @@ export function QuestionPractice({ questionBank, initialSubjectId, initialTopic 
                 />
               </div>
             )}
-            <CardTitle className="text-lg leading-7">
+            <CardTitle className="text-xl font-medium leading-8">
               <MathText text={currentQuestion.question} className="leading-8" />
             </CardTitle>
             <CardDescription>先做完一輪，再回頭看哪個單元最需要補強。</CardDescription>
@@ -508,24 +513,39 @@ export function QuestionPractice({ questionBank, initialSubjectId, initialTopic 
               <div className="space-y-3">
                 <input
                   type="text"
-                  className="w-full rounded-lg border border-border bg-background px-4 py-3 text-sm outline-none focus:border-primary focus:ring-1 focus:ring-primary disabled:opacity-50"
-                  placeholder="輸入你的答案…"
+                  className="w-full rounded-xl border-2 border-border bg-background px-4 py-4 text-base outline-none focus:border-primary focus:ring-1 focus:ring-primary disabled:opacity-50"
+                  placeholder="輸入你的答案，按 Enter 確認…"
                   value={session.textAnswer}
                   disabled={session.isAnswerChecked}
                   onChange={(e) => setSession({ ...session, textAnswer: e.target.value })}
                   onKeyDown={(e) => e.key === "Enter" && !session.isAnswerChecked && checkAnswer()}
                 />
                 {session.isAnswerChecked && (
-                  <div className="space-y-3 rounded-lg border bg-muted/40 p-4">
-                    <div className="flex items-start gap-2">
-                      {session.userCorrectOverride ? (
-                        <CheckCircle2 className="mt-0.5 h-4 w-4 text-green-600" />
-                      ) : (
-                        <CircleHelp className="mt-0.5 h-4 w-4 text-amber-600" />
-                      )}
-                      <div className="space-y-1.5 text-sm">
-                        <p className="font-medium">
-                          {session.userCorrectOverride ? "答對了" : "系統判斷為答錯"}
+                  <div className={[
+                    "rounded-xl border-2 p-4",
+                    session.userCorrectOverride
+                      ? "border-green-500 bg-green-50 dark:bg-green-950/30"
+                      : "border-amber-400 bg-amber-50 dark:bg-amber-950/30",
+                  ].join(" ")}>
+                    <div className="flex items-start gap-3">
+                      <div className={[
+                        "mt-0.5 rounded-full p-1 flex-shrink-0",
+                        session.userCorrectOverride ? "bg-green-500" : "bg-amber-500",
+                      ].join(" ")}>
+                        {session.userCorrectOverride ? (
+                          <Check className="h-3.5 w-3.5 text-white" />
+                        ) : (
+                          <CircleHelp className="h-3.5 w-3.5 text-white" />
+                        )}
+                      </div>
+                      <div className="min-w-0 space-y-1.5 text-sm">
+                        <p className={[
+                          "font-semibold",
+                          session.userCorrectOverride
+                            ? "text-green-700 dark:text-green-400"
+                            : "text-amber-700 dark:text-amber-400",
+                        ].join(" ")}>
+                          {session.userCorrectOverride ? "答對了！" : "系統判斷為答錯"}
                         </p>
                         <p className="text-muted-foreground">
                           參考答案：
@@ -577,45 +597,106 @@ export function QuestionPractice({ questionBank, initialSubjectId, initialTopic 
                   const isCorrect = currentQuestion.answer === index
                   const isWrongSelection =
                     session.isAnswerChecked && isSelected && !isCorrect
+                  const isUnrelatedAfterCheck =
+                    session.isAnswerChecked && !isCorrect && !isWrongSelection
 
                   return (
                     <button
                       key={`${currentQuestion.id}-${index}`}
                       type="button"
                       className={[
-                        "w-full rounded-lg border px-4 py-3 text-left transition-colors",
-                        isSelected ? "border-primary bg-primary/5" : "border-border hover:bg-muted/50",
-                        session.isAnswerChecked && isCorrect ? "border-green-500 bg-green-50" : "",
-                        isWrongSelection ? "border-destructive bg-destructive/5" : "",
+                        "w-full rounded-xl border-2 px-4 py-4 text-left transition-all flex items-center gap-3",
+                        !session.isAnswerChecked && isSelected
+                          ? "border-primary bg-primary/10"
+                          : "",
+                        !session.isAnswerChecked && !isSelected
+                          ? "border-border bg-background hover:bg-muted/50 hover:border-muted-foreground/40"
+                          : "",
+                        session.isAnswerChecked && isCorrect
+                          ? "border-green-500 bg-green-50 dark:bg-green-950/30"
+                          : "",
+                        session.isAnswerChecked && isWrongSelection
+                          ? "border-destructive bg-destructive/10"
+                          : "",
+                        isUnrelatedAfterCheck
+                          ? "border-border/50 opacity-50"
+                          : "",
                       ].join(" ")}
                       disabled={session.isAnswerChecked}
                       onClick={() => setSession({ ...session, selectedAnswer: index })}
                     >
-                      <span className="font-medium">{String.fromCharCode(65 + index)}.</span>{" "}
+                      <div className={[
+                        "w-7 h-7 rounded-full border-2 flex-shrink-0 flex items-center justify-center text-xs font-bold transition-all",
+                        !session.isAnswerChecked && isSelected
+                          ? "border-primary bg-primary text-primary-foreground"
+                          : "",
+                        !session.isAnswerChecked && !isSelected
+                          ? "border-muted-foreground/40 text-muted-foreground"
+                          : "",
+                        session.isAnswerChecked && isCorrect
+                          ? "border-green-500 bg-green-500 text-white"
+                          : "",
+                        session.isAnswerChecked && isWrongSelection
+                          ? "border-destructive bg-destructive text-white"
+                          : "",
+                        isUnrelatedAfterCheck
+                          ? "border-muted-foreground/30 text-muted-foreground/40"
+                          : "",
+                      ].join(" ")}>
+                        {session.isAnswerChecked && isCorrect ? (
+                          <Check className="w-3.5 h-3.5" />
+                        ) : session.isAnswerChecked && isWrongSelection ? (
+                          <X className="w-3.5 h-3.5" />
+                        ) : (
+                          String.fromCharCode(65 + index)
+                        )}
+                      </div>
                       <MathText text={option} className="inline break-words" />
                     </button>
                   )
                 })}
 
                 {session.isAnswerChecked ? (
-                  <div className="space-y-3 rounded-lg border bg-muted/40 p-4">
-                    <div className="flex items-start gap-2">
-                      {selectedAnswerValue === currentQuestion.answer ? (
-                        <CheckCircle2 className="mt-0.5 h-4 w-4 text-green-600" />
-                      ) : (
-                        <CircleHelp className="mt-0.5 h-4 w-4 text-amber-600" />
-                      )}
-                      <div className="space-y-1 text-sm">
-                        <p className="font-medium">
-                          {selectedAnswerValue === currentQuestion.answer ? "答對了" : "這題答錯了"}
+                  <div className={[
+                    "rounded-xl border-2 p-4 mt-2",
+                    selectedAnswerValue === currentQuestion.answer
+                      ? "border-green-500 bg-green-50 dark:bg-green-950/30"
+                      : "border-destructive bg-destructive/10",
+                  ].join(" ")}>
+                    <div className="flex items-start gap-3">
+                      <div className={[
+                        "mt-0.5 rounded-full p-1 flex-shrink-0",
+                        selectedAnswerValue === currentQuestion.answer
+                          ? "bg-green-500"
+                          : "bg-destructive",
+                      ].join(" ")}>
+                        {selectedAnswerValue === currentQuestion.answer ? (
+                          <Check className="h-3.5 w-3.5 text-white" />
+                        ) : (
+                          <X className="h-3.5 w-3.5 text-white" />
+                        )}
+                      </div>
+                      <div className="min-w-0 space-y-1.5 text-sm">
+                        <p className={[
+                          "font-semibold",
+                          selectedAnswerValue === currentQuestion.answer
+                            ? "text-green-700 dark:text-green-400"
+                            : "text-destructive",
+                        ].join(" ")}>
+                          {selectedAnswerValue === currentQuestion.answer ? "答對了！" : "這題答錯了"}
                         </p>
-                        <p className="text-muted-foreground">
-                          正確答案：{String.fromCharCode(65 + currentQuestion.answer)}.{" "}
-                          <MathText
-                            text={currentQuestion.options[currentQuestion.answer]}
-                            className="inline"
-                          />
-                        </p>
+                        {selectedAnswerValue !== currentQuestion.answer && (
+                          <p className="text-muted-foreground">
+                            正確答案：
+                            <span className="font-medium text-foreground">
+                              {String.fromCharCode(65 + currentQuestion.answer)}.
+                            </span>{" "}
+                            <MathText
+                              text={currentQuestion.options[currentQuestion.answer]}
+                              className="inline"
+                            />
+                          </p>
+                        )}
                         {currentQuestion.explanation ? (
                           <p className="break-words text-muted-foreground">
                             解析：<MathText text={currentQuestion.explanation} className="inline" />
@@ -628,19 +709,26 @@ export function QuestionPractice({ questionBank, initialSubjectId, initialTopic 
               </div>
             )}
 
-            <div className="flex flex-col gap-2 sm:flex-row sm:justify-between">
-              <Button type="button" variant="outline" onClick={restartPractice}>
+            <div className="flex flex-col gap-2 pt-2 sm:flex-row sm:justify-between">
+              <Button type="button" variant="outline" size="sm" onClick={restartPractice}>
                 <RotateCcw className="mr-2 h-4 w-4" />
                 重新選題
               </Button>
               {!session.isAnswerChecked ? (
-                <Button type="button" className="w-full sm:w-auto" onClick={checkAnswer}>
+                <Button
+                  type="button"
+                  size="lg"
+                  className="w-full sm:w-auto sm:min-w-[160px]"
+                  disabled={isFibQuestion ? !session.textAnswer.trim() : selectedAnswerValue === null}
+                  onClick={checkAnswer}
+                >
                   確認答案
                 </Button>
               ) : (
                 <Button
                   type="button"
-                  className="w-full sm:w-auto"
+                  size="lg"
+                  className="w-full sm:w-auto sm:min-w-[160px]"
                   disabled={isSubmitting}
                   onClick={moveToNextQuestion}
                 >
@@ -648,7 +736,7 @@ export function QuestionPractice({ questionBank, initialSubjectId, initialTopic 
                     ? "儲存中..."
                     : isLastQuestion
                       ? "完成並儲存結果"
-                      : "下一題"}
+                      : "下一題 →"}
                 </Button>
               )}
             </div>
