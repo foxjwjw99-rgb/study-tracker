@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache"
 
 import prisma from "@/lib/prisma"
+import { resolveSubjectUnit } from "@/lib/subject-unit"
 import {
   assertOwnedRecord,
   getCurrentUserOrThrow,
@@ -31,6 +32,8 @@ export async function getStudyLogs(): Promise<StudyLogListItem[]> {
 export async function createStudyLog(data: {
   subject_id: string
   topic: string
+  unit_id?: string | null
+  unit_name?: string | null
   study_date: Date
   duration_minutes: number
   study_type: string
@@ -55,11 +58,27 @@ export async function createStudyLog(data: {
 
   assertOwnedRecord(subject, OWNERSHIP_ERROR_MESSAGE)
 
+  const resolvedUnit = await resolveSubjectUnit(prisma, {
+    subjectId: data.subject_id,
+    unitId: data.unit_id,
+    unitName: data.unit_name,
+    topic: data.topic,
+    createIfMissing: true,
+    source: "SYSTEM",
+  })
+
   const log = await prisma.studyLog.create({
     data: {
-      ...data,
+      subject_id: data.subject_id,
+      topic: resolvedUnit.topicSnapshot || data.topic,
+      unit_id: resolvedUnit.unitId,
+      study_date: data.study_date,
       duration_minutes: Math.min(data.duration_minutes, MAX_DURATION_MINUTES),
+      study_type: data.study_type,
+      focus_score: data.focus_score,
+      planned_done: data.planned_done,
       source_type: data.source_type ?? "manual",
+      notes: data.notes,
       user_id: user.id,
     },
   })

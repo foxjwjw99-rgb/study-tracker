@@ -60,7 +60,7 @@ export function WrongQuestionList({ initialItems, subjects }: Props) {
     return true
   })
 
-  const handleStatusChange = (id: string, newStatus: "ACTIVE" | "CORRECTED" | "MASTERED" | "ARCHIVED") => {
+  const handleStatusChange = (id: string, newStatus: "ACTIVE" | "CORRECTED" | "ARCHIVED") => {
     startTransition(async () => {
       try {
         await updateWrongQuestionStatus(id, newStatus)
@@ -198,9 +198,9 @@ export function WrongQuestionList({ initialItems, subjects }: Props) {
                     </Button>
                   )}
                   {item.status === "CORRECTED" && (
-                    <Button size="sm" variant="outline" disabled={isPending} onClick={() => handleStatusChange(item.id, "MASTERED")}>
-                      設為已掌握
-                    </Button>
+                    <div className="self-center text-xs text-muted-foreground">
+                      已訂正，但要走完 1 → 3 → 7 → 14 複習鏈才會變成已掌握。
+                    </div>
                   )}
                   {item.status === "ACTIVE" && !item.is_careless && item.question_id && (
                     <Button size="sm" variant="outline" disabled={isPending} onClick={() => handleMarkCareless(item)}>

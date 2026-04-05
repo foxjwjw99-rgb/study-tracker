@@ -76,6 +76,12 @@ export type WrongQuestionItem = Prisma.WrongQuestionGetPayload<{
   }
 }>
 
+export type WrongQuestionStatus = "ACTIVE" | "CORRECTED" | "MASTERED" | "ARCHIVED"
+
+export type WrongQuestionReviewStage = 1 | 3 | 7 | 14
+
+export type WrongQuestionReviewLogItem = Prisma.WrongQuestionReviewLogGetPayload<Record<string, never>>
+
 export type DashboardTrendPoint = {
   date: string
   minutes: number
@@ -91,6 +97,8 @@ export type WeakTopicItem = WrongQuestionItem
 export type DashboardReviewFocusItem = {
   id: string
   topic: string
+  unitId?: string | null
+  unitName?: string | null
   reviewDate: Date
   reviewStage: number
   subject: {
@@ -510,6 +518,8 @@ export type PracticeQuestionItem = {
   subject_id: string
   subject_name: string
   topic: string
+  unit_id?: string | null
+  unit_name?: string | null
   question: string
   question_type: QuestionType
   options: string[]
@@ -524,6 +534,8 @@ export type PracticeQuestionItem = {
 
 export type PracticeQuestionAnswerInput = {
   question_id: string
+  unit_id?: string | null
+  unit_name?: string | null
   selected_answer: number | null  // MC: index; FIB: null
   text_answer?: string | null     // FIB: user's typed answer
   is_user_correct?: boolean | null // FIB: final correctness verdict (auto or overridden)

@@ -9,6 +9,8 @@ import {
   OWNERSHIP_ERROR_MESSAGE,
 } from "@/lib/current-user"
 
+import { buildUnitSlug, normalizeUnitAlias } from "@/lib/subject-unit"
+
 import type { ActionResult, Subject, SubjectDeletionImpact } from "@/types"
 
 export async function updateExamDate(date: Date) {
@@ -175,34 +177,6 @@ export type ExamUnitSubjectEntry = {
   subjectId: string
   subjectName: string
   units: { id: string; name: string; order: number }[]
-}
-
-function normalizeUnitAlias(input: string) {
-  return input
-    .normalize("NFKC")
-    .trim()
-    .toLowerCase()
-    .replace(/[()（）\[\]{}【】「」『』]/g, "")
-    .replace(/[&＆]/g, "與")
-    .replace(/[\/／]/g, "/")
-    .replace(/[，,、]/g, "")
-    .replace(/\s+/g, "")
-}
-
-function buildUnitSlug(input: string) {
-  const slug = input
-    .normalize("NFKC")
-    .trim()
-    .toLowerCase()
-    .replace(/[()（）\[\]{}【】「」『』]/g, "")
-    .replace(/[&＆]/g, " and ")
-    .replace(/[\/／，,、]+/g, " ")
-    .replace(/\s+/g, "-")
-    .replace(/[^a-z0-9\u4e00-\u9fff-]/g, "-")
-    .replace(/-+/g, "-")
-    .replace(/^-|-$/g, "")
-
-  return slug || "unit"
 }
 
 export async function getExamUnits(): Promise<ExamUnitSubjectEntry[]> {

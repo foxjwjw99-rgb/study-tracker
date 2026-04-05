@@ -6,6 +6,7 @@ import type { Prisma } from "@prisma/client"
 
 import prisma from "@/lib/prisma"
 import { getCurrentUserOrThrow } from "@/lib/current-user"
+import { resolveSubjectUnit } from "@/lib/subject-unit"
 import {
   importPayloadSchema,
   importQuestionGroupsSchema,
@@ -297,6 +298,7 @@ type NormalizedImportTarget = Awaited<ReturnType<typeof resolveImportTarget>> ex
 type ExistingImportState = {
   questionExternalIds: Set<string>
   questionTextKeys: Set<string>
+  groupExternalIds: Set<string>
   groupTextKeys: Set<string>
 }
 
@@ -350,7 +352,7 @@ async function loadExistingImportState(userId: string): Promise<ExistingImportSt
     }),
     prisma.questionGroup.findMany({
       where: { user_id: userId },
-      select: { subject_id: true, context: true },
+      select: { subject_id: true, context: true, external_id: true },
     }),
   ])
 
@@ -362,6 +364,11 @@ async function loadExistingImportState(userId: string): Promise<ExistingImportSt
     ),
     questionTextKeys: new Set(
       questions.map((question) => JSON.stringify([question.subject_id, question.question.trim()])),
+    ),
+    groupExternalIds: new Set(
+      groups
+        .filter((group) => group.external_id)
+        .map((group) => JSON.stringify([group.subject_id, group.external_id])),
     ),
     groupTextKeys: new Set(
       groups.map((group) => JSON.stringify([group.subject_id, group.context.trim()])),
@@ -419,12 +426,19 @@ async function importSingleQuestion(
   payloadState.questionTextKeys.add(textKey)
 
   const isFib = question.question_type === "fill_in_blank"
+  const resolvedUnit = await resolveSubjectUnit(tx, {
+    subjectId,
+    topic: question.topic,
+    createIfMissing: true,
+    source: "IMPORTED",
+  })
 
   await tx.question.create({
     data: {
       user_id: userId,
       subject_id: subjectId,
-      topic: question.topic,
+      topic: resolvedUnit.topicSnapshot || question.topic,
+      unit_id: resolvedUnit.unitId!,
       external_id: question.external_id,
       question: question.question,
       question_type: isFib ? "fill_in_blank" : "multiple_choice",
@@ -457,7 +471,7 @@ async function importSingleGroup(
 ) {
   if (group.external_id) {
     const externalKey = groupExternalKey(subjectId, group.external_id)
-    if (payloadState.groupExternalIds.has(externalKey)) {
+    if (existing.groupExternalIds.has(externalKey) || payloadState.groupExternalIds.has(externalKey)) {
       return { groupCount: 0, questionCount: 0, duplicateGroupCount: 1, duplicateQuestionCount: 0, errorCount: 0 }
     }
     payloadState.groupExternalIds.add(externalKey)
@@ -470,17 +484,29 @@ async function importSingleGroup(
 
   payloadState.groupTextKeys.add(textKey)
 
+  const resolvedGroupUnit = await resolveSubjectUnit(tx, {
+    subjectId,
+    topic: group.topic,
+    createIfMissing: true,
+    source: "IMPORTED",
+  })
+
   const createdGroup = await tx.questionGroup.create({
     data: {
       user_id: userId,
       subject_id: subjectId,
-      topic: group.topic,
+      topic: resolvedGroupUnit.topicSnapshot || group.topic,
+      unit_id: resolvedGroupUnit.unitId,
+      external_id: group.external_id ?? null,
       title: group.group_title ?? null,
       context: group.group_context,
     },
   })
 
   existing.groupTextKeys.add(textKey)
+  if (group.external_id) {
+    existing.groupExternalIds.add(groupExternalKey(subjectId, group.external_id))
+  }
 
   let questionCount = 0
   let duplicateQuestionCount = 0
@@ -526,7 +552,8 @@ async function importSingleGroup(
         data: {
           user_id: userId,
           subject_id: subjectId,
-          topic: group.topic,
+          topic: resolvedGroupUnit.topicSnapshot || group.topic,
+          unit_id: resolvedGroupUnit.unitId!,
           external_id: question.external_id ?? null,
           question: question.question,
           question_type: isFib ? "fill_in_blank" : "multiple_choice",

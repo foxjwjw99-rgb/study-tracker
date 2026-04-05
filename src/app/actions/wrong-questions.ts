@@ -9,7 +9,15 @@ import {
   getCurrentUserOrThrow,
   OWNERSHIP_ERROR_MESSAGE,
 } from "@/lib/current-user"
+import { resolveSubjectUnit } from "@/lib/subject-unit"
 import { REVIEW_TASK_SOURCE_TYPES } from "@/lib/vocabulary"
+import {
+  getNextWrongQuestionReviewStage,
+  getWrongQuestionInitialReviewDate,
+  getWrongQuestionNextReviewDate,
+  WRONG_QUESTION_REVIEW_STAGES,
+  WRONG_QUESTION_STATUS,
+} from "@/lib/wrong-question-review"
 import type { ActionResult } from "@/types"
 
 export type WrongQuestionSourceType =
@@ -160,80 +168,65 @@ export async function addToWrongBook(
 
   const question = await prisma.question.findFirst({
     where: { id: question_id },
-    select: { id: true, topic: true, subject_id: true },
+    select: {
+      id: true,
+      topic: true,
+      subject_id: true,
+      unit_id: true,
+      question: true,
+      question_type: true,
+      options: true,
+      answer: true,
+      text_answer: true,
+    },
   })
   if (!question) {
     return { success: false, message: "找不到題目。" }
   }
 
   const now = new Date()
-  const nextReviewDate = new Date(now)
-  nextReviewDate.setDate(nextReviewDate.getDate() + 1)
-
-  const existing = await prisma.wrongQuestion.findFirst({
-    where: { user_id: user.id, question_id },
+  const nextReviewDate = getWrongQuestionInitialReviewDate(now)
+  const resolvedUnit = await resolveSubjectUnit(prisma, {
+    subjectId: ownedSubject.id,
+    unitId: question.unit_id,
+    topic: question.topic,
+    createIfMissing: true,
+    source: "SYSTEM",
   })
 
-  let wqId: string
+  const wq = await prisma.wrongQuestion.create({
+    data: {
+      user_id: user.id,
+      subject_id: ownedSubject.id,
+      question_id,
+      unit_id: resolvedUnit.unitId,
+      topic: resolvedUnit.topicSnapshot || question.topic,
+      question_text: question.question,
+      correct_answer_text: getQuestionCorrectAnswerText(question),
+      source_type,
+      source: "手動加入",
+      first_wrong_date: now,
+      last_wrong_date: now,
+      status: WRONG_QUESTION_STATUS.pending,
+      wrong_count: 1,
+      next_review_date: nextReviewDate,
+      is_manual_added: true,
+      is_careless: source_type === "careless_mistake",
+    },
+  })
 
-  if (existing) {
-    if (existing.status === "MASTERED" || existing.status === "ARCHIVED") {
-      await prisma.wrongQuestion.update({
-        where: { id: existing.id },
-        data: {
-          status: "ACTIVE",
-          source_type,
-          is_manual_added: true,
-          is_careless: source_type === "careless_mistake",
-          next_review_date: nextReviewDate,
-          updated_at: now,
-        },
-      })
-    } else {
-      await prisma.wrongQuestion.update({
-        where: { id: existing.id },
-        data: {
-          source_type,
-          is_manual_added: true,
-          is_careless: source_type === "careless_mistake",
-          updated_at: now,
-        },
-      })
-    }
-    wqId = existing.id
-  } else {
-    const wq = await prisma.wrongQuestion.create({
-      data: {
-        user_id: user.id,
-        subject_id: ownedSubject.id,
-        question_id,
-        topic: question.topic,
-        source_type,
-        source: "手動加入",
-        first_wrong_date: now,
-        last_wrong_date: now,
-        status: "ACTIVE",
-        wrong_count: 0,
-        next_review_date: nextReviewDate,
-        is_manual_added: true,
-        is_careless: source_type === "careless_mistake",
-      },
-    })
-
-    await prisma.reviewTask.create({
-      data: {
-        user_id: user.id,
-        subject_id: ownedSubject.id,
-        topic: question.topic,
-        wrong_question_id: wq.id,
-        source_type: REVIEW_TASK_SOURCE_TYPES.wrongQuestion,
-        review_date: nextReviewDate,
-        review_stage: 1,
-      },
-    })
-
-    wqId = wq.id
-  }
+  await prisma.reviewTask.create({
+    data: {
+      user_id: user.id,
+      subject_id: ownedSubject.id,
+      topic: resolvedUnit.topicSnapshot || question.topic,
+      unit_id: resolvedUnit.unitId,
+      wrong_question_id: wq.id,
+      source_type: REVIEW_TASK_SOURCE_TYPES.wrongQuestion,
+      review_date: nextReviewDate,
+      review_stage: WRONG_QUESTION_REVIEW_STAGES[0],
+    },
+  })
 
   revalidatePath("/practice")
   revalidatePath("/wrong-questions")
@@ -249,7 +242,7 @@ export async function addToWrongBook(
   return {
     success: true,
     message: labelMap[source_type],
-    wrongQuestionId: wqId,
+    wrongQuestionId: wq.id,
   }
 }
 
@@ -299,50 +292,64 @@ export async function submitWrongQuestionReview(data: {
   const now = new Date()
 
   await prisma.$transaction(async (tx) => {
+    const currentStage = WRONG_QUESTION_REVIEW_STAGES[Math.min(wq.review_count, WRONG_QUESTION_REVIEW_STAGES.length - 1)]
+
     await tx.wrongQuestionReviewLog.create({
       data: {
         wrong_question_id: data.wrong_question_id,
         user_id: user.id,
+        subject_id: wq.subject_id,
         question_id: data.question_id,
         answered_correctly: data.answered_correctly,
         selected_answer: data.selected_answer ?? null,
         typed_answer: data.typed_answer ?? null,
         review_mode: "wrong_book_review",
+        review_stage: currentStage,
+        result_score: data.answered_correctly ? 100 : 0,
         reviewed_at: now,
       },
     })
 
-    const newReviewCount = wq.review_count + 1
-    const newCorrectStreak = data.answered_correctly ? wq.correct_streak + 1 : 0
-    const newStatus = newCorrectStreak >= 3 ? "MASTERED" : wq.status === "ARCHIVED" ? "ARCHIVED" : "ACTIVE"
+    const nextStage = getNextWrongQuestionReviewStage(currentStage)
+    const nextReviewDate = data.answered_correctly
+      ? (nextStage === null ? null : getWrongQuestionNextReviewDate(currentStage, now))
+      : getWrongQuestionInitialReviewDate(now)
 
-    let nextReviewDate: Date | null = null
-    if (newStatus !== "MASTERED") {
-      nextReviewDate = new Date(now)
-      if (data.answered_correctly) {
-        const days = getNextReviewDays(newReviewCount)
-        nextReviewDate.setDate(nextReviewDate.getDate() + days)
-      } else {
-        nextReviewDate.setDate(nextReviewDate.getDate() + 1)
-      }
-    }
+    const newStatus = data.answered_correctly
+      ? nextStage === null
+        ? WRONG_QUESTION_STATUS.mastered
+        : WRONG_QUESTION_STATUS.corrected
+      : WRONG_QUESTION_STATUS.pending
 
     await tx.wrongQuestion.update({
       where: { id: data.wrong_question_id },
       data: {
-        review_count: newReviewCount,
-        correct_streak: newCorrectStreak,
+        review_count: { increment: 1 },
+        correct_streak: data.answered_correctly ? { increment: 1 } : 0,
         last_reviewed_at: now,
-        status: newStatus as never,
+        status: newStatus,
         next_review_date: nextReviewDate,
         ...(data.answered_correctly ? {} : { wrong_count: { increment: 1 }, last_wrong_date: now }),
       },
     })
 
-    if (newStatus === "MASTERED") {
-      await tx.reviewTask.updateMany({
-        where: { user_id: user.id, wrong_question_id: data.wrong_question_id, completed: false },
-        data: { completed: true },
+    await tx.reviewTask.updateMany({
+      where: { user_id: user.id, wrong_question_id: data.wrong_question_id, completed: false },
+      data: { completed: true },
+    })
+
+    if (data.answered_correctly && nextStage !== null && nextReviewDate) {
+      await tx.reviewTask.create({
+        data: {
+          user_id: user.id,
+          subject_id: wq.subject_id,
+          topic: wq.topic,
+          unit_id: wq.unit_id,
+          wrong_question_id: wq.id,
+          source_type: REVIEW_TASK_SOURCE_TYPES.wrongQuestion,
+          review_date: nextReviewDate,
+          review_stage: nextStage,
+        },
       })
     }
   })
@@ -351,21 +358,13 @@ export async function submitWrongQuestionReview(data: {
   revalidatePath("/review")
   revalidatePath("/dashboard")
 
-  return { success: true, message: data.answered_correctly ? "答對！已更新複習排程。" : "答錯了，已重新排入明天複習。" }
-}
-
-function getNextReviewDays(reviewCount: number): number {
-  if (reviewCount <= 1) return 1
-  if (reviewCount === 2) return 3
-  if (reviewCount === 3) return 7
-  return 14
+  return { success: true, message: data.answered_correctly ? "答對！已更新複習排程。" : "答錯了，已重新排入第 1 天複習。" }
 }
 
 export async function getWrongQuestionStats(subject_id?: string) {
   const user = await getCurrentUserOrThrow()
   const now = new Date()
-  const todayStart = startOfDay(now)
-  const sevenDaysAgo = new Date(now)
+  const sevenDaysAgo = startOfDay(new Date(now))
   sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7)
 
   const [dueCount, unresolvedCount, recentAddedCount, recentMasteredCount] = await Promise.all([
@@ -403,4 +402,26 @@ export async function getWrongQuestionStats(subject_id?: string) {
   ])
 
   return { dueCount, unresolvedCount, recentAddedCount, recentMasteredCount }
+}
+
+function getQuestionCorrectAnswerText(question: {
+  question_type: string
+  options: string
+  answer: number
+  text_answer: string | null
+}) {
+  if (question.question_type === "fill_in_blank") {
+    return question.text_answer ?? "（見題目）"
+  }
+
+  try {
+    const options = JSON.parse(question.options) as unknown
+    if (Array.isArray(options) && typeof options[question.answer] === "string") {
+      return options[question.answer] as string
+    }
+  } catch {
+    // ignore JSON parse failures
+  }
+
+  return `選項 ${question.answer + 1}`
 }

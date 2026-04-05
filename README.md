@@ -388,7 +388,9 @@ SQLITE_PATH=prisma/dev.db npm run db:migrate:data -- --force-clear
 - 否則視為**單題**
 - `answer` 使用 **0-based index**（0=A, 1=B, 2=C...）
 - 建議提供 `external_id`，系統會優先用它做去重
-- 沒有 `external_id` 時，才會退回用題目文字 / 題組情境做重複判斷
+- 題組會先用 `(subject + external_id)` 去重；沒有 `external_id` 時，才退回用題組情境做重複判斷
+- 單題會先用 `(subject + external_id)` 去重；沒有 `external_id` 時，才退回用題目文字做重複判斷
+- `topic` 會被當成單元名稱輸入，匯入時會自動做單元正規化與 `unit_id` 對應，避免同單元不同寫法拆成多份
 - 若是填充題，`text_answer` 可用 `|` 分隔多個接受答案
 
 ## Git 注意事項

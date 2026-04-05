@@ -3,15 +3,19 @@
 import { revalidatePath } from "next/cache"
 
 import prisma from "@/lib/prisma"
+import { resolveSubjectUnit } from "@/lib/subject-unit"
 import { applyVocabularyReview } from "@/lib/vocabulary-review"
 import {
   assertOwnedRecord,
   getCurrentUserOrThrow,
   OWNERSHIP_ERROR_MESSAGE,
 } from "@/lib/current-user"
+import { REVIEW_TASK_SOURCE_TYPES } from "@/lib/vocabulary"
 import {
-  REVIEW_TASK_SOURCE_TYPES,
-} from "@/lib/vocabulary"
+  getNextWrongQuestionReviewStage,
+  getWrongQuestionNextReviewDate,
+  WRONG_QUESTION_STATUS,
+} from "@/lib/wrong-question-review"
 
 import type {
   ActionResult,
@@ -20,6 +24,8 @@ import type {
   VocabularyStatus,
   WrongQuestionItem,
 } from "@/types"
+
+type WrongQuestionStatus = (typeof WRONG_QUESTION_STATUS)[keyof typeof WRONG_QUESTION_STATUS]
 
 export async function getReviewTasks(): Promise<ReviewTaskItem[]> {
   const user = await getCurrentUserOrThrow()
@@ -30,7 +36,7 @@ export async function getReviewTasks(): Promise<ReviewTaskItem[]> {
     where: {
       user_id: user.id,
       review_date: { lte: today },
-      completed: false
+      completed: false,
     },
     include: {
       subject: {
@@ -73,6 +79,8 @@ export async function getWrongQuestions(): Promise<WrongQuestionItem[]> {
 export async function createManualReviewTask(data: {
   subject_id: string
   topic: string
+  unit_id?: string | null
+  unit_name?: string | null
   review_date: Date
   review_stage: number
 }): Promise<ActionResult> {
@@ -99,11 +107,20 @@ export async function createManualReviewTask(data: {
 
   const ownedSubject = assertOwnedRecord(subject, OWNERSHIP_ERROR_MESSAGE)
 
+  const resolvedUnit = await resolveSubjectUnit(prisma, {
+    subjectId: ownedSubject.id,
+    unitId: data.unit_id,
+    unitName: data.unit_name,
+    topic: trimmedTopic,
+    createIfMissing: true,
+    source: "SYSTEM",
+  })
+
   const existing = await prisma.reviewTask.findFirst({
     where: {
       user_id: user.id,
       subject_id: ownedSubject.id,
-      topic: trimmedTopic,
+      topic: resolvedUnit.topicSnapshot || trimmedTopic,
       completed: false,
       source_type: REVIEW_TASK_SOURCE_TYPES.manual,
     },
@@ -113,7 +130,7 @@ export async function createManualReviewTask(data: {
   if (existing) {
     return {
       success: false,
-      message: `${ownedSubject.name}「${trimmedTopic}」已有未完成的複習任務。`,
+      message: `${ownedSubject.name}「${resolvedUnit.topicSnapshot || trimmedTopic}」已有未完成的複習任務。`,
     }
   }
 
@@ -121,7 +138,8 @@ export async function createManualReviewTask(data: {
     data: {
       user_id: user.id,
       subject_id: ownedSubject.id,
-      topic: trimmedTopic,
+      topic: resolvedUnit.topicSnapshot || trimmedTopic,
+      unit_id: resolvedUnit.unitId,
       source_type: REVIEW_TASK_SOURCE_TYPES.manual,
       review_date: data.review_date,
       review_stage: data.review_stage,
@@ -155,6 +173,12 @@ export async function completeReviewTask(id: string, resultScore?: number) {
           average_response_ms: true,
         },
       },
+      wrong_question: {
+        select: {
+          id: true,
+          status: true,
+        },
+      },
     },
   })
 
@@ -185,23 +209,95 @@ export async function completeReviewTask(id: string, resultScore?: number) {
 
     if (
       task.source_type === REVIEW_TASK_SOURCE_TYPES.wrongQuestion &&
-      task.wrong_question_id
+      task.wrong_question_id &&
+      task.wrong_question
     ) {
-      const wq = await tx.wrongQuestion.findUnique({
-        where: { id: task.wrong_question_id }
+      await tx.wrongQuestionReviewLog.create({
+        data: {
+          user_id: user.id,
+          subject_id: task.subject_id,
+          wrong_question_id: task.wrong_question_id,
+          review_task_id: task.id,
+          review_mode: "scheduled_review",
+          answered_correctly: true,
+          review_stage: task.review_stage,
+          result_score: resultScore ?? null,
+        },
       })
-      if (wq && wq.status === "ACTIVE") {
+
+      const nextStage = getNextWrongQuestionReviewStage(task.review_stage)
+      const retryResult = typeof resultScore === "number" ? String(resultScore) : null
+      const sharedUpdate = {
+        last_reviewed_at: new Date(),
+        review_count: { increment: 1 },
+        correct_streak: { increment: 1 },
+        retry_result: retryResult,
+      }
+
+      if (nextStage !== null) {
+        const nextReviewDate = getWrongQuestionNextReviewDate(task.review_stage)!
+
         await tx.wrongQuestion.update({
           where: { id: task.wrong_question_id },
-          data: { status: "CORRECTED" }
+          data: {
+            ...sharedUpdate,
+            status: WRONG_QUESTION_STATUS.corrected,
+            next_review_date: nextReviewDate,
+          },
+        })
+
+        const existingFollowUpTask = await tx.reviewTask.findFirst({
+          where: {
+            user_id: user.id,
+            wrong_question_id: task.wrong_question_id,
+            review_stage: nextStage,
+            completed: false,
+          },
+          select: { id: true },
+        })
+
+        if (!existingFollowUpTask) {
+          await tx.reviewTask.create({
+            data: {
+              user_id: user.id,
+              subject_id: task.subject_id,
+              topic: task.topic,
+              unit_id: task.unit_id,
+              wrong_question_id: task.wrong_question_id,
+              source_type: REVIEW_TASK_SOURCE_TYPES.wrongQuestion,
+              review_date: nextReviewDate,
+              review_stage: nextStage,
+              completed: false,
+            },
+          })
+        }
+      } else {
+        await tx.wrongQuestion.update({
+          where: { id: task.wrong_question_id },
+          data: {
+            ...sharedUpdate,
+            status: WRONG_QUESTION_STATUS.mastered,
+            next_review_date: null,
+          },
+        })
+
+        await tx.reviewTask.updateMany({
+          where: {
+            user_id: user.id,
+            wrong_question_id: task.wrong_question_id,
+            completed: false,
+          },
+          data: {
+            completed: true,
+          },
         })
       }
     }
-
   })
 
   revalidatePath("/review")
   revalidatePath("/dashboard")
+  revalidatePath("/wrong-questions")
 }
 
 export async function reviewVocabularyTask(
@@ -266,8 +362,16 @@ export async function reviewVocabularyTask(
   }
 }
 
-export async function updateWrongQuestionStatus(id: string, status: "ACTIVE" | "CORRECTED" | "MASTERED" | "ARCHIVED") {
+export async function updateWrongQuestionStatus(id: string, status: WrongQuestionStatus) {
   const user = await getCurrentUserOrThrow()
+
+  if (!Object.values(WRONG_QUESTION_STATUS).includes(status)) {
+    throw new Error("Invalid status")
+  }
+
+  if (status === WRONG_QUESTION_STATUS.mastered) {
+    throw new Error("Wrong question mastery must be completed through the full 1→3→7→14 review chain")
+  }
 
   const ownedQuestion = await prisma.wrongQuestion.findFirst({
     where: {
@@ -284,10 +388,12 @@ export async function updateWrongQuestionStatus(id: string, status: "ACTIVE" | "
   await prisma.$transaction(async (tx) => {
     await tx.wrongQuestion.update({
       where: { id: question.id },
-      data: { status },
+      data: {
+        status,
+      },
     })
 
-    if (status === "MASTERED" || status === "ARCHIVED") {
+    if (status === WRONG_QUESTION_STATUS.archived) {
       await tx.reviewTask.updateMany({
         where: {
           user_id: user.id,
@@ -296,7 +402,7 @@ export async function updateWrongQuestionStatus(id: string, status: "ACTIVE" | "
         },
         data: {
           completed: true,
-        }
+        },
       })
     }
   })

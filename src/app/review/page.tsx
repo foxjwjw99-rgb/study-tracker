@@ -4,6 +4,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Badge } from "@/components/ui/badge"
 import { differenceInCalendarDays, format, startOfDay } from "date-fns"
 import { Button } from "@/components/ui/button"
+import { WRONG_QUESTION_STATUS_LABEL } from "@/lib/wrong-question-review"
 import { ManualReviewTaskForm } from "./manual-review-task-form"
 import { VocabularyReviewTaskControls } from "./vocabulary-review-task-controls"
 import type { ReviewTaskItem, WrongQuestionItem } from "@/types"
@@ -104,7 +105,7 @@ export default async function ReviewPage() {
         <Card>
           <CardHeader>
             <CardTitle>錯題追蹤</CardTitle>
-            <CardDescription>你需要重新檢視的單元。</CardDescription>
+            <CardDescription>每題會沿著固定鏈 1 → 3 → 7 → 14 天複習；已訂正代表你已經修正，但還沒走完整條鏈。</CardDescription>
           </CardHeader>
           <CardContent>
             {wrongQs.length === 0 ? (
@@ -119,8 +120,8 @@ export default async function ReviewPage() {
                     <div className="min-w-0">
                       <div className="flex flex-col gap-2 font-semibold sm:flex-row sm:items-center sm:justify-between">
                         <span className="break-words">{q.subject.name} - {q.topic}</span>
-                        <Badge variant={q.status === 'MASTERED' ? 'default' : q.status === 'CORRECTED' ? 'secondary' : 'destructive'}>
-                          {q.status === 'ACTIVE' ? '未訂正' : q.status === 'CORRECTED' ? '已訂正' : q.status === 'MASTERED' ? '已掌握' : '封存'}
+                        <Badge variant={q.status === 'MASTERED' ? 'default' : q.status === 'CORRECTED' ? 'secondary' : q.status === 'ARCHIVED' ? 'outline' : 'destructive'}>
+                          {WRONG_QUESTION_STATUS_LABEL[q.status]}
                         </Badge>
                       </div>
                       <div className="mt-1 text-sm text-muted-foreground">
@@ -140,12 +141,9 @@ export default async function ReviewPage() {
                         </form>
                       )}
                       {q.status === 'CORRECTED' && (
-                        <form action={async () => {
-                          "use server"
-                          await updateWrongQuestionStatus(q.id, 'MASTERED')
-                        }}>
-                          <Button size="sm" variant="outline" className="w-full sm:w-auto">設為已掌握</Button>
-                        </form>
+                        <div className="text-xs text-muted-foreground sm:self-center">
+                          已訂正，但仍需完成 1 → 3 → 7 → 14 複習鏈後才會變成已掌握。
+                        </div>
                       )}
                     </div>
                   </div>
