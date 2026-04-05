@@ -3,9 +3,7 @@ import { BookOpen, PlayCircle } from "lucide-react"
 
 import { getWrongQuestionsWithFilters, getWrongQuestionStats } from "@/app/actions/wrong-questions"
 import { getSubjects } from "@/app/actions/subject"
-import { buttonVariants } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { cn } from "@/lib/utils"
 import { WrongQuestionList } from "./wrong-question-list"
 
 function StatCard({ label, value, tone }: { label: string; value: string | number; tone?: "warning" | "default" }) {
@@ -47,7 +45,7 @@ export default async function WrongQuestionsPage() {
           <p className="text-sm text-amber-800 dark:text-amber-200">
             有 <span className="font-semibold">{stats.dueCount}</span> 題今天到期，可以開始複習了。
           </p>
-          <Link href="/wrong-questions/review" className={cn(buttonVariants({ size: "sm" }))}>
+          <Link href="/wrong-questions/review" className="inline-flex items-center justify-center rounded-xl border border-transparent bg-primary px-2.5 py-1 text-[0.8rem] font-medium text-primary-foreground transition-all hover:bg-primary/90">
             <PlayCircle className="mr-2 h-4 w-4" />
             開始複習
           </Link>
@@ -60,7 +58,7 @@ export default async function WrongQuestionsPage() {
             <BookOpen className="h-5 w-5" />
             所有錯題
           </CardTitle>
-          <Link href="/wrong-questions/review" className={cn(buttonVariants({ size: "sm", variant: "outline" }))}>
+          <Link href="/wrong-questions/review" className="inline-flex items-center justify-center rounded-xl border border-border/90 bg-background/80 px-2.5 py-1 text-[0.8rem] font-medium text-foreground transition-all hover:bg-muted">
             複習到期錯題
           </Link>
         </CardHeader>
