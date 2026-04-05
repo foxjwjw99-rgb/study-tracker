@@ -25,6 +25,13 @@ enum SubjectUnitSource {
   SYSTEM
 }
 
+enum WrongQuestionStatus {
+  ACTIVE
+  CORRECTED
+  MASTERED
+  ARCHIVED
+}
+
 model User {
   id            String    @id @default(cuid())
   name          String
@@ -33,21 +40,22 @@ model User {
   image         String?
   exam_date     DateTime?
 
-  accounts               Account[]
-  sessions               Session[]
-  subjects               Subject[]
-  study_logs             StudyLog[]
-  practice_logs          PracticeLog[]
-  wrong_qs               WrongQuestion[]
-  review_tasks           ReviewTask[]
-  questions              Question[]
-  vocabulary_words       VocabularyWord[]
-  vocabulary_review_logs VocabularyReviewLog[]
-  reward_draws           RewardDraw[]
-  owned_study_groups     StudyGroup[]          @relation("StudyGroupOwner")
-  study_group_members    StudyGroupMember[]
-  question_groups        QuestionGroup[]
-  exam_syllabus_units    ExamSyllabusUnit[]
+  accounts                    Account[]
+  sessions                    Session[]
+  subjects                    Subject[]
+  study_logs                  StudyLog[]
+  practice_logs               PracticeLog[]
+  wrong_qs                    WrongQuestion[]
+  wrong_question_review_logs  WrongQuestionReviewLog[]
+  review_tasks                ReviewTask[]
+  questions                   Question[]
+  vocabulary_words            VocabularyWord[]
+  vocabulary_review_logs      VocabularyReviewLog[]
+  reward_draws                RewardDraw[]
+  owned_study_groups          StudyGroup[]             @relation("StudyGroupOwner")
+  study_group_members         StudyGroupMember[]
+  question_groups             QuestionGroup[]
+  exam_syllabus_units         ExamSyllabusUnit[]
   mock_exam_records      MockExamRecord[]
   target_programs        TargetProgram[]
   prediction_snapshots   PredictionSnapshot[]
@@ -134,6 +142,7 @@ model SubjectUnit {
   study_logs          StudyLog[]
   practice_logs       PracticeLog[]
   exam_syllabus_units ExamSyllabusUnit[]
+  wrong_questions     WrongQuestion[]
 
   created_at DateTime @default(now())
   updated_at DateTime @updatedAt
@@ -239,26 +248,61 @@ model PracticeLog {
 }
 
 model WrongQuestion {
-  id               String    @id @default(cuid())
+  id               String               @id @default(cuid())
   user_id          String
-  user             User      @relation(fields: [user_id], references: [id])
+  user             User                 @relation(fields: [user_id], references: [id])
   subject_id       String
-  subject          Subject   @relation(fields: [subject_id], references: [id])
+  subject          Subject              @relation(fields: [subject_id], references: [id])
+  question_id      String?
+  question         Question?            @relation(fields: [question_id], references: [id], onDelete: SetNull)
+  unit_id          String?
+  unit             SubjectUnit?         @relation(fields: [unit_id], references: [id], onDelete: SetNull)
   topic            String
   source           String?
+  source_type      String? // "wrong_answer" | "manual_add" | "careless_mistake" | "guessed_correct"
   error_reason     String?
   first_wrong_date DateTime
-  status           String // 未訂正/已訂正/已掌握
+  last_wrong_date  DateTime?
+  last_reviewed_at DateTime?
+  status           WrongQuestionStatus  @default(ACTIVE)
   next_review_date DateTime?
-  retry_result     String? // Optional
+  wrong_count      Int                  @default(1)
+  review_count     Int                  @default(0)
+  correct_streak   Int                  @default(0)
+  retry_result     String?
   notes            String?
+  is_manual_added  Boolean              @default(false)
+  is_careless      Boolean              @default(false)
 
   review_tasks ReviewTask[]
+  review_logs  WrongQuestionReviewLog[]
 
   created_at DateTime @default(now())
   updated_at DateTime @updatedAt
 
+  @@unique([user_id, question_id])
   @@index([user_id, status])
+  @@index([user_id, subject_id, next_review_date])
+  @@index([user_id, status, next_review_date])
+  @@index([user_id, question_id])
+}
+
+model WrongQuestionReviewLog {
+  id                String        @id @default(cuid())
+  wrong_question_id String
+  wrong_question    WrongQuestion @relation(fields: [wrong_question_id], references: [id], onDelete: Cascade)
+  user_id           String
+  user              User          @relation(fields: [user_id], references: [id])
+  question_id       String?
+  answered_correctly Boolean
+  selected_answer   Int?
+  typed_answer      String?
+  review_mode       String? // "wrong_book_review" | "manual_recheck"
+  confidence        Int?
+  reviewed_at       DateTime      @default(now())
+
+  @@index([wrong_question_id])
+  @@index([user_id, reviewed_at])
 }
 
 model ReviewTask {
@@ -324,6 +368,8 @@ model Question {
   group_id              String?
   group_order           Int?
   group                 QuestionGroup? @relation(fields: [group_id], references: [id], onDelete: SetNull)
+
+  wrong_questions WrongQuestion[]
 
   created_at DateTime @default(now())
   updated_at DateTime @updatedAt

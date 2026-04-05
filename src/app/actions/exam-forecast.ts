@@ -144,7 +144,7 @@ export async function getExamForecastData(): Promise<ExamForecastData> {
   for (const row of wrongQuestions) {
     const entry = wrongBySubject.get(row.subject_id) ?? { total: 0, resolved: 0 }
     entry.total += row._count.id
-    if (row.status === "已訂正" || row.status === "已掌握") {
+    if (row.status === "CORRECTED" || row.status === "MASTERED") {
       entry.resolved += row._count.id
     }
     wrongBySubject.set(row.subject_id, entry)

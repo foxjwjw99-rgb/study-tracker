@@ -13,6 +13,7 @@ import {
   getPracticeQuestionTopics,
   submitPracticeQuestionSession,
 } from "@/app/actions/practice-log"
+import { addToWrongBook, removeFromWrongBook } from "@/app/actions/wrong-questions"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -72,6 +73,8 @@ export function QuestionPractice({ questionBank, initialSubjectId, initialTopic 
   const [completionSummary, setCompletionSummary] = useState<PracticeCompletionSummary | null>(null)
   const [isStarting, setIsStarting] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
+  // Track per-question wrong-book states after submission (question_id -> wrongQuestionId | null | "removed")
+  const [wqStates, setWqStates] = useState<Record<string, string | null | "removed">>({})
 
   const selectedSubject = useMemo(
     () => questionBank.find((item) => item.subject_id === selectedSubjectId) ?? null,
@@ -274,6 +277,14 @@ export function QuestionPractice({ questionBank, initialSubjectId, initialTopic 
 
         setCompletionSummary(buildCompletionSummary(session.questions, session.answers, submissionResult))
         setResult(submissionResult)
+        // Initialize wqStates from returned questionResults
+        if (submissionResult.questionResults) {
+          const initial: Record<string, string | null | "removed"> = {}
+          for (const qr of submissionResult.questionResults) {
+            initial[qr.question_id] = qr.wrongQuestionId
+          }
+          setWqStates(initial)
+        }
         setSession(null)
         toast.success(submissionResult.message)
         router.refresh()
@@ -304,6 +315,7 @@ export function QuestionPractice({ questionBank, initialSubjectId, initialTopic 
     setSession(null)
     setResult(null)
     setCompletionSummary(null)
+    setWqStates({})
   }
 
   if (questionBank.length === 0) {
@@ -800,6 +812,117 @@ export function QuestionPractice({ questionBank, initialSubjectId, initialTopic 
                 description="如果剛剛只是測驗，現在很適合順手把觀念補起來。"
               />
             </div>
+
+            {result.questionResults && result.questionResults.length > 0 && (
+              <div className="space-y-2">
+                <p className="text-sm font-medium text-foreground">每題詳情</p>
+                <div className="space-y-2">
+                  {result.questionResults.map((qr) => {
+                    const wqId = wqStates[qr.question_id]
+                    const inWrongBook = wqId !== null && wqId !== "removed"
+                    return (
+                      <div
+                        key={qr.question_id}
+                        className={`rounded-xl border p-3 text-sm ${qr.isCorrect ? "border-emerald-500/20 bg-emerald-50/30 dark:bg-emerald-950/20" : "border-destructive/20 bg-destructive/5"}`}
+                      >
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="flex min-w-0 flex-1 items-start gap-2">
+                            <span className={`mt-0.5 shrink-0 text-base ${qr.isCorrect ? "text-emerald-600 dark:text-emerald-400" : "text-destructive"}`}>
+                              {qr.isCorrect ? "✓" : "✗"}
+                            </span>
+                            <div className="min-w-0">
+                              <p className="break-words text-foreground">{qr.question}</p>
+                              <p className="mt-1 text-xs text-muted-foreground">{qr.topic}</p>
+                              {!qr.isCorrect && qr.explanation && (
+                                <p className="mt-1 break-words text-xs text-muted-foreground">解析：{qr.explanation}</p>
+                              )}
+                            </div>
+                          </div>
+                          <div className="flex shrink-0 flex-col gap-1">
+                            {qr.isCorrect && !inWrongBook && (
+                              <>
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  className="h-7 px-2 text-xs"
+                                  onClick={async () => {
+                                    const res = await addToWrongBook(qr.question_id, completionSummary.subjectId, "manual_add")
+                                    if (res.success && res.wrongQuestionId) {
+                                      setWqStates((prev) => ({ ...prev, [qr.question_id]: res.wrongQuestionId! }))
+                                      toast.success(res.message)
+                                    } else {
+                                      toast.error(res.message)
+                                    }
+                                  }}
+                                >
+                                  加入錯題本
+                                </Button>
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  className="h-7 px-2 text-xs"
+                                  onClick={async () => {
+                                    const res = await addToWrongBook(qr.question_id, completionSummary.subjectId, "guessed_correct")
+                                    if (res.success && res.wrongQuestionId) {
+                                      setWqStates((prev) => ({ ...prev, [qr.question_id]: res.wrongQuestionId! }))
+                                      toast.success(res.message)
+                                    } else {
+                                      toast.error(res.message)
+                                    }
+                                  }}
+                                >
+                                  猜對不熟
+                                </Button>
+                              </>
+                            )}
+                            {!qr.isCorrect && inWrongBook && (
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="h-7 px-2 text-xs"
+                                onClick={async () => {
+                                  const res = await addToWrongBook(qr.question_id, completionSummary.subjectId, "careless_mistake")
+                                  if (res.success) {
+                                    toast.success(res.message)
+                                  } else {
+                                    toast.error(res.message)
+                                  }
+                                }}
+                              >
+                                標記粗心
+                              </Button>
+                            )}
+                            {inWrongBook && (
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                className="h-7 px-2 text-xs text-muted-foreground"
+                                onClick={async () => {
+                                  if (!wqId || typeof wqId !== "string") return
+                                  const res = await removeFromWrongBook(wqId)
+                                  if (res.success) {
+                                    setWqStates((prev) => ({ ...prev, [qr.question_id]: "removed" }))
+                                    toast.success(res.message)
+                                  } else {
+                                    toast.error(res.message)
+                                  }
+                                }}
+                              >
+                                移除
+                              </Button>
+                            )}
+                            {wqId === "removed" && (
+                              <span className="text-xs text-muted-foreground">已移除</span>
+                            )}
+                            {inWrongBook && <span className="text-center text-xs text-muted-foreground">已在錯題本</span>}
+                          </div>
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              </div>
+            )}
           </CardContent>
         </Card>
       ) : null}

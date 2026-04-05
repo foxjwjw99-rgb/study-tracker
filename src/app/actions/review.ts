@@ -190,10 +190,10 @@ export async function completeReviewTask(id: string, resultScore?: number) {
       const wq = await tx.wrongQuestion.findUnique({
         where: { id: task.wrong_question_id }
       })
-      if (wq && wq.status === "未訂正") {
+      if (wq && wq.status === "ACTIVE") {
         await tx.wrongQuestion.update({
           where: { id: task.wrong_question_id },
-          data: { status: "已訂正" }
+          data: { status: "CORRECTED" }
         })
       }
     }
@@ -266,12 +266,8 @@ export async function reviewVocabularyTask(
   }
 }
 
-export async function updateWrongQuestionStatus(id: string, status: "未訂正" | "已訂正" | "已掌握") {
+export async function updateWrongQuestionStatus(id: string, status: "ACTIVE" | "CORRECTED" | "MASTERED" | "ARCHIVED") {
   const user = await getCurrentUserOrThrow()
-  
-  if (status !== "未訂正" && status !== "已訂正" && status !== "已掌握") {
-    throw new Error("Invalid status")
-  }
 
   const ownedQuestion = await prisma.wrongQuestion.findFirst({
     where: {
@@ -291,7 +287,7 @@ export async function updateWrongQuestionStatus(id: string, status: "未訂正" 
       data: { status },
     })
 
-    if (status === "已掌握") {
+    if (status === "MASTERED" || status === "ARCHIVED") {
       await tx.reviewTask.updateMany({
         where: {
           user_id: user.id,
@@ -306,5 +302,6 @@ export async function updateWrongQuestionStatus(id: string, status: "未訂正" 
   })
 
   revalidatePath("/review")
+  revalidatePath("/wrong-questions")
   revalidatePath("/dashboard")
 }

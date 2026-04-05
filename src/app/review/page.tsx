@@ -17,7 +17,7 @@ export default async function ReviewPage() {
   const dueTodayReviews = reviews.filter((task) => differenceInCalendarDays(today, new Date(task.review_date)) === 0)
   const overdueCount = overdueReviews.length
   const todayCount = dueTodayReviews.length
-  const unresolvedWrongCount = wrongQs.filter((q) => q.status !== "已掌握").length
+  const unresolvedWrongCount = wrongQs.filter((q) => q.status !== "MASTERED").length
 
   return (
     <div className="mx-auto max-w-6xl space-y-6 lg:space-y-8">
@@ -119,8 +119,8 @@ export default async function ReviewPage() {
                     <div className="min-w-0">
                       <div className="flex flex-col gap-2 font-semibold sm:flex-row sm:items-center sm:justify-between">
                         <span className="break-words">{q.subject.name} - {q.topic}</span>
-                        <Badge variant={q.status === '已掌握' ? 'default' : q.status === '已訂正' ? 'secondary' : 'destructive'}>
-                          {q.status}
+                        <Badge variant={q.status === 'MASTERED' ? 'default' : q.status === 'CORRECTED' ? 'secondary' : 'destructive'}>
+                          {q.status === 'ACTIVE' ? '未訂正' : q.status === 'CORRECTED' ? '已訂正' : q.status === 'MASTERED' ? '已掌握' : '封存'}
                         </Badge>
                       </div>
                       <div className="mt-1 text-sm text-muted-foreground">
@@ -131,18 +131,18 @@ export default async function ReviewPage() {
                     </div>
 
                     <div className="flex flex-col gap-2 sm:flex-row sm:justify-end">
-                      {q.status === '未訂正' && (
+                      {q.status === 'ACTIVE' && (
                         <form action={async () => {
                           "use server"
-                          await updateWrongQuestionStatus(q.id, '已訂正')
+                          await updateWrongQuestionStatus(q.id, 'CORRECTED')
                         }}>
                           <Button size="sm" variant="outline" className="w-full sm:w-auto">設為已訂正</Button>
                         </form>
                       )}
-                      {q.status === '已訂正' && (
+                      {q.status === 'CORRECTED' && (
                         <form action={async () => {
                           "use server"
-                          await updateWrongQuestionStatus(q.id, '已掌握')
+                          await updateWrongQuestionStatus(q.id, 'MASTERED')
                         }}>
                           <Button size="sm" variant="outline" className="w-full sm:w-auto">設為已掌握</Button>
                         </form>
