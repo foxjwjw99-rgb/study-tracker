@@ -339,7 +339,7 @@ export async function getPracticeQuestionsWeakFirst(
     where: {
       user_id: user.id,
       subject: { name: normalizedSubjectName },
-      status: { not: "已掌握" },
+      status: { not: "MASTERED" },
     },
     select: { topic: true },
     distinct: ["topic"],
@@ -504,7 +504,7 @@ export async function addWrongQuestion(data: {
       user_id: user.id,
       subject_id: data.subject_id,
       topic: data.topic,
-      status: { not: "已掌握" },
+      status: { not: "MASTERED" },
     },
   })
 
@@ -522,7 +522,7 @@ export async function addWrongQuestion(data: {
       data: {
         ...data,
         user_id: user.id,
-        status: "未訂正",
+        status: "ACTIVE",
         next_review_date,
       },
     })
@@ -642,7 +642,7 @@ export async function submitPracticeQuestionSession(data: {
       : `題庫練習（${uniqueTopics.length} 個單元）`
   const usedSharedQuestions = questions.some((question) => question.visibility === "study_group")
 
-  await prisma.$transaction(async (tx) => {
+  const questionResults = await prisma.$transaction(async (tx) => {
     await tx.practiceLog.create({
       data: {
         user_id: user.id,
@@ -657,6 +657,30 @@ export async function submitPracticeQuestionSession(data: {
         notes: `題庫練習完成，共 ${questions.length} 題，答對 ${correctQuestions} 題。`,
       },
     })
+
+    const questionResults: NonNullable<PracticeQuestionSessionResult["questionResults"]> = []
+
+    for (const q of questions) {
+      const answer = answerMap.get(createAnswerKey(q.id, ownedSubject.id))
+      const parsedOptions = safeParseOptions(q.options)
+      const isCorrect = q.question_type === "fill_in_blank"
+        ? answer?.is_user_correct === true
+        : answer?.selected_answer === q.answer
+      questionResults.push({
+        question_id: q.id,
+        topic: q.topic,
+        question: q.question,
+        question_type: q.question_type as "multiple_choice" | "fill_in_blank",
+        options: parsedOptions,
+        answer: q.answer,
+        text_answer: q.text_answer ?? null,
+        explanation: q.explanation ?? null,
+        isCorrect,
+        selectedAnswer: answer?.selected_answer ?? null,
+        typedAnswer: answer?.text_answer ?? null,
+        wrongQuestionId: null,
+      })
+    }
 
     for (const wrongQuestion of wrongQuestions) {
       const nextReviewDate = new Date(practiceDate)
@@ -679,48 +703,53 @@ export async function submitPracticeQuestionSession(data: {
           parsedOptions[wrongQuestion.answer] || `選項 ${wrongQuestion.answer + 1}`
       }
 
-      let wq = await tx.wrongQuestion.findFirst({
-        where: {
-          user_id: user.id,
-          subject_id: ownedSubject.id,
-          topic: wrongQuestion.topic,
-          status: { not: "已掌握" },
-        },
-      })
-
       const sourceLabel = wrongQuestion.visibility === "study_group" ? "共享題庫" : "題庫練習"
       const newNotes = `題目：${wrongQuestion.question}\n你的答案：${selectedAnswerText}\n正確答案：${correctAnswerText}`
 
-      if (wq) {
-        wq = await tx.wrongQuestion.update({
-          where: { id: wq.id, user_id: user.id },
-          data: {
-            updated_at: new Date(),
-            notes: wq.notes ? `${wq.notes}\n---\n${newNotes}` : newNotes,
-            next_review_date: nextReviewDate,
-          },
-        })
-      } else {
-        wq = await tx.wrongQuestion.create({
-          data: {
+      // Upsert by question_id so each question gets its own record
+      const wq = await tx.wrongQuestion.upsert({
+        where: {
+          user_id_question_id: {
             user_id: user.id,
-            subject_id: ownedSubject.id,
-            topic: wrongQuestion.topic,
-            source: sourceLabel,
-            error_reason: "題庫練習答錯",
-            first_wrong_date: practiceDate,
-            status: "未訂正",
-            next_review_date: nextReviewDate,
-            notes: newNotes,
+            question_id: wrongQuestion.id,
           },
-        })
+        },
+        update: {
+          wrong_count: { increment: 1 },
+          last_wrong_date: practiceDate,
+          status: "ACTIVE",
+          correct_streak: 0,
+          next_review_date: nextReviewDate,
+          notes: newNotes,
+          updated_at: new Date(),
+        },
+        create: {
+          user_id: user.id,
+          subject_id: ownedSubject.id,
+          question_id: wrongQuestion.id,
+          topic: wrongQuestion.topic,
+          source: sourceLabel,
+          source_type: "wrong_answer",
+          error_reason: "題庫練習答錯",
+          first_wrong_date: practiceDate,
+          last_wrong_date: practiceDate,
+          status: "ACTIVE",
+          wrong_count: 1,
+          next_review_date: nextReviewDate,
+          notes: newNotes,
+        },
+      })
+
+      // Update questionResults with the wrongQuestionId
+      const resultEntry = questionResults.find((r) => r.question_id === wrongQuestion.id)
+      if (resultEntry) {
+        resultEntry.wrongQuestionId = wq.id
       }
 
       const existingReviewTask = await tx.reviewTask.findFirst({
         where: {
           user_id: user.id,
-          subject_id: ownedSubject.id,
-          topic: wrongQuestion.topic,
+          wrong_question_id: wq.id,
           completed: false,
           source_type: REVIEW_TASK_SOURCE_TYPES.wrongQuestion,
         },
@@ -731,7 +760,6 @@ export async function submitPracticeQuestionSession(data: {
           where: { id: existingReviewTask.id },
           data: {
             review_date: nextReviewDate,
-            wrong_question_id: wq.id,
           },
         })
       } else {
@@ -748,6 +776,8 @@ export async function submitPracticeQuestionSession(data: {
         })
       }
     }
+
+    return questionResults
   })
 
   revalidatePath("/practice")
@@ -761,6 +791,7 @@ export async function submitPracticeQuestionSession(data: {
     totalQuestions: questions.length,
     correctQuestions,
     wrongQuestionCount: wrongQuestions.length,
+    questionResults,
   }
 }
 

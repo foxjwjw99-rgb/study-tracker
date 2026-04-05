@@ -186,7 +186,7 @@ export async function getAdmissionEvaluationV2(
   // ── Unresolved wrong questions per subject ──
   const unresolvedWrong = await prisma.wrongQuestion.groupBy({
     by: ["subject_id"],
-    where: { user_id: user.id, status: "未訂正" },
+    where: { user_id: user.id, status: "ACTIVE" },
     _count: { id: true },
   })
   const wrongMap = new Map<string, number>()

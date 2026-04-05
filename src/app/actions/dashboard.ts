@@ -148,7 +148,7 @@ export async function getDashboardData(): Promise<DashboardData> {
       select: { subject_id: true, topic: true, duration_minutes: true, focus_score: true, study_type: true },
     }),
     prisma.wrongQuestion.findMany({
-      where: { user_id: user.id, status: { not: "已掌握" } },
+      where: { user_id: user.id, status: { not: "MASTERED" } },
       include: {
         subject: {
           select: {
@@ -201,7 +201,7 @@ export async function getDashboardData(): Promise<DashboardData> {
       by: ["subject_id"],
       where: {
         user_id: user.id,
-        status: { not: "已掌握" },
+        status: { not: "MASTERED" },
       },
       _count: { _all: true },
     }),
@@ -223,7 +223,7 @@ export async function getDashboardData(): Promise<DashboardData> {
       by: ["subject_id", "topic"],
       where: {
         user_id: user.id,
-        status: { not: "已掌握" },
+        status: { not: "MASTERED" },
       },
       _count: { _all: true },
     }),

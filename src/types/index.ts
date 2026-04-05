@@ -533,6 +533,20 @@ export type PracticeQuestionSessionResult = ActionResult & {
   totalQuestions: number
   correctQuestions: number
   wrongQuestionCount: number
+  questionResults?: Array<{
+    question_id: string
+    topic: string
+    question: string
+    question_type: QuestionType
+    options: string[]
+    answer: number
+    text_answer: string | null
+    explanation: string | null
+    isCorrect: boolean
+    selectedAnswer: number | null
+    typedAnswer: string | null
+    wrongQuestionId: string | null
+  }>
 }
 
 // --- Admission Evaluation v2 ---
