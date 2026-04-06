@@ -130,7 +130,7 @@ export function ManualReviewTaskForm({ subjects }: { subjects: Subject[] }) {
               )}
             >
               <CalendarIcon className="mr-2 h-4 w-4" />
-              {format(date, "PPP")}
+              {format(date, "yyyy年M月d日")}
             </PopoverTrigger>
             <PopoverContent className="w-auto p-0" align="start">
               <Calendar mode="single" selected={date} onSelect={(nextDate) => nextDate && setDate(nextDate)} initialFocus />

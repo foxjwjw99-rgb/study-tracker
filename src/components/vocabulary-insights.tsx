@@ -25,7 +25,7 @@ export function VocabularyInsights({
         <OverviewCard title="單字總數" value={data.vocabularyOverview.totalWords} description="目前已匯入並可追蹤的英文單字" />
         <OverviewCard title="已學會單字" value={data.vocabularyOverview.masteredWords} description={`約占全部 ${data.vocabularyOverview.masteredRate}%`} />
         <OverviewCard title="今日已複習" value={data.vocabularyOverview.reviewedToday} description={`本週累計 ${data.vocabularyOverview.reviewedThisWeek} 次 review`} />
-        <OverviewCard title="待複習數" value={data.vocabularyOverview.dueWords} description="next review date 已到期或今天到期" />
+        <OverviewCard title="待複習數" value={data.vocabularyOverview.dueWords} description="下次複習日期已到期或今天到期" />
       </div>
 
       <div className="grid gap-6 lg:grid-cols-2">
