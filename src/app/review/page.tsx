@@ -1,24 +1,27 @@
-import { getReviewTasks, getWrongQuestions, completeReviewTask, updateWrongQuestionStatus } from "@/app/actions/review"
+import Link from "next/link"
+import { getReviewTasks, completeReviewTask } from "@/app/actions/review"
+import { getWrongQuestionStats } from "@/app/actions/wrong-questions"
 import { getSubjects } from "@/app/actions/subject"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { differenceInCalendarDays, format, startOfDay } from "date-fns"
-import { Button } from "@/components/ui/button"
-import { WRONG_QUESTION_STATUS_LABEL } from "@/lib/wrong-question-review"
+import { Button, buttonVariants } from "@/components/ui/button"
+import { BookMarked, PlayCircle } from "lucide-react"
 import { ManualReviewTaskForm } from "./manual-review-task-form"
 import { VocabularyReviewTaskControls } from "./vocabulary-review-task-controls"
-import type { ReviewTaskItem, WrongQuestionItem } from "@/types"
+import type { ReviewTaskItem } from "@/types"
 
 export default async function ReviewPage() {
-  const subjects = await getSubjects()
-  const reviews = await getReviewTasks()
-  const wrongQs = await getWrongQuestions()
+  const [subjects, reviews, wqStats] = await Promise.all([
+    getSubjects(),
+    getReviewTasks(),
+    getWrongQuestionStats(),
+  ])
   const today = startOfDay(new Date())
   const overdueReviews = reviews.filter((task) => differenceInCalendarDays(today, new Date(task.review_date)) > 0)
   const dueTodayReviews = reviews.filter((task) => differenceInCalendarDays(today, new Date(task.review_date)) === 0)
   const overdueCount = overdueReviews.length
-  const todayCount = dueTodayReviews.length
-  const unresolvedWrongCount = wrongQs.filter((q) => q.status !== "MASTERED").length
+  const unresolvedWrongCount = wqStats.unresolvedCount
 
   return (
     <div className="mx-auto max-w-6xl space-y-6 lg:space-y-8">
@@ -35,7 +38,7 @@ export default async function ReviewPage() {
       <div className="grid gap-3 sm:grid-cols-3">
         <SummaryCard label="待處理複習" value={`${reviews.length} 項`} detail="今天以前該完成的任務" />
         <SummaryCard label="已逾期" value={`${overdueCount} 項`} detail={overdueCount > 0 ? "這些最值得先清掉" : "沒有逾期，節奏不錯"} tone={overdueCount > 0 ? "warning" : "default"} />
-        <SummaryCard label="未掌握錯題" value={`${unresolvedWrongCount} 題`} detail={todayCount > 0 ? `今天到期 ${todayCount} 項` : "今天沒有新增到期任務"} />
+        <SummaryCard label="未掌握錯題" value={`${unresolvedWrongCount} 題`} detail={wqStats.dueCount > 0 ? `今天到期 ${wqStats.dueCount} 題` : "今天沒有到期錯題"} />
       </div>
 
       {subjects.length > 0 ? (
@@ -104,52 +107,34 @@ export default async function ReviewPage() {
 
         <Card>
           <CardHeader>
-            <CardTitle>錯題追蹤</CardTitle>
-            <CardDescription>每題會沿著固定鏈 1 → 3 → 7 → 14 天複習；已訂正代表你已經修正，但還沒走完整條鏈。</CardDescription>
+            <CardTitle className="flex items-center gap-2">
+              <BookMarked className="h-4 w-4" />
+              錯題本
+            </CardTitle>
+            <CardDescription>每題沿著 1 → 3 → 7 → 14 天複習鏈前進，走完才算掌握。</CardDescription>
           </CardHeader>
-          <CardContent>
-            {wrongQs.length === 0 ? (
-              <div className="rounded-2xl border border-dashed border-border bg-background/60 px-5 py-8 text-center">
-                <p className="text-sm font-medium text-foreground">目前沒有錯題紀錄。</p>
-                <p className="mt-1 text-xs text-muted-foreground">做練習題後，答錯的會自動出現在這裡。</p>
+          <CardContent className="space-y-4">
+            <div className="grid grid-cols-2 gap-3">
+              <div className="rounded-xl border border-border/70 bg-background/70 p-3 text-center">
+                <p className="text-xs text-muted-foreground">未掌握</p>
+                <p className="mt-1 text-2xl font-semibold">{wqStats.unresolvedCount}</p>
               </div>
-            ) : (
-              <div className="space-y-3">
-                {wrongQs.map((q: WrongQuestionItem) => (
-                  <div key={q.id} className="rounded-xl border border-border/70 bg-background/70 p-4 space-y-3">
-                    <div className="min-w-0">
-                      <div className="flex flex-col gap-2 font-semibold sm:flex-row sm:items-center sm:justify-between">
-                        <span className="break-words">{q.subject.name} - {q.topic}</span>
-                        <Badge variant={q.status === 'MASTERED' ? 'default' : q.status === 'CORRECTED' ? 'secondary' : q.status === 'ARCHIVED' ? 'outline' : 'destructive'}>
-                          {WRONG_QUESTION_STATUS_LABEL[q.status]}
-                        </Badge>
-                      </div>
-                      <div className="mt-1 text-sm text-muted-foreground">
-                        首錯日期：{format(q.first_wrong_date, "PP")}
-                        {q.error_reason && ` · 原因：${q.error_reason}`}
-                      </div>
-                      {q.notes && <div className="mt-2 break-words text-sm text-muted-foreground">{q.notes}</div>}
-                    </div>
-
-                    <div className="flex flex-col gap-2 sm:flex-row sm:justify-end">
-                      {q.status === 'ACTIVE' && (
-                        <form action={async () => {
-                          "use server"
-                          await updateWrongQuestionStatus(q.id, 'CORRECTED')
-                        }}>
-                          <Button size="sm" variant="outline" className="w-full sm:w-auto">設為已訂正</Button>
-                        </form>
-                      )}
-                      {q.status === 'CORRECTED' && (
-                        <div className="text-xs text-muted-foreground sm:self-center">
-                          已訂正，但仍需完成 1 → 3 → 7 → 14 複習鏈後才會變成已掌握。
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                ))}
+              <div className={`rounded-xl border p-3 text-center ${wqStats.dueCount > 0 ? "border-destructive/20 bg-destructive/5" : "border-border/70 bg-background/70"}`}>
+                <p className="text-xs text-muted-foreground">今天到期</p>
+                <p className={`mt-1 text-2xl font-semibold ${wqStats.dueCount > 0 ? "text-destructive" : ""}`}>{wqStats.dueCount}</p>
               </div>
-            )}
+            </div>
+            <div className="flex flex-col gap-2 sm:flex-row">
+              <Link href="/wrong-questions" className={buttonVariants({ variant: "outline", size: "sm" })}>
+                前往錯題本
+              </Link>
+              {wqStats.dueCount > 0 && (
+                <Link href="/wrong-questions/review" className={buttonVariants({ size: "sm" })}>
+                  <PlayCircle className="mr-1.5 h-3.5 w-3.5" />
+                  開始複習（{wqStats.dueCount} 題）
+                </Link>
+              )}
+            </div>
           </CardContent>
         </Card>
       </div>
