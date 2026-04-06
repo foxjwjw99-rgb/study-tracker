@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache"
 import prisma from "@/lib/prisma"
 import { getCurrentUserOrThrow } from "@/lib/current-user"
-import { generateQuestionExplanation, suggestUnitForGroup, type UnitSuggestion } from "@/lib/ai/gemma"
+import { generateQuestionExplanation, generateWeaknessDiagnosis, suggestUnitForGroup, type UnitSuggestion, type WeakTopicStat } from "@/lib/ai/gemma"
 import type { AiUnitMappingStatus } from "@prisma/client"
 
 /**
@@ -309,6 +309,101 @@ export async function confirmUnitMapping(
     revalidatePath("/import")
 
     return { success: true, updatedCount }
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "未知錯誤"
+    return { success: false, error: message }
+  }
+}
+
+/**
+ * 生成跨科目 AI 弱點診斷報告
+ */
+export async function generateAIWeaknessDiagnosis(): Promise<{
+  success: boolean
+  diagnosis?: string
+  error?: string
+}> {
+  try {
+    const user = await getCurrentUserOrThrow()
+
+    const thirtyDaysAgo = new Date()
+    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30)
+
+    const [subjects, wrongGroups, carelessGroups, practiceGroups] = await Promise.all([
+      prisma.subject.findMany({
+        where: { user_id: user.id },
+        select: { id: true, name: true },
+      }),
+      prisma.wrongQuestion.groupBy({
+        by: ["subject_id", "topic"],
+        where: { user_id: user.id, status: { in: ["ACTIVE", "CORRECTED"] } },
+        _sum: { wrong_count: true },
+        orderBy: { _sum: { wrong_count: "desc" } },
+        take: 15,
+      }),
+      prisma.wrongQuestion.groupBy({
+        by: ["subject_id", "topic"],
+        where: { user_id: user.id, is_careless: true, status: { in: ["ACTIVE", "CORRECTED"] } },
+        _count: { id: true },
+      }),
+      prisma.practiceLog.groupBy({
+        by: ["subject_id", "topic"],
+        where: { user_id: user.id, practice_date: { gte: thirtyDaysAgo } },
+        _sum: { total_questions: true, correct_questions: true },
+        having: { total_questions: { _sum: { gte: 5 } } },
+      }),
+    ])
+
+    const subjectMap = new Map(subjects.map((s) => [s.id, s.name]))
+    const carelessMap = new Map(
+      carelessGroups.map((g) => [`${g.subject_id}::${g.topic}`, g._count.id])
+    )
+    const practiceMap = new Map(
+      practiceGroups.map((g) => [
+        `${g.subject_id}::${g.topic}`,
+        { total: g._sum.total_questions ?? 0, correct: g._sum.correct_questions ?? 0 },
+      ])
+    )
+
+    const topicKeys = new Set<string>()
+    const stats: WeakTopicStat[] = []
+
+    for (const g of wrongGroups) {
+      const key = `${g.subject_id}::${g.topic}`
+      topicKeys.add(key)
+      const practice = practiceMap.get(key)
+      stats.push({
+        subjectName: subjectMap.get(g.subject_id) ?? g.subject_id,
+        topic: g.topic,
+        wrongCount: g._sum.wrong_count ?? 0,
+        carelessCount: carelessMap.get(key) ?? 0,
+        practiceTotal: practice?.total ?? null,
+        practiceCorrect: practice?.correct ?? null,
+      })
+    }
+
+    // Include practice-only topics with low accuracy that have no wrong questions yet
+    for (const [key, practice] of practiceMap.entries()) {
+      if (topicKeys.has(key)) continue
+      const accuracy = practice.total > 0 ? practice.correct / practice.total : 1
+      if (accuracy >= 0.6) continue
+      const [subjectId, topic] = key.split("::")
+      stats.push({
+        subjectName: subjectMap.get(subjectId) ?? subjectId,
+        topic,
+        wrongCount: 0,
+        carelessCount: 0,
+        practiceTotal: practice.total,
+        practiceCorrect: practice.correct,
+      })
+    }
+
+    if (stats.length === 0) {
+      return { success: false, error: "資料不足，請先累積更多練習紀錄再試。" }
+    }
+
+    const diagnosis = await generateWeaknessDiagnosis(stats)
+    return { success: true, diagnosis }
   } catch (error) {
     const message = error instanceof Error ? error.message : "未知錯誤"
     return { success: false, error: message }

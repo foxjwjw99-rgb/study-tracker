@@ -8,6 +8,7 @@ interface GemmaResponse {
     content: {
       parts: Array<{
         text: string
+        thought?: boolean
       }>
     }
   }>
@@ -59,7 +60,12 @@ export async function callGemmaAPI(prompt: string): Promise<string> {
     }
 
     const data = (await response.json()) as GemmaResponse
-    const text = data.candidates?.[0]?.content?.parts?.[0]?.text
+    const parts = data.candidates?.[0]?.content?.parts ?? []
+    const text = parts
+      .filter((p) => !p.thought)
+      .map((p) => p.text)
+      .join('')
+      .trim()
 
     if (!text) {
       throw new Error('Gemma API 無回應內容')
@@ -230,4 +236,54 @@ ${unitChoices}
     console.error('AI 單元建議失敗:', error)
     return null
   }
+}
+
+export interface WeakTopicStat {
+  subjectName: string
+  topic: string
+  wrongCount: number
+  carelessCount: number
+  practiceTotal: number | null
+  practiceCorrect: number | null
+}
+
+/**
+ * 生成跨科目弱點診斷報告
+ */
+export async function generateWeaknessDiagnosis(stats: WeakTopicStat[]): Promise<string> {
+  const wrongLines = stats
+    .filter((s) => s.wrongCount > 0)
+    .slice(0, 10)
+    .map((s) => {
+      const careless = s.carelessCount > 0 ? `（粗心 ${s.carelessCount} 題）` : ''
+      return `- ${s.subjectName} ／ ${s.topic}：未解決錯題 ${s.wrongCount} 題${careless}`
+    })
+    .join('\n')
+
+  const practiceLines = stats
+    .filter((s) => s.practiceTotal !== null && s.practiceTotal >= 5)
+    .slice(0, 10)
+    .map((s) => {
+      const accuracy = Math.round(((s.practiceCorrect ?? 0) / (s.practiceTotal ?? 1)) * 100)
+      return `- ${s.subjectName} ／ ${s.topic}：準確率 ${accuracy}%（共 ${s.practiceTotal} 題）`
+    })
+    .join('\n')
+
+  let prompt = `你是一位學習診斷專家。根據以下學習數據，請提供跨科目的弱點診斷報告。\n\n`
+
+  if (wrongLines) {
+    prompt += `【未解決的錯題（按主題）】\n${wrongLines}\n\n`
+  }
+
+  if (practiceLines) {
+    prompt += `【最近30天練習準確率】\n${practiceLines}\n\n`
+  }
+
+  prompt += `請診斷：\n`
+  prompt += `1. 最需要優先補強的 2-3 個弱點（整合錯題與準確率資料）\n`
+  prompt += `2. 每個弱點的根本原因（粗心／概念不清／計算失誤／未複習）\n`
+  prompt += `3. 具體可執行的改善建議\n\n`
+  prompt += `使用繁體中文，300-400 字，直接輸出診斷報告，不要加標題或標記。`
+
+  return callGemmaAPI(prompt)
 }
