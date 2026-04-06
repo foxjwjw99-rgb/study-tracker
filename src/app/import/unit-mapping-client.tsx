@@ -27,6 +27,7 @@ type Props = {
 
 export function UnitMappingClient({ subjects, subjectUnits }: Props) {
   const [selectedSubjectId, setSelectedSubjectId] = useState(subjects[0]?.id || "")
+  const [mode, setMode] = useState<'groups' | 'questions'>('groups')
   const [previewData, setPreviewData] = useState<MapPreviewResult[]>([])
   const [isLoading, setIsLoading] = useState(false)
   const [overrides, setOverrides] = useState<Record<string, string>>({})
@@ -46,12 +47,10 @@ export function UnitMappingClient({ subjects, subjectUnits }: Props) {
 
     setIsLoading(true)
     try {
-      const result = await previewUnitMapping(selectedSubjectId)
+      const result = await previewUnitMapping(selectedSubjectId, mode)
       if (result.success && result.data) {
         setPreviewData(result.data)
-        setOverrides({})
-        setSelectedMappings(new Set(result.data.map((r) => r.groupId)))
-        toast.success(`預覽 ${result.data.length} 個題組`)
+        toast.success(`已載入 ${result.data.length} 個${mode === 'groups' ? '題組' : '題目'}`)
       } else {
         toast.error(result.error || "預覽失敗")
       }
@@ -62,7 +61,7 @@ export function UnitMappingClient({ subjects, subjectUnits }: Props) {
 
   const handleConfirm = async () => {
     if (selectedMappings.size === 0) {
-      toast.error("至少選一個題組")
+      toast.error("至少選一個")
       return
     }
 
@@ -100,7 +99,7 @@ export function UnitMappingClient({ subjects, subjectUnits }: Props) {
     try {
       const result = await confirmUnitMapping(selectedSubjectId, toConfirm)
       if (result.success) {
-        toast.success(`已更新 ${result.updatedCount} 個題組的單元對應`)
+        toast.success(`已更新 ${result.updatedCount} 個的單元對應`)
         setPreviewData([])
         setOverrides({})
         setSelectedMappings(new Set())
@@ -118,11 +117,11 @@ export function UnitMappingClient({ subjects, subjectUnits }: Props) {
         <CardHeader>
           <CardTitle>批量驗證單元對應</CardTitle>
           <CardDescription>
-            使用 AI 自動分析題組，建議最合適的學習單元。可在確認前手動調整。
+            使用 AI 自動分析題組或單題，建議最合適的學習單元。可在確認前手動調整。
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
-          {/* 科目選擇 */}
+          {/* 科目 + 模式選擇 */}
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label className="text-sm font-medium">選擇科目</label>
@@ -140,50 +139,68 @@ export function UnitMappingClient({ subjects, subjectUnits }: Props) {
               </Select>
             </div>
 
-            <div className="flex items-end">
-              <Button
-                onClick={handlePreview}
-                disabled={isLoading || !selectedSubjectId}
-                className="w-full"
-              >
-                {isLoading ? (
-                  <>
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    分析中...
-                  </>
-                ) : (
-                  "🤖 AI 分析建議"
-                )}
-              </Button>
+            <div>
+              <label className="text-sm font-medium">驗證模式</label>
+              <Select value={mode} onValueChange={(v) => setMode(v as 'groups' | 'questions')}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="groups">題組</SelectItem>
+                  <SelectItem value="questions">單題</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
           </div>
 
+          <Button
+            onClick={handlePreview}
+            disabled={isLoading || !selectedSubjectId}
+            className="w-full"
+          >
+            {isLoading ? (
+              <>
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                分析中...
+              </>
+            ) : (
+              <>🤖 AI 分析建議</>
+            )}
+          </Button>
+
           {/* 預覽表格 */}
           {previewData.length > 0 && (
-            <div className="space-y-4">
-              <div className="rounded-lg border">
+            <>
+              <div className="space-y-2">
+                <div className="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    id="selectAll"
+                    checked={selectedMappings.size === previewData.length}
+                    onChange={(e) => {
+                      if (e.target.checked) {
+                        setSelectedMappings(new Set(previewData.map((p) => p.groupId)))
+                      } else {
+                        setSelectedMappings(new Set())
+                      }
+                    }}
+                    className="cursor-pointer"
+                  />
+                  <label htmlFor="selectAll" className="text-sm font-medium cursor-pointer">
+                    全選 ({selectedMappings.size}/{previewData.length})
+                  </label>
+                </div>
+              </div>
+
+              <div className="border rounded-lg overflow-hidden">
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead className="w-12">
-                        <input
-                          type="checkbox"
-                          checked={selectedMappings.size === previewData.length}
-                          onChange={(e) => {
-                            if (e.target.checked) {
-                              setSelectedMappings(new Set(previewData.map((r) => r.groupId)))
-                            } else {
-                              setSelectedMappings(new Set())
-                            }
-                          }}
-                          className="rounded"
-                        />
-                      </TableHead>
-                      <TableHead>Topic</TableHead>
-                      <TableHead>目前單元</TableHead>
+                      <TableHead className="w-10"></TableHead>
+                      <TableHead>目前 Topic</TableHead>
                       <TableHead>AI 建議</TableHead>
-                      <TableHead>信心度</TableHead>
-                      <TableHead>手動選擇</TableHead>
+                      <TableHead className="w-20">信心度</TableHead>
+                      <TableHead className="w-24">動作</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -202,61 +219,33 @@ export function UnitMappingClient({ subjects, subjectUnits }: Props) {
                               }
                               setSelectedMappings(newSet)
                             }}
-                            className="rounded"
+                            className="cursor-pointer"
                           />
                         </TableCell>
-                        <TableCell className="text-sm font-medium">{preview.topic}</TableCell>
-                        <TableCell className="text-sm">{preview.currentUnitName || "未設定"}</TableCell>
+                        <TableCell className="max-w-xs truncate">{preview.topic}</TableCell>
                         <TableCell>
                           {preview.suggestedUnit ? (
-                            <div className="text-sm">
-                              <p className="font-medium">{preview.suggestedUnit.unitName}</p>
-                              <p className="text-xs text-muted-foreground">{preview.suggestedUnit.reason}</p>
+                            <div>
+                              <div className="font-medium">{preview.suggestedUnit.unitName}</div>
+                              <div className="text-xs text-muted-foreground">{preview.suggestedUnit.reason}</div>
                             </div>
                           ) : (
-                            <p className="text-sm text-muted-foreground">—</p>
+                            <span className="text-muted-foreground">無建議</span>
                           )}
                         </TableCell>
                         <TableCell>
-                          {preview.suggestedUnit && (
-                            <span
-                              className={`text-sm font-medium ${
-                                preview.suggestedUnit.confidence > 0.8
-                                  ? "text-green-600"
-                                  : preview.suggestedUnit.confidence > 0.6
-                                    ? "text-yellow-600"
-                                    : "text-orange-600"
-                              }`}
-                            >
-                              {(preview.suggestedUnit.confidence * 100).toFixed(0)}%
-                            </span>
+                          {preview.suggestedUnit ? (
+                            <span className="text-sm">{(preview.suggestedUnit.confidence * 100).toFixed(0)}%</span>
+                          ) : (
+                            "-"
                           )}
                         </TableCell>
                         <TableCell>
-                          <Select
-                            value={overrides[preview.groupId] || ""}
-                            onValueChange={(value) => {
-                              const newOverrides = { ...overrides }
-                              if (value) {
-                                newOverrides[preview.groupId] = value
-                              } else {
-                                delete newOverrides[preview.groupId]
-                              }
-                              setOverrides(newOverrides)
-                            }}
-                          >
-                            <SelectTrigger className="h-8 text-xs">
-                              <SelectValue placeholder="選擇" />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="">AI 建議</SelectItem>
-                              {availableUnits.map((u) => (
-                                <SelectItem key={u.id} value={u.id}>
-                                  {u.name}
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
+                          {overrides[preview.groupId] ? (
+                            <AlertCircle className="h-4 w-4 text-orange-500" />
+                          ) : preview.suggestedUnit ? (
+                            <CheckCircle2 className="h-4 w-4 text-green-500" />
+                          ) : null}
                         </TableCell>
                       </TableRow>
                     ))}
@@ -264,37 +253,21 @@ export function UnitMappingClient({ subjects, subjectUnits }: Props) {
                 </Table>
               </div>
 
-              <div className="flex gap-2">
-                <Button
-                  onClick={handleConfirm}
-                  disabled={isConfirming || selectedMappings.size === 0}
-                  className="flex-1"
-                  variant="default"
-                >
-                  {isConfirming ? (
-                    <>
-                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                      確認中...
-                    </>
-                  ) : (
-                    <>
-                      <CheckCircle2 className="mr-2 h-4 w-4" />
-                      ✅ 確認對應 ({selectedMappings.size})
-                    </>
-                  )}
-                </Button>
-                <Button
-                  onClick={() => {
-                    setPreviewData([])
-                    setOverrides({})
-                    setSelectedMappings(new Set())
-                  }}
-                  variant="outline"
-                >
-                  取消
-                </Button>
-              </div>
-            </div>
+              <Button
+                onClick={handleConfirm}
+                disabled={isConfirming || selectedMappings.size === 0}
+                className="w-full"
+              >
+                {isConfirming ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    確認中...
+                  </>
+                ) : (
+                  <>✅ 確認對應 ({selectedMappings.size})</>
+                )}
+              </Button>
+            </>
           )}
         </CardContent>
       </Card>
