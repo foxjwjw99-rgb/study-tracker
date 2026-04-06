@@ -1,6 +1,5 @@
 import Link from "next/link"
-import { getReviewTasks, completeReviewTask } from "@/app/actions/review"
-import { getWrongQuestionStats } from "@/app/actions/wrong-questions"
+import { getReviewTasks, getWrongQuestions, completeReviewTask } from "@/app/actions/review"
 import { getSubjects } from "@/app/actions/subject"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
@@ -9,19 +8,30 @@ import { Button, buttonVariants } from "@/components/ui/button"
 import { BookMarked, PlayCircle } from "lucide-react"
 import { ManualReviewTaskForm } from "./manual-review-task-form"
 import { VocabularyReviewTaskControls } from "./vocabulary-review-task-controls"
-import type { ReviewTaskItem } from "@/types"
+import type { ReviewTaskItem, WrongQuestionItem } from "@/types"
 
 export default async function ReviewPage() {
-  const [subjects, reviews, wqStats] = await Promise.all([
-    getSubjects(),
-    getReviewTasks(),
-    getWrongQuestionStats(),
-  ])
+  const subjects = await getSubjects()
+  const reviews = await getReviewTasks()
+  const wrongQs = await getWrongQuestions()
+
   const today = startOfDay(new Date())
+  const now = new Date()
+
   const overdueReviews = reviews.filter((task) => differenceInCalendarDays(today, new Date(task.review_date)) > 0)
   const dueTodayReviews = reviews.filter((task) => differenceInCalendarDays(today, new Date(task.review_date)) === 0)
   const overdueCount = overdueReviews.length
-  const unresolvedWrongCount = wqStats.unresolvedCount
+
+  const unresolvedWrongCount = wrongQs.filter(
+    (q: WrongQuestionItem) => q.status !== "MASTERED" && q.status !== "ARCHIVED"
+  ).length
+  const dueWrongCount = wrongQs.filter(
+    (q: WrongQuestionItem) =>
+      q.status !== "MASTERED" &&
+      q.status !== "ARCHIVED" &&
+      q.next_review_date != null &&
+      new Date(q.next_review_date) <= now
+  ).length
 
   return (
     <div className="mx-auto max-w-6xl space-y-6 lg:space-y-8">
@@ -38,7 +48,7 @@ export default async function ReviewPage() {
       <div className="grid gap-3 sm:grid-cols-3">
         <SummaryCard label="待處理複習" value={`${reviews.length} 項`} detail="今天以前該完成的任務" />
         <SummaryCard label="已逾期" value={`${overdueCount} 項`} detail={overdueCount > 0 ? "這些最值得先清掉" : "沒有逾期，節奏不錯"} tone={overdueCount > 0 ? "warning" : "default"} />
-        <SummaryCard label="未掌握錯題" value={`${unresolvedWrongCount} 題`} detail={wqStats.dueCount > 0 ? `今天到期 ${wqStats.dueCount} 題` : "今天沒有到期錯題"} />
+        <SummaryCard label="未掌握錯題" value={`${unresolvedWrongCount} 題`} detail={dueWrongCount > 0 ? `今天到期 ${dueWrongCount} 題` : "今天沒有到期錯題"} />
       </div>
 
       {subjects.length > 0 ? (
@@ -78,7 +88,6 @@ export default async function ReviewPage() {
                     </div>
                     {overdueReviews.map((task: ReviewTaskItem) => {
                       const overdueDays = differenceInCalendarDays(today, new Date(task.review_date))
-
                       return (
                         <ReviewTaskCard key={task.id} task={task} overdueDays={overdueDays} />
                       )
@@ -117,21 +126,21 @@ export default async function ReviewPage() {
             <div className="grid grid-cols-2 gap-3">
               <div className="rounded-xl border border-border/70 bg-background/70 p-3 text-center">
                 <p className="text-xs text-muted-foreground">未掌握</p>
-                <p className="mt-1 text-2xl font-semibold">{wqStats.unresolvedCount}</p>
+                <p className="mt-1 text-2xl font-semibold">{unresolvedWrongCount}</p>
               </div>
-              <div className={`rounded-xl border p-3 text-center ${wqStats.dueCount > 0 ? "border-destructive/20 bg-destructive/5" : "border-border/70 bg-background/70"}`}>
+              <div className={`rounded-xl border p-3 text-center ${dueWrongCount > 0 ? "border-destructive/20 bg-destructive/5" : "border-border/70 bg-background/70"}`}>
                 <p className="text-xs text-muted-foreground">今天到期</p>
-                <p className={`mt-1 text-2xl font-semibold ${wqStats.dueCount > 0 ? "text-destructive" : ""}`}>{wqStats.dueCount}</p>
+                <p className={`mt-1 text-2xl font-semibold ${dueWrongCount > 0 ? "text-destructive" : ""}`}>{dueWrongCount}</p>
               </div>
             </div>
             <div className="flex flex-col gap-2 sm:flex-row">
               <Link href="/wrong-questions" className={buttonVariants({ variant: "outline", size: "sm" })}>
                 前往錯題本
               </Link>
-              {wqStats.dueCount > 0 && (
+              {dueWrongCount > 0 && (
                 <Link href="/wrong-questions/review" className={buttonVariants({ size: "sm" })}>
                   <PlayCircle className="mr-1.5 h-3.5 w-3.5" />
-                  開始複習（{wqStats.dueCount} 題）
+                  開始複習（{dueWrongCount} 題）
                 </Link>
               )}
             </div>
