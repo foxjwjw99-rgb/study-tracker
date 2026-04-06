@@ -1,6 +1,7 @@
 "use client"
 
 import Link from "next/link"
+import { createPortal } from "react-dom"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { format } from "date-fns"
 import { BookOpenText, Check, CheckCircle2, Keyboard, Sparkles, Trash2, X, XCircle } from "lucide-react"
@@ -100,8 +101,13 @@ export function VocabularyStudyClient({
   const [session, setSession] = useState<VocabularySessionState | null>(null)
   const [isStarting, setIsStarting] = useState(false)
   const [isUpdating, setIsUpdating] = useState(false)
+  const [mounted, setMounted] = useState(false)
   const spellingInputRef = useRef<HTMLInputElement>(null)
   const sessionStartedAtRef = useRef<number | null>(null)
+
+  useEffect(() => {
+    setMounted(true)
+  }, [])
 
   const handleDeleteWord = async (id: string, wordStr: string) => {
     if (!confirm(`確定要刪除單字「${wordStr}」嗎？`)) {
@@ -497,8 +503,8 @@ export function VocabularyStudyClient({
         </Card>
       ) : null}
 
-      {session && currentWord ? (
-        <div className="fixed inset-0 z-50 flex flex-col bg-background">
+      {session && currentWord && mounted ? createPortal(
+        <div className="fixed inset-0 z-[100] flex flex-col bg-background">
           <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_top,_color-mix(in_oklab,var(--primary)_5%,transparent)_0%,transparent_60%)]" />
 
           <div className="relative mx-auto flex w-full max-w-lg items-center gap-3 px-5 pt-[max(1.5rem,env(safe-area-inset-top))]">
@@ -747,11 +753,12 @@ export function VocabularyStudyClient({
               ) : null}
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       ) : null}
 
-      {session && !currentWord ? (
-        <div className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-background px-5">
+      {session && !currentWord && mounted ? createPortal(
+        <div className="fixed inset-0 z-[100] flex flex-col items-center justify-center bg-background px-5">
           <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_top,_color-mix(in_oklab,var(--primary)_5%,transparent)_0%,transparent_60%)]" />
           <div className="relative space-y-6 text-center">
             <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-emerald-100 text-emerald-600 dark:bg-emerald-900/40 dark:text-emerald-400">
@@ -771,7 +778,8 @@ export function VocabularyStudyClient({
               回到單字列表
             </Button>
           </div>
-        </div>
+        </div>,
+        document.body
       ) : null}
 
       <Card>
@@ -845,7 +853,7 @@ export function VocabularyStudyClient({
                 </div>
                 <div className="mt-2 text-xs text-muted-foreground">
                   下次複習：{" "}
-                  {word.next_review_date ? format(word.next_review_date, "PP") : "尚未安排"}
+                  {word.next_review_date ? format(new Date(word.next_review_date), "yyyy/MM/dd") : "尚未安排"}
                 </div>
                 <div className="mt-1 text-xs text-muted-foreground">
                   SRS：間隔 {word.interval_days.toFixed(1)} 天 • EF {word.ease_factor.toFixed(2)} • 累計 {word.review_count} 次
