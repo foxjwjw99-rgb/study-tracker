@@ -10,12 +10,19 @@ import { updateWrongQuestionStatus } from "@/app/actions/review"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
+import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
+import { MathText } from "@/components/math-text"
 import type { WrongQuestionWithQuestion } from "@/app/actions/wrong-questions"
 import type { Subject } from "@/types"
 
@@ -33,6 +40,112 @@ const STATUS_BADGE_VARIANT: Record<string, "default" | "secondary" | "destructiv
   ARCHIVED: "outline",
 }
 
+function safeParseOptions(raw: string): string[] {
+  try {
+    const parsed = JSON.parse(raw) as unknown
+    if (Array.isArray(parsed) && parsed.every((o) => typeof o === "string")) return parsed
+  } catch {
+    // ignore
+  }
+  return []
+}
+
+function WrongQuestionDetailDialog({
+  item,
+  open,
+  onOpenChange,
+}: {
+  item: WrongQuestionWithQuestion | null
+  open: boolean
+  onOpenChange: (open: boolean) => void
+}) {
+  if (!item) return null
+  const q = item.question
+  const isFib = q?.question_type === "fill_in_blank"
+  const options = q ? safeParseOptions(q.options) : []
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="sm:max-w-lg max-h-[85vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle className="pr-6 text-sm font-semibold leading-snug">
+            {item.subject.name}・{item.topic}
+          </DialogTitle>
+        </DialogHeader>
+
+        {q ? (
+          <div className="space-y-4">
+            {/* Question text */}
+            <div className="text-sm font-medium leading-relaxed">
+              <MathText text={q.question} />
+            </div>
+
+            {/* Options or fill-in-blank */}
+            {isFib ? (
+              <div className="rounded-lg border border-emerald-500/30 bg-emerald-50/40 p-3 text-sm dark:bg-emerald-950/20">
+                <span className="font-medium text-emerald-700 dark:text-emerald-300">正確答案：</span>
+                <span className="text-foreground">{q.text_answer ?? "—"}</span>
+              </div>
+            ) : (
+              <div className="space-y-1.5">
+                {options.map((opt, idx) => {
+                  const isCorrect = idx === q.answer
+                  return (
+                    <div
+                      key={idx}
+                      className={`flex items-start gap-2 rounded-lg border px-3 py-2 text-sm ${
+                        isCorrect
+                          ? "border-emerald-500/40 bg-emerald-50/50 text-emerald-800 dark:bg-emerald-950/30 dark:text-emerald-200"
+                          : "border-border/50 bg-background/50 text-muted-foreground"
+                      }`}
+                    >
+                      <span className="shrink-0 font-mono font-semibold">{String.fromCharCode(65 + idx)}.</span>
+                      <MathText text={opt} />
+                      {isCorrect && <span className="ml-auto shrink-0 text-xs font-medium text-emerald-600 dark:text-emerald-400">✓ 正確</span>}
+                    </div>
+                  )
+                })}
+              </div>
+            )}
+
+            {/* Explanation */}
+            {q.explanation && (
+              <div className="rounded-lg border border-border/60 bg-muted/30 p-3 text-sm">
+                <p className="font-medium text-foreground">解析</p>
+                <p className="mt-1 text-muted-foreground">{q.explanation}</p>
+              </div>
+            )}
+          </div>
+        ) : (
+          <p className="text-sm text-muted-foreground">此題目無完整資料（可能為手動加入）。</p>
+        )}
+
+        {/* Error reason / notes */}
+        {(item.error_reason || item.notes) && (
+          <div className="space-y-1 rounded-lg border border-border/60 bg-muted/20 p-3 text-sm">
+            {item.error_reason && (
+              <p className="text-muted-foreground"><span className="font-medium text-foreground">錯誤原因：</span>{item.error_reason}</p>
+            )}
+            {item.notes && (
+              <p className="text-muted-foreground"><span className="font-medium text-foreground">備註：</span>{item.notes}</p>
+            )}
+          </div>
+        )}
+
+        {/* Stats */}
+        <div className="flex flex-wrap gap-x-4 gap-y-1 rounded-lg bg-muted/20 px-3 py-2 text-xs text-muted-foreground">
+          <span>首錯：{format(new Date(item.first_wrong_date), "yyyy/MM/dd")}</span>
+          <span>錯 {item.wrong_count} 次</span>
+          <span>複習 {item.review_count} 次</span>
+          {item.next_review_date && (
+            <span>下次複習：{format(new Date(item.next_review_date), "yyyy/MM/dd")}</span>
+          )}
+        </div>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
 type Props = {
   initialItems: WrongQuestionWithQuestion[]
   subjects: Subject[]
@@ -45,6 +158,7 @@ export function WrongQuestionList({ initialItems, subjects }: Props) {
   const [filterCareless, setFilterCareless] = useState<boolean>(false)
   const [filterOverdue, setFilterOverdue] = useState<boolean>(false)
   const [isPending, startTransition] = useTransition()
+  const [detailItem, setDetailItem] = useState<WrongQuestionWithQuestion | null>(null)
 
   const now = new Date()
 
@@ -157,39 +271,45 @@ export function WrongQuestionList({ initialItems, subjects }: Props) {
             const isOverdue = item.next_review_date && new Date(item.next_review_date) <= now && item.status !== "MASTERED" && item.status !== "ARCHIVED"
             return (
               <div key={item.id} className="rounded-xl border border-border/70 bg-background/70 p-4 space-y-3">
-                <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
-                  <div className="min-w-0 flex-1 space-y-1">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <span className="text-sm font-semibold text-foreground">{item.subject.name}</span>
-                      <span className="text-sm text-muted-foreground">·</span>
-                      <span className="text-sm text-muted-foreground">{item.topic}</span>
-                      {item.is_careless && <Badge variant="outline" className="text-xs">粗心</Badge>}
-                      {item.source_type === "guessed_correct" && <Badge variant="outline" className="text-xs">猜對不熟</Badge>}
-                      {item.is_manual_added && <Badge variant="outline" className="text-xs">手動加入</Badge>}
-                    </div>
-                    {item.question && (
-                      <p className="break-words text-sm text-foreground line-clamp-2">{item.question.question}</p>
-                    )}
-                    <div className="flex flex-wrap gap-x-3 gap-y-1 text-xs text-muted-foreground">
-                      <span>首錯：{format(new Date(item.first_wrong_date), "yyyy/MM/dd")}</span>
-                      <span>錯 {item.wrong_count} 次</span>
-                      <span>複習 {item.review_count} 次</span>
-                      {item.next_review_date && (
-                        <span className={isOverdue ? "font-medium text-destructive" : ""}>
-                          下次複習：{format(new Date(item.next_review_date), "yyyy/MM/dd")}{isOverdue ? "（到期）" : ""}
-                        </span>
+                <button
+                  type="button"
+                  className="w-full text-left"
+                  onClick={() => setDetailItem(item)}
+                >
+                  <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                    <div className="min-w-0 flex-1 space-y-1">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="text-sm font-semibold text-foreground">{item.subject.name}</span>
+                        <span className="text-sm text-muted-foreground">·</span>
+                        <span className="text-sm text-muted-foreground">{item.topic}</span>
+                        {item.is_careless && <Badge variant="outline" className="text-xs">粗心</Badge>}
+                        {item.source_type === "guessed_correct" && <Badge variant="outline" className="text-xs">猜對不熟</Badge>}
+                        {item.is_manual_added && <Badge variant="outline" className="text-xs">手動加入</Badge>}
+                      </div>
+                      {item.question && (
+                        <p className="break-words text-sm text-foreground line-clamp-2">{item.question.question}</p>
+                      )}
+                      <div className="flex flex-wrap gap-x-3 gap-y-1 text-xs text-muted-foreground">
+                        <span>首錯：{format(new Date(item.first_wrong_date), "yyyy/MM/dd")}</span>
+                        <span>錯 {item.wrong_count} 次</span>
+                        <span>複習 {item.review_count} 次</span>
+                        {item.next_review_date && (
+                          <span className={isOverdue ? "font-medium text-destructive" : ""}>
+                            下次複習：{format(new Date(item.next_review_date), "yyyy/MM/dd")}{isOverdue ? "（到期）" : ""}
+                          </span>
+                        )}
+                      </div>
+                      {item.error_reason && (
+                        <p className="text-xs text-muted-foreground">錯誤原因：{item.error_reason}</p>
                       )}
                     </div>
-                    {item.error_reason && (
-                      <p className="text-xs text-muted-foreground">錯誤原因：{item.error_reason}</p>
-                    )}
+                    <div className="flex shrink-0 items-center gap-2">
+                      <Badge variant={STATUS_BADGE_VARIANT[item.status] ?? "outline"}>
+                        {STATUS_LABELS[item.status] ?? item.status}
+                      </Badge>
+                    </div>
                   </div>
-                  <div className="flex shrink-0 items-center gap-2">
-                    <Badge variant={STATUS_BADGE_VARIANT[item.status] ?? "outline"}>
-                      {STATUS_LABELS[item.status] ?? item.status}
-                    </Badge>
-                  </div>
-                </div>
+                </button>
 
                 <div className="flex flex-wrap gap-2">
                   {item.status === "ACTIVE" && (
@@ -219,6 +339,12 @@ export function WrongQuestionList({ initialItems, subjects }: Props) {
           })}
         </div>
       )}
+
+      <WrongQuestionDetailDialog
+        item={detailItem}
+        open={detailItem !== null}
+        onOpenChange={(open) => { if (!open) setDetailItem(null) }}
+      />
     </div>
   )
 }
