@@ -545,6 +545,7 @@ export type PracticeQuestionItem = {
   answer: number
   text_answer: string | null  // pipe-separated accepted answers for FIB
   explanation: string | null
+  ai_explanation?: string | null  // AI generated explanation
   image_url?: string | null
   visibility?: QuestionVisibility
   shared_study_group_id?: string | null

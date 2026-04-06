@@ -3,14 +3,20 @@ import { QuestionManagementClient } from "./question-management-client"
 import { VocabularyImportClient } from "./vocabulary-import-client"
 import { CopyPromptButton } from "./copy-prompt-button"
 import { QuestionGroupImportClient } from "./question-group-import-client"
+import { UnitMappingClient } from "./unit-mapping-client"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { getStudyGroupsForCurrentUser } from "@/app/actions/study-group"
 import { getPracticeQuestionBank } from "@/app/actions/practice-log"
+import prisma from "@/lib/prisma"
+import { getCurrentUserOrThrow } from "@/lib/current-user"
 
 export default async function ImportPage() {
-  const [studyGroups, questionBank] = await Promise.all([
+  const user = await getCurrentUserOrThrow()
+  const [studyGroups, questionBank, subjects, subjectUnits] = await Promise.all([
     getStudyGroupsForCurrentUser(),
     getPracticeQuestionBank(),
+    prisma.subject.findMany({ where: { user_id: user.id } }),
+    prisma.subjectUnit.findMany({ where: { subject: { user_id: user.id } }, include: { subject: true } }),
   ])
 
   return (
@@ -24,6 +30,7 @@ export default async function ImportPage() {
         <TabsList className="w-full sm:w-auto">
           <TabsTrigger value="questions">題目匯入</TabsTrigger>
           <TabsTrigger value="question-groups">題組表格匯入</TabsTrigger>
+          <TabsTrigger value="unit-mapping">批量驗證</TabsTrigger>
           <TabsTrigger value="manage">管理題目</TabsTrigger>
           <TabsTrigger value="vocabulary">英文單字</TabsTrigger>
         </TabsList>
@@ -114,6 +121,17 @@ export default async function ImportPage() {
               <li>重複的題組（相同科目 + 相同情境）將自動跳過。</li>
             </ul>
           </div>
+        </TabsContent>
+
+        <TabsContent value="unit-mapping" className="space-y-6">
+          <UnitMappingClient 
+            subjects={subjects}
+            subjectUnits={subjectUnits.map(u => ({
+              id: u.id,
+              subjectId: u.subject_id,
+              name: u.name
+            }))}
+          />
         </TabsContent>
 
         <TabsContent value="manage" className="space-y-6">

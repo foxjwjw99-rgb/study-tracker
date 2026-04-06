@@ -12,6 +12,7 @@ import {
   updateQuestion,
   type QuestionManagementItem,
 } from "@/app/actions/practice-log"
+import { generateQuestionAiExplanation } from "@/app/actions/ai-generation"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -64,6 +65,7 @@ export function QuestionManagementClient({ questionBank }: QuestionManagementCli
   const [editOptions, setEditOptions] = useState<string[]>([])
   const [editAnswer, setEditAnswer] = useState(0)
   const [editExplanation, setEditExplanation] = useState("")
+  const [isGeneratingExplanation, setIsGeneratingExplanation] = useState(false)
 
   async function loadTopics(subjectId: string) {
     setIsLoadingTopics(true)
@@ -466,7 +468,33 @@ export function QuestionManagementClient({ questionBank }: QuestionManagementCli
               </>
             )}
             <div className="space-y-2">
-              <Label>解析（選填）</Label>
+              <div className="flex items-center justify-between">
+                <Label>解析（選填）</Label>
+                {editingQuestion && (
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    onClick={async () => {
+                      setIsGeneratingExplanation(true)
+                      try {
+                        const result = await generateQuestionAiExplanation(editingQuestion.id)
+                        if (result.success && result.explanation) {
+                          setEditExplanation(result.explanation)
+                          toast.success("✅ AI 解析已生成")
+                        } else {
+                          toast.error(result.error || "生成失敗")
+                        }
+                      } finally {
+                        setIsGeneratingExplanation(false)
+                      }
+                    }}
+                    disabled={isGeneratingExplanation}
+                  >
+                    {isGeneratingExplanation ? "生成中..." : "🤖 生成解析"}
+                  </Button>
+                )}
+              </div>
               <textarea value={editExplanation} onChange={(e) => setEditExplanation(e.target.value)} rows={2} className="min-h-[48px] w-full rounded-md border bg-transparent px-3 py-2 text-sm shadow-xs outline-none transition placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50" />
             </div>
           </div>

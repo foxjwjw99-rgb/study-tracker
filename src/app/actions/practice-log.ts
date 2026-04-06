@@ -363,7 +363,12 @@ export async function getPracticeQuestionsWeakFirst(
           context: true,
         },
       },
-      shared_study_group: { select: { id: true, name: true } },
+      shared_study_group: {
+        select: {
+          id: true,
+          name: true,
+        },
+      },
     },
     orderBy: [{ created_at: "desc" }],
   })
@@ -890,6 +895,7 @@ function buildPracticeQuestionItem(
     group_order: question.group_order ?? null,
     question: question.question,
     explanation: question.explanation,
+    ai_explanation: question.ai_explanation ?? null,
     image_url: question.image_url,
     visibility: question.visibility === "study_group" ? "study_group" : "private",
     shared_study_group_id: question.shared_study_group_id,

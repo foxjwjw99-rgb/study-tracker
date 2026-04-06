@@ -25,6 +25,12 @@ enum SubjectUnitSource {
   SYSTEM
 }
 
+enum AiUnitMappingStatus {
+  PENDING
+  COMPLETED
+  FAILED
+}
+
 enum WrongQuestionStatus {
   ACTIVE
   CORRECTED
@@ -362,6 +368,11 @@ model QuestionGroup {
   title       String?
   context     String // 共同題幹 / 情境段落
 
+  // AI 單元自動對應追蹤
+  ai_unit_mapping_status AiUnitMappingStatus @default(PENDING)
+  ai_unit_mapping_note   String?
+  ai_unit_mapping_at     DateTime?
+
   questions Question[]
 
   created_at DateTime @default(now())
@@ -388,6 +399,7 @@ model Question {
   answer                Int // Index of correct option (MC); 0 for FIB
   text_answer           String? // Pipe-separated accepted answers for FIB, e.g. "光合作用|photosynthesis"
   explanation           String?
+  ai_explanation        String? // AI 生成的解析（與人工 explanation 併存）
   image_url             String?
   visibility            String         @default("private") // private / study_group
   shared_study_group_id String?
