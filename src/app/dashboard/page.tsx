@@ -14,6 +14,7 @@ import {
 
 import { getDashboardData } from "@/app/actions/dashboard"
 import { ExamForecastSection } from "./exam-forecast-section"
+import { AIWeaknessCard } from "./ai-weakness-card"
 import { TrendChart, SubjectChart } from "@/components/dashboard-charts"
 import {
   readinessLabel,
@@ -427,6 +428,14 @@ export default async function DashboardPage() {
             </CardContent>
           </Card>
         </div>
+      </section>
+
+      <section className="space-y-4">
+        <div className="space-y-1">
+          <h2 className="section-heading">AI 弱點診斷</h2>
+          <p className="section-copy">整合所有科目的資料，客觀找出最需要補強的地方。</p>
+        </div>
+        <AIWeaknessCard />
       </section>
 
       {data.completedToday ? (
