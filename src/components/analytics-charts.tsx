@@ -96,7 +96,7 @@ export function VocabularyTrendChart({ data }: { data: VocabularyDailyTrendPoint
         <Tooltip contentStyle={tooltipStyle} />
         <Legend verticalAlign="top" height={28} />
         <Bar dataKey="reviewedWords" name="複習單字數" radius={[8, 8, 0, 0]} fill="#6366f1" />
-        <Bar dataKey="reviewCount" name="完成 review 次數" radius={[8, 8, 0, 0]} fill="#22c55e" />
+        <Bar dataKey="reviewCount" name="複習次數" radius={[8, 8, 0, 0]} fill="#22c55e" />
       </BarChart>
     </ResponsiveContainer>
   )

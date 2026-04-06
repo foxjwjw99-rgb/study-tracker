@@ -24,7 +24,7 @@ export function VocabularyInsights({
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <OverviewCard title="單字總數" value={data.vocabularyOverview.totalWords} description="目前已匯入並可追蹤的英文單字" />
         <OverviewCard title="已學會單字" value={data.vocabularyOverview.masteredWords} description={`約占全部 ${data.vocabularyOverview.masteredRate}%`} />
-        <OverviewCard title="今日已複習" value={data.vocabularyOverview.reviewedToday} description={`本週累計 ${data.vocabularyOverview.reviewedThisWeek} 次 review`} />
+        <OverviewCard title="今日已複習" value={data.vocabularyOverview.reviewedToday} description={`本週累計 ${data.vocabularyOverview.reviewedThisWeek} 次複習`} />
         <OverviewCard title="待複習數" value={data.vocabularyOverview.dueWords} description="下次複習日期已到期或今天到期" />
       </div>
 
@@ -52,7 +52,7 @@ export function VocabularyInsights({
         <Card>
           <CardHeader>
             <CardTitle>單字複習趨勢（7 日）</CardTitle>
-            <CardDescription>每天複習了幾個單字，以及完成了幾次 review。</CardDescription>
+            <CardDescription>每天複習了幾個單字，以及完成了幾次複習。</CardDescription>
           </CardHeader>
           <CardContent className="pl-0">
             <div className="h-[320px] sm:h-[360px]">

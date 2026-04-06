@@ -111,7 +111,7 @@ export default async function PracticePage({
                           </span>
                         </div>
                         <div className="break-words text-sm text-muted-foreground">
-                          {format(log.practice_date, "PP")} • {log.duration_minutes} 分鐘
+                          {format(new Date(log.practice_date), "yyyy/MM/dd")} • {log.duration_minutes} 分鐘
                           {log.source && ` • 來源: ${log.source}`}
                           {log.error_type && ` • 主要錯誤: ${log.error_type}`}
                         </div>
