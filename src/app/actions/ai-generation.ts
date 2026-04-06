@@ -95,12 +95,12 @@ export interface MapPreviewResult {
 
 export async function previewUnitMapping(
   subjectId: string,
-  groupIds?: string[]
+  mode: 'groups' | 'questions' = 'groups',
+  itemIds?: string[]
 ): Promise<{ success: boolean; data?: MapPreviewResult[]; error?: string }> {
   try {
     const user = await getCurrentUserOrThrow()
 
-    // 取得該科目所有既有單元
     const units = await prisma.subjectUnit.findMany({
       where: { subject_id: subjectId },
       include: {
@@ -108,57 +108,111 @@ export async function previewUnitMapping(
       },
     })
 
-    // 取得題組
-    let query: Parameters<typeof prisma.questionGroup.findMany>[0] = {
-      where: {
-        subject_id: subjectId,
-        user_id: user.id,
-      },
-      include: {
-        unit: true,
-      },
-    }
+    if (mode === 'groups') {
+      let query: Parameters<typeof prisma.questionGroup.findMany>[0] = {
+        where: {
+          subject_id: subjectId,
+          user_id: user.id,
+        },
+        include: {
+          unit: true,
+        },
+      }
 
-    if (groupIds && groupIds.length > 0) {
-      query.where = { ...query.where, id: { in: groupIds.slice(0, 20) } } // 最多 20 個
+      if (itemIds && itemIds.length > 0) {
+        query.where = { ...query.where, id: { in: itemIds.slice(0, 20) } }
+      } else {
+        query.take = 20
+      }
+
+      const groups = await prisma.questionGroup.findMany(query)
+      const results: MapPreviewResult[] = []
+
+      for (const group of groups) {
+        const preview: MapPreviewResult = {
+          groupId: group.id,
+          topic: group.topic,
+          currentUnitId: group.unit_id,
+          currentUnitName: group.unit?.name,
+        }
+
+        const suggestion = await suggestUnitForGroup(
+          group.topic,
+          group.context,
+          units.map((u) => ({
+            id: u.id,
+            name: u.name,
+            aliases: u.aliases.map((a) => a.alias),
+          }))
+        )
+
+        if (suggestion) {
+          preview.suggestedUnit = suggestion
+        }
+
+        results.push(preview)
+      }
+
+      return { success: true, data: results }
     } else {
-      query.take = 20
-    }
-
-    const groups = await prisma.questionGroup.findMany(query)
-
-    // 為每個題組生成建議
-    const results: MapPreviewResult[] = []
-
-    for (const group of groups) {
-      const preview: MapPreviewResult = {
-        groupId: group.id,
-        topic: group.topic,
-        currentUnitId: group.unit_id,
-        currentUnitName: group.unit?.name,
+      let query: Parameters<typeof prisma.question.findMany>[0] = {
+        where: {
+          user_id: user.id,
+          subject: { id: subjectId },
+        },
+        include: {
+          subject: true,
+        },
       }
 
-      // 呼叫 AI 建議
-      const suggestion = await suggestUnitForGroup(
-        group.topic,
-        group.context,
-        units.map((u) => ({
-          id: u.id,
-          name: u.name,
-          aliases: u.aliases.map((a) => a.alias),
-        }))
-      )
-
-      if (suggestion) {
-        preview.suggestedUnit = suggestion
+      if (itemIds && itemIds.length > 0) {
+        query.where = { ...query.where, id: { in: itemIds.slice(0, 20) } }
+      } else {
+        query.take = 20
       }
 
-      results.push(preview)
-    }
+      const questions = await prisma.question.findMany(query)
+      const results: MapPreviewResult[] = []
 
-    return { success: true, data: results }
+      for (const question of questions) {
+        const preview: MapPreviewResult = {
+          groupId: question.id,
+          topic: question.topic,
+          currentUnitId: question.unit_id,
+          currentUnitName: question.topic,
+        }
+
+        let questionContext = question.question
+        if (question.question_type === 'multiple_choice' && question.options) {
+          try {
+            const opts = JSON.parse(question.options) as string[]
+            questionContext += '\n选项: ' + opts.map((o, i) => `${String.fromCharCode(65 + i)}. ${o}`).join(' ')
+          } catch {
+            // ignore
+          }
+        }
+
+        const suggestion = await suggestUnitForQuestion(
+          question.topic,
+          questionContext,
+          units.map((u) => ({
+            id: u.id,
+            name: u.name,
+            aliases: u.aliases.map((a) => a.alias),
+          }))
+        )
+
+        if (suggestion) {
+          preview.suggestedUnit = suggestion
+        }
+
+        results.push(preview)
+      }
+
+      return { success: true, data: results }
+    }
   } catch (error) {
-    const message = error instanceof Error ? error.message : "未知錯誤"
+    const message = error instanceof Error ? error.message : '未知错误'
     return { success: false, error: message }
   }
 }

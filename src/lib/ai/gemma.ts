@@ -173,3 +173,61 @@ ${unitChoices}
     return null
   }
 }
+
+/**
+ * 建議單題應屬的單元
+ */
+export async function suggestUnitForQuestion(
+  topic: string,
+  questionText: string,
+  availableUnits: Array<{ id: string; name: string; aliases: string[] }>
+): Promise<UnitSuggestion | null> {
+  if (availableUnits.length === 0) {
+    return null
+  }
+
+  const unitChoices = availableUnits
+    .map((u) => `- ${u.name} (別名: ${u.aliases.join(', ') || '無'})`)
+    .join('\n')
+
+  const prompt = `根據以下題目資訊，選擇最合適的學習單元。
+
+當前 topic: ${topic}
+題目: ${questionText.substring(0, 300)}
+
+可選單元：
+${unitChoices}
+
+請以 JSON 格式回應，包含：
+{
+  "unitName": "選中的單元名稱",
+  "confidence": 0.75,
+  "reason": "為什麼選這個單元的簡短說明"
+}
+
+只回應 JSON，不要其他文字。`
+
+  try {
+    const response = await callGemmaAPI(prompt)
+    const json = JSON.parse(response.trim()) as {
+      unitName: string
+      confidence: number
+      reason: string
+    }
+
+    const matched = availableUnits.find((u) => u.name === json.unitName)
+    if (!matched) {
+      return null
+    }
+
+    return {
+      unitId: matched.id,
+      unitName: json.unitName,
+      confidence: Math.min(json.confidence, 1),
+      reason: json.reason,
+    }
+  } catch (error) {
+    console.error('AI 單元建議失敗:', error)
+    return null
+  }
+}
