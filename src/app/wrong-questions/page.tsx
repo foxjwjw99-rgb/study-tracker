@@ -3,8 +3,9 @@ import { BookOpen, PlayCircle } from "lucide-react"
 
 import { getWrongQuestionsWithFilters, getWrongQuestionStats } from "@/app/actions/wrong-questions"
 import { getSubjects } from "@/app/actions/subject"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { WrongQuestionList } from "./wrong-question-list"
+import { ManualWrongQuestionForm } from "./manual-wrong-question-form"
 
 function StatCard({ label, value, tone }: { label: string; value: string | number; tone?: "warning" | "default" }) {
   return (
@@ -39,6 +40,18 @@ export default async function WrongQuestionsPage() {
         <StatCard label="最近 7 天新增" value={stats.recentAddedCount} />
         <StatCard label="最近 7 天已掌握" value={stats.recentMasteredCount} />
       </div>
+
+      {subjects.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle>手動加入錯題</CardTitle>
+            <CardDescription>適合加入考卷、講義、自己算錯但不在題庫裡的題目。</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <ManualWrongQuestionForm subjects={subjects} />
+          </CardContent>
+        </Card>
+      )}
 
       {stats.dueCount > 0 && (
         <div className="flex items-center justify-between rounded-2xl border border-amber-500/20 bg-amber-500/5 px-4 py-3">

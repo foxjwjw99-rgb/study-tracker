@@ -116,8 +116,24 @@ function WrongQuestionDetailDialog({
               </div>
             )}
           </div>
+        ) : item.question_text ? (
+          <div className="space-y-3">
+            <div className="text-sm font-medium leading-relaxed whitespace-pre-wrap break-words">
+              {item.question_text}
+            </div>
+            <div className="rounded-lg border border-emerald-500/30 bg-emerald-50/40 p-3 text-sm dark:bg-emerald-950/20">
+              <span className="font-medium text-emerald-700 dark:text-emerald-300">正確答案：</span>
+              <span className="text-foreground whitespace-pre-wrap">{item.correct_answer_text ?? "—"}</span>
+            </div>
+            {item.user_answer_text && (
+              <div className="rounded-lg border border-border/60 bg-muted/20 p-3 text-sm">
+                <span className="font-medium text-foreground">我的答案：</span>
+                <span className="text-muted-foreground whitespace-pre-wrap">{item.user_answer_text}</span>
+              </div>
+            )}
+          </div>
         ) : (
-          <p className="text-sm text-muted-foreground">此題目無完整資料（可能為手動加入）。</p>
+          <p className="text-sm text-muted-foreground">此題目無完整資料。</p>
         )}
 
         {/* Error reason / notes */}
@@ -286,8 +302,10 @@ export function WrongQuestionList({ initialItems, subjects }: Props) {
                         {item.source_type === "guessed_correct" && <Badge variant="outline" className="text-xs">猜對不熟</Badge>}
                         {item.is_manual_added && <Badge variant="outline" className="text-xs">手動加入</Badge>}
                       </div>
-                      {item.question && (
-                        <p className="break-words text-sm text-foreground line-clamp-2">{item.question.question}</p>
+                      {(item.question?.question ?? item.question_text) && (
+                        <p className="break-words text-sm text-foreground line-clamp-2">
+                          {item.question?.question ?? item.question_text}
+                        </p>
                       )}
                       <div className="flex flex-wrap gap-x-3 gap-y-1 text-xs text-muted-foreground">
                         <span>首錯：{format(new Date(item.first_wrong_date), "yyyy/MM/dd")}</span>

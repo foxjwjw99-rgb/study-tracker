@@ -55,6 +55,9 @@ export type WrongQuestionWithQuestion = {
   wrong_count: number
   review_count: number
   correct_streak: number
+  question_text: string | null
+  correct_answer_text: string | null
+  user_answer_text: string | null
   notes: string | null
   is_manual_added: boolean
   is_careless: boolean
@@ -402,6 +405,41 @@ export async function getWrongQuestionStats(subject_id?: string) {
   ])
 
   return { dueCount, unresolvedCount, recentAddedCount, recentMasteredCount }
+}
+
+export async function createManualWrongQuestion(data: {
+  subject_id: string
+  topic: string
+  question_text: string
+  correct_answer_text: string
+  user_answer_text?: string
+  error_reason?: string
+  notes?: string
+  first_wrong_date?: Date
+}): Promise<ActionResult> {
+  const { addWrongQuestion } = await import("@/app/actions/practice-log")
+
+  const first_wrong_date = data.first_wrong_date ?? new Date()
+
+  try {
+    await addWrongQuestion({
+      subject_id: data.subject_id,
+      topic: data.topic,
+      question_text: data.question_text,
+      correct_answer_text: data.correct_answer_text,
+      user_answer_text: data.user_answer_text,
+      error_reason: data.error_reason,
+      notes: data.notes,
+      source: "手動加入",
+      first_wrong_date,
+    })
+
+    revalidatePath("/wrong-questions")
+
+    return { success: true, message: "已加入錯題本。" }
+  } catch {
+    return { success: false, message: "加入失敗，請稍後再試。" }
+  }
 }
 
 function getQuestionCorrectAnswerText(question: {
