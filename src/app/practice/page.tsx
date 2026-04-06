@@ -18,7 +18,7 @@ export default async function PracticePage({
 }: {
   searchParams: Promise<{ subject?: string; topic?: string }>
 }) {
-  const { subject: initialSubjectId, topic: initialTopic } = await searchParams
+  const { subject: initialSubjectId } = await searchParams
   const subjects = await getSubjects()
   const logs = await getPracticeLogs()
   const questionBank = await getPracticeQuestionBank()
@@ -50,7 +50,6 @@ export default async function PracticePage({
               <QuestionPractice
                 questionBank={questionBank}
                 initialSubjectId={initialSubjectId}
-                initialTopic={initialTopic}
               />
             ) : (
               <Card>

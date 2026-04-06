@@ -10,7 +10,7 @@ import { toast } from "sonner"
 import {
   getPracticeQuestions,
   getPracticeQuestionsWeakFirst,
-  getPracticeQuestionTopics,
+  getPracticeQuestionUnits,
   submitPracticeQuestionSession,
 } from "@/app/actions/practice-log"
 import { addToWrongBook, removeFromWrongBook } from "@/app/actions/wrong-questions"
@@ -35,7 +35,6 @@ import type {
 type QuestionPracticeProps = {
   questionBank: PracticeQuestionBankSummary[]
   initialSubjectId?: string
-  initialTopic?: string
 }
 
 type SessionState = {
@@ -59,13 +58,13 @@ type PracticeCompletionSummary = {
 
 const QUESTION_COUNT_OPTIONS = [5, 10, 20] as const
 
-export function QuestionPractice({ questionBank, initialSubjectId, initialTopic }: QuestionPracticeProps) {
+export function QuestionPractice({ questionBank, initialSubjectId }: QuestionPracticeProps) {
   const router = useRouter()
   const [selectedSubjectId, setSelectedSubjectId] = useState(
     initialSubjectId ?? questionBank[0]?.subject_id ?? ""
   )
-  const [selectedTopic, setSelectedTopic] = useState(initialTopic ?? "")
-  const [topics, setTopics] = useState<{ topic: string; count: number }[]>([])
+  const [selectedUnitId, setSelectedUnitId] = useState("")
+  const [units, setUnits] = useState<{ unitId: string; unitName: string; count: number }[]>([])
   const [requestedCount, setRequestedCount] = useState<string>("10")
   const [quizMode, setQuizMode] = useState<"random" | "weak_first">("random")
   const [session, setSession] = useState<SessionState | null>(null)
@@ -83,17 +82,17 @@ export function QuestionPractice({ questionBank, initialSubjectId, initialTopic 
 
   useEffect(() => {
     if (!selectedSubjectId) return
-    setSelectedTopic("")
-    setTopics([])
-    getPracticeQuestionTopics(selectedSubjectId).then(setTopics).catch(() => {})
+    setSelectedUnitId("")
+    setUnits([])
+    getPracticeQuestionUnits(selectedSubjectId).then(setUnits).catch(() => {})
   }, [selectedSubjectId])
 
   const effectiveQuestionCount = useMemo(() => {
-    if (selectedTopic) {
-      return topics.find((t) => t.topic === selectedTopic)?.count ?? 0
+    if (selectedUnitId) {
+      return units.find((u) => u.unitId === selectedUnitId)?.count ?? 0
     }
     return selectedSubject?.question_count ?? 0
-  }, [selectedTopic, topics, selectedSubject])
+  }, [selectedUnitId, units, selectedSubject])
 
   const questionCountOptions = useMemo(() => {
     const availableCount = effectiveQuestionCount
@@ -169,7 +168,7 @@ export function QuestionPractice({ questionBank, initialSubjectId, initialTopic 
         : Number.parseInt(requestedCount, 10)
       const questions = quizMode === "weak_first"
         ? await getPracticeQuestionsWeakFirst(selectedSubjectId, count)
-        : await getPracticeQuestions(selectedSubjectId, count, selectedTopic || undefined)
+        : await getPracticeQuestions(selectedSubjectId, count, selectedUnitId || undefined)
 
       if (questions.length === 0) {
         toast.error("這個科目目前沒有可用題目。")
@@ -387,22 +386,22 @@ export function QuestionPractice({ questionBank, initialSubjectId, initialTopic 
               <div className="space-y-2">
                 <label className="text-sm font-medium">單元</label>
                 <Select
-                  value={selectedTopic || "__all__"}
-                  onValueChange={(value) => setSelectedTopic(value === "__all__" ? "" : (value ?? ""))}
-                  disabled={topics.length === 0}
+                  value={selectedUnitId || "__all__"}
+                  onValueChange={(value) => setSelectedUnitId(value === "__all__" ? "" : (value ?? ""))}
+                  disabled={units.length === 0}
                 >
                   <SelectTrigger className="w-full">
                     <SelectValue>
-                      {selectedTopic
-                        ? `${selectedTopic} (${topics.find((t) => t.topic === selectedTopic)?.count ?? 0} 題)`
+                      {selectedUnitId
+                        ? `${units.find((u) => u.unitId === selectedUnitId)?.unitName ?? selectedUnitId} (${units.find((u) => u.unitId === selectedUnitId)?.count ?? 0} 題)`
                         : "全部單元"}
                     </SelectValue>
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="__all__">全部單元</SelectItem>
-                    {topics.map((t) => (
-                      <SelectItem key={t.topic} value={t.topic}>
-                        {t.topic} ({t.count} 題)
+                    {units.map((u) => (
+                      <SelectItem key={u.unitId} value={u.unitId}>
+                        {u.unitName} ({u.count} 題)
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -436,7 +435,7 @@ export function QuestionPractice({ questionBank, initialSubjectId, initialTopic 
                 <div className="rounded-lg border bg-muted/40 p-3 text-sm">
                   <div className="text-muted-foreground">目前題庫</div>
                   <div className="mt-1 font-medium text-foreground">
-                    {selectedSubject.subject_name}{selectedTopic ? ` · ${selectedTopic}` : ""}
+                    {selectedSubject.subject_name}{selectedUnitId ? ` · ${units.find((u) => u.unitId === selectedUnitId)?.unitName ?? selectedUnitId}` : ""}
                   </div>
                   <div className="mt-1 text-muted-foreground">共 {effectiveQuestionCount} 題</div>
                 </div>
@@ -1000,7 +999,8 @@ function buildCompletionSummary(
         ? answer?.is_user_correct === true
         : answer?.selected_answer === question.answer
     const targetMap = isCorrect ? correctTopicCount : wrongTopicCount
-    targetMap.set(question.topic, (targetMap.get(question.topic) ?? 0) + 1)
+    const label = question.unit_name ?? question.topic
+    targetMap.set(label, (targetMap.get(label) ?? 0) + 1)
   }
 
   return {

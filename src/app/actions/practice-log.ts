@@ -245,10 +245,45 @@ export async function getPracticeQuestionTopics(
     .sort((a, b) => a.topic.localeCompare(b.topic, "zh-Hant"))
 }
 
+export async function getPracticeQuestionUnits(
+  subjectNameOrId: string
+): Promise<{ unitId: string; unitName: string; count: number }[]> {
+  const user = await getCurrentUserOrThrow()
+  const accessibleGroupIds = await getAccessibleStudyGroupIds(user.id)
+  const normalizedSubjectName = await resolveSubjectName(user.id, subjectNameOrId)
+
+  const questions = await prisma.question.findMany({
+    where: {
+      ...buildAccessibleQuestionWhere(user.id, accessibleGroupIds),
+      subject: { name: normalizedSubjectName },
+    },
+    select: {
+      unit_id: true,
+      unit: { select: { name: true } },
+    },
+  })
+
+  const countByUnit = new Map<string, { unitName: string; count: number }>()
+  for (const q of questions) {
+    const unitId = q.unit_id
+    const unitName = q.unit?.name ?? q.unit_id
+    const existing = countByUnit.get(unitId)
+    if (existing) {
+      existing.count += 1
+    } else {
+      countByUnit.set(unitId, { unitName, count: 1 })
+    }
+  }
+
+  return Array.from(countByUnit.entries())
+    .map(([unitId, { unitName, count }]) => ({ unitId, unitName, count }))
+    .sort((a, b) => a.unitName.localeCompare(b.unitName, "zh-Hant"))
+}
+
 export async function getPracticeQuestions(
   subjectNameOrId: string,
   requestedCount: number,
-  topic?: string
+  unitId?: string
 ): Promise<PracticeQuestionItem[]> {
   const user = await getCurrentUserOrThrow()
   const accessibleGroupIds = await getAccessibleStudyGroupIds(user.id)
@@ -262,9 +297,10 @@ export async function getPracticeQuestions(
       subject: {
         name: normalizedSubjectName,
       },
-      ...(topic ? { topic } : {}),
+      ...(unitId ? { unit_id: unitId } : {}),
     },
     include: {
+      unit: { select: { id: true, name: true } },
       group: {
         select: {
           id: true,
@@ -300,17 +336,18 @@ export async function getPracticeQuestionsWeakFirst(
   const normalizedSubjectName = await resolveSubjectName(user.id, subjectNameOrId)
   const practiceSubjectId = await ensureLocalSubjectId(user.id, normalizedSubjectName)
 
-  // Get topics with unresolved wrong questions
-  const wrongTopics = await prisma.wrongQuestion.findMany({
+  // Get units with unresolved wrong questions
+  const wrongUnits = await prisma.wrongQuestion.findMany({
     where: {
       user_id: user.id,
       subject: { name: normalizedSubjectName },
       status: { not: "MASTERED" },
+      unit_id: { not: null },
     },
-    select: { topic: true },
-    distinct: ["topic"],
+    select: { unit_id: true },
+    distinct: ["unit_id"],
   })
-  const weakTopicSet = new Set(wrongTopics.map((wq) => wq.topic))
+  const weakUnitSet = new Set(wrongUnits.map((wq) => wq.unit_id).filter(Boolean) as string[])
 
   const allQuestions = await prisma.question.findMany({
     where: {
@@ -318,6 +355,7 @@ export async function getPracticeQuestionsWeakFirst(
       subject: { name: normalizedSubjectName },
     },
     include: {
+      unit: { select: { id: true, name: true } },
       group: {
         select: {
           id: true,
@@ -335,7 +373,7 @@ export async function getPracticeQuestionsWeakFirst(
   const otherQuestions: PracticeQuestionItem[] = []
 
   for (const item of orderedQuestions) {
-    if (weakTopicSet.has(item.topic)) {
+    if (item.unit_id && weakUnitSet.has(item.unit_id)) {
       weakQuestions.push(item)
     } else {
       otherQuestions.push(item)
@@ -656,45 +694,84 @@ export async function submitPracticeQuestionSession(data: {
       const sourceLabel = wrongQuestion.visibility === "study_group" ? "共享題庫" : "題庫練習"
       const newNotes = `題目：${wrongQuestion.question}\n你的答案：${selectedAnswerText}\n正確答案：${correctAnswerText}`
 
-      const wq = await tx.wrongQuestion.create({
-        data: {
-          user_id: user.id,
-          subject_id: ownedSubject.id,
-          question_id: wrongQuestion.id,
-          unit_id: resolvedUnit.unitId,
-          topic: resolvedUnit.topicSnapshot || wrongQuestion.topic,
-          question_text: wrongQuestion.question,
-          correct_answer_text: correctAnswerText,
-          user_answer_text: selectedAnswerText,
-          source: sourceLabel,
-          source_type: "wrong_answer",
-          error_reason: "題庫練習答錯",
-          first_wrong_date: practiceDate,
-          last_wrong_date: practiceDate,
-          status: WRONG_QUESTION_STATUS.pending,
-          wrong_count: 1,
-          next_review_date: nextReviewDate,
-          notes: newNotes,
-        },
+      const existingWq = await tx.wrongQuestion.findFirst({
+        where: { user_id: user.id, question_id: wrongQuestion.id, status: { not: "ARCHIVED" } },
+        select: { id: true, status: true },
       })
+
+      let wqId: string
+      if (existingWq) {
+        const wasAlreadyMastered = existingWq.status === "MASTERED"
+        await tx.wrongQuestion.update({
+          where: { id: existingWq.id },
+          data: {
+            wrong_count: { increment: 1 },
+            last_wrong_date: practiceDate,
+            user_answer_text: selectedAnswerText,
+            notes: newNotes,
+            ...(wasAlreadyMastered ? {
+              status: WRONG_QUESTION_STATUS.pending,
+              next_review_date: nextReviewDate,
+              correct_streak: 0,
+            } : {}),
+          },
+        })
+        wqId = existingWq.id
+        if (wasAlreadyMastered) {
+          await tx.reviewTask.create({
+            data: {
+              user_id: user.id,
+              subject_id: ownedSubject.id,
+              topic: resolvedUnit.topicSnapshot || wrongQuestion.topic,
+              unit_id: resolvedUnit.unitId,
+              wrong_question_id: existingWq.id,
+              source_type: REVIEW_TASK_SOURCE_TYPES.wrongQuestion,
+              review_date: nextReviewDate,
+              review_stage: WRONG_QUESTION_REVIEW_STAGES[0],
+            },
+          })
+        }
+      } else {
+        const wq = await tx.wrongQuestion.create({
+          data: {
+            user_id: user.id,
+            subject_id: ownedSubject.id,
+            question_id: wrongQuestion.id,
+            unit_id: resolvedUnit.unitId,
+            topic: resolvedUnit.topicSnapshot || wrongQuestion.topic,
+            question_text: wrongQuestion.question,
+            correct_answer_text: correctAnswerText,
+            user_answer_text: selectedAnswerText,
+            source: sourceLabel,
+            source_type: "wrong_answer",
+            error_reason: "題庫練習答錯",
+            first_wrong_date: practiceDate,
+            last_wrong_date: practiceDate,
+            status: WRONG_QUESTION_STATUS.pending,
+            wrong_count: 1,
+            next_review_date: nextReviewDate,
+            notes: newNotes,
+          },
+        })
+        wqId = wq.id
+        await tx.reviewTask.create({
+          data: {
+            user_id: user.id,
+            subject_id: ownedSubject.id,
+            topic: resolvedUnit.topicSnapshot || wrongQuestion.topic,
+            unit_id: resolvedUnit.unitId,
+            wrong_question_id: wq.id,
+            source_type: REVIEW_TASK_SOURCE_TYPES.wrongQuestion,
+            review_date: nextReviewDate,
+            review_stage: WRONG_QUESTION_REVIEW_STAGES[0],
+          },
+        })
+      }
 
       const resultEntry = questionResults.find((r) => r.question_id === wrongQuestion.id)
       if (resultEntry) {
-        resultEntry.wrongQuestionId = wq.id
+        resultEntry.wrongQuestionId = wqId
       }
-
-      await tx.reviewTask.create({
-        data: {
-          user_id: user.id,
-          subject_id: ownedSubject.id,
-          topic: resolvedUnit.topicSnapshot || wrongQuestion.topic,
-          unit_id: resolvedUnit.unitId,
-          wrong_question_id: wq.id,
-          source_type: REVIEW_TASK_SOURCE_TYPES.wrongQuestion,
-          review_date: nextReviewDate,
-          review_stage: WRONG_QUESTION_REVIEW_STAGES[0],
-        },
-      })
     }
 
     return questionResults
@@ -806,7 +883,7 @@ function buildPracticeQuestionItem(
     subject_name: subjectName,
     topic: question.topic,
     unit_id: question.unit_id ?? null,
-    unit_name: question.topic,
+    unit_name: question.unit?.name ?? question.topic,
     group_id: question.group_id ?? null,
     group_title: question.group?.title ?? null,
     group_context: question.group?.context ?? null,
