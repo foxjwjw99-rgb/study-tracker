@@ -96,7 +96,8 @@ export async function generateQuestionExplanation(
   }
 
   prompt += `正確答案：${correctAnswer}\n\n`
-  prompt += `請用 200-300 字清楚解釋為什麼這是正確答案。`
+  prompt += `請用 200-300 字清楚解釋為什麼這是正確答案。\n\n`
+  prompt += `回應格式：直接輸出解析文本，不要添加任何額外的結構、標記或思考過程。`
 
   return callGemmaAPI(prompt)
 }
