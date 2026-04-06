@@ -1,0 +1,558 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
+// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum VocabularyWordStatus {
+  NEW
+  LEARNING
+  FAMILIAR
+}
+
+enum SubjectUnitSource {
+  MANUAL
+  IMPORTED
+  SYSTEM
+}
+
+enum WrongQuestionStatus {
+  ACTIVE
+  CORRECTED
+  MASTERED
+  ARCHIVED
+}
+
+model User {
+  id            String    @id @default(cuid())
+  name          String
+  email         String?   @unique
+  emailVerified DateTime?
+  image         String?
+  exam_date     DateTime?
+
+  accounts                    Account[]
+  sessions                    Session[]
+  subjects                    Subject[]
+  study_logs                  StudyLog[]
+  practice_logs               PracticeLog[]
+  wrong_qs                    WrongQuestion[]
+  wrong_question_review_logs  WrongQuestionReviewLog[]
+  review_tasks                ReviewTask[]
+  questions                   Question[]
+  vocabulary_words            VocabularyWord[]
+  vocabulary_review_logs      VocabularyReviewLog[]
+  reward_draws                RewardDraw[]
+  owned_study_groups          StudyGroup[]             @relation("StudyGroupOwner")
+  study_group_members         StudyGroupMember[]
+  question_groups             QuestionGroup[]
+  exam_syllabus_units         ExamSyllabusUnit[]
+  mock_exam_records      MockExamRecord[]
+  target_programs        TargetProgram[]
+  prediction_snapshots   PredictionSnapshot[]
+
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+}
+
+model Subject {
+  id           String @id @default(cuid())
+  user_id      String
+  user         User   @relation(fields: [user_id], references: [id])
+  name         String
+  target_score Int?
+  exam_weight  Float? // 佔總分比重 (0.0–1.0)，e.g. 0.4 = 40%
+
+  exam_units             SubjectUnit[]
+  study_logs             StudyLog[]
+  practice_logs          PracticeLog[]
+  wrong_qs               WrongQuestion[]
+  wrong_question_review_logs  WrongQuestionReviewLog[]
+  review_tasks           ReviewTask[]
+  questions              Question[]
+  question_groups        QuestionGroup[]
+  vocabulary_words       VocabularyWord[]
+  vocabulary_review_logs VocabularyReviewLog[]
+  exam_syllabus_units    ExamSyllabusUnit[]
+  mock_exam_records      MockExamRecord[]
+  subjectUnitAlias       SubjectUnitAlias[]
+
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+}
+
+model MockExamRecord {
+  id         String   @id @default(cuid())
+  user_id    String
+  user       User     @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  subject_id String
+  subject    Subject  @relation(fields: [subject_id], references: [id], onDelete: Cascade)
+  exam_date  DateTime
+  score      Float
+  full_score Float    @default(100)
+  is_timed   Boolean  @default(false)
+  notes      String?
+
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  @@index([user_id, subject_id, exam_date])
+}
+
+model ExamSyllabusUnit {
+  id            String       @id @default(cuid())
+  user_id       String
+  user          User         @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  subject_id    String
+  subject       Subject      @relation(fields: [subject_id], references: [id], onDelete: Cascade)
+  unit_name     String // 對應 PracticeLog.topic
+  unit_id       String?
+  unit          SubjectUnit? @relation(fields: [unit_id], references: [id], onDelete: SetNull)
+  weight        Float // 佔該科比重 (0.0–1.0)
+  mastery_score Int? // 手動評分 0–5
+
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  @@unique([subject_id, unit_name])
+  @@index([user_id, subject_id])
+  @@index([subject_id, unit_id])
+}
+
+model SubjectUnit {
+  id            String            @id @default(cuid())
+  subject_id    String
+  subject       Subject           @relation(fields: [subject_id], references: [id], onDelete: Cascade)
+  name          String
+  slug          String?
+  display_order Int               @default(0) @map("order")
+  is_active     Boolean           @default(true)
+  source        SubjectUnitSource @default(MANUAL)
+  notes         String?
+
+  aliases             SubjectUnitAlias[]
+  study_logs          StudyLog[]
+  practice_logs       PracticeLog[]
+  exam_syllabus_units ExamSyllabusUnit[]
+  questions           Question[]
+  question_groups     QuestionGroup[]
+  wrong_questions     WrongQuestion[]
+  review_tasks        ReviewTask[]
+
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  @@unique([subject_id, slug])
+  @@index([subject_id, name])
+  @@index([subject_id, is_active])
+  @@index([subject_id, display_order])
+  @@map("ExamUnit")
+}
+
+model SubjectUnitAlias {
+  id               String      @id @default(cuid())
+  subject_id       String
+  subject          Subject     @relation(fields: [subject_id], references: [id], onDelete: Cascade)
+  subject_unit_id  String
+  subject_unit     SubjectUnit @relation(fields: [subject_unit_id], references: [id], onDelete: Cascade)
+  alias            String
+  normalized_alias String
+
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  @@unique([subject_id, normalized_alias])
+  @@index([subject_unit_id])
+  @@index([subject_id, normalized_alias])
+}
+
+model StudyLog {
+  id               String       @id @default(cuid())
+  user_id          String
+  user             User         @relation(fields: [user_id], references: [id])
+  subject_id       String
+  subject          Subject      @relation(fields: [subject_id], references: [id])
+  topic            String
+  unit_id          String?
+  unit             SubjectUnit? @relation(fields: [unit_id], references: [id], onDelete: SetNull)
+  study_date       DateTime
+  duration_minutes Int
+  study_type       String // 看書/做題/複習/上課
+  focus_score      Int // 1-5
+  planned_done     Boolean
+  source_type      String       @default("manual") // manual / timer
+  notes            String? // Optional
+
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  @@index([user_id, study_date])
+  @@index([user_id, subject_id, study_date])
+  @@index([subject_id, unit_id, study_date])
+}
+
+model StudyGroup {
+  id               String             @id @default(cuid())
+  owner_user_id    String
+  owner            User               @relation("StudyGroupOwner", fields: [owner_user_id], references: [id])
+  name             String
+  invite_code      String             @unique
+  members          StudyGroupMember[]
+  shared_questions Question[]
+
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+}
+
+model StudyGroupMember {
+  id             String     @id @default(cuid())
+  study_group_id String
+  study_group    StudyGroup @relation(fields: [study_group_id], references: [id], onDelete: Cascade)
+  user_id        String
+  user           User       @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  @@unique([study_group_id, user_id])
+}
+
+model PracticeLog {
+  id                String       @id @default(cuid())
+  user_id           String
+  user              User         @relation(fields: [user_id], references: [id])
+  subject_id        String
+  subject           Subject      @relation(fields: [subject_id], references: [id])
+  topic             String
+  unit_id           String?
+  unit              SubjectUnit? @relation(fields: [unit_id], references: [id], onDelete: SetNull)
+  source            String?
+  practice_date     DateTime
+  total_questions   Int
+  correct_questions Int
+  duration_minutes  Int
+  error_type        String? // 不會/粗心/計算錯/觀念混淆
+  notes             String?
+
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  @@index([user_id, practice_date])
+  @@index([user_id, subject_id, practice_date])
+  @@index([subject_id, unit_id, practice_date])
+}
+
+model WrongQuestion {
+  id                  String               @id @default(cuid())
+  user_id             String
+  user                User                 @relation(fields: [user_id], references: [id])
+  subject_id          String
+  subject             Subject              @relation(fields: [subject_id], references: [id])
+  question_id         String?
+  question            Question?            @relation(fields: [question_id], references: [id], onDelete: SetNull)
+  unit_id             String?
+  unit                SubjectUnit?         @relation(fields: [unit_id], references: [id], onDelete: SetNull)
+  topic               String
+  question_text       String?
+  correct_answer_text String?
+  user_answer_text    String?
+  source              String?
+  source_type         String? // "wrong_answer" | "manual_add" | "careless_mistake" | "guessed_correct"
+  error_reason        String?
+  first_wrong_date    DateTime
+  last_wrong_date     DateTime?
+  last_reviewed_at    DateTime?
+  status              WrongQuestionStatus  @default(ACTIVE)
+  next_review_date    DateTime?
+  wrong_count         Int                  @default(1)
+  review_count        Int                  @default(0)
+  correct_streak      Int                  @default(0)
+  retry_result        String?
+  notes               String?
+  is_manual_added     Boolean              @default(false)
+  is_careless         Boolean              @default(false)
+
+  review_tasks ReviewTask[]
+  review_logs  WrongQuestionReviewLog[]
+
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  @@index([user_id, status])
+  @@index([user_id, subject_id, next_review_date])
+  @@index([user_id, status, next_review_date])
+  @@index([user_id, question_id])
+  @@index([subject_id, unit_id])
+}
+
+model WrongQuestionReviewLog {
+  id                 String        @id @default(cuid())
+  wrong_question_id  String
+  wrong_question     WrongQuestion @relation(fields: [wrong_question_id], references: [id], onDelete: Cascade)
+  user_id            String
+  user               User          @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  subject_id         String
+  subject            Subject       @relation(fields: [subject_id], references: [id], onDelete: Cascade)
+  question_id        String?
+  review_task_id     String?
+  review_task        ReviewTask?   @relation(fields: [review_task_id], references: [id], onDelete: SetNull)
+  answered_correctly Boolean?
+  selected_answer    Int?
+  typed_answer       String?
+  review_mode        String? // "wrong_book_review" | "manual_recheck"
+  confidence         Int?
+  review_stage       Int?
+  result_score       Int?
+  reviewed_at        DateTime      @default(now())
+
+  @@index([wrong_question_id])
+  @@index([user_id, reviewed_at])
+  @@index([user_id, wrong_question_id, reviewed_at])
+  @@index([user_id, subject_id, reviewed_at])
+}
+
+model ReviewTask {
+  id                 String          @id @default(cuid())
+  user_id            String
+  user               User            @relation(fields: [user_id], references: [id])
+  subject_id         String
+  subject            Subject         @relation(fields: [subject_id], references: [id])
+  vocabulary_word_id String?
+  vocabulary_word    VocabularyWord? @relation(fields: [vocabulary_word_id], references: [id])
+  wrong_question_id  String?
+  wrong_question     WrongQuestion?  @relation(fields: [wrong_question_id], references: [id])
+  topic              String
+  unit_id            String?
+  unit               SubjectUnit?    @relation(fields: [unit_id], references: [id], onDelete: SetNull)
+  source_type        String? // manual / wrong_question / vocabulary
+  review_date        DateTime
+  review_stage       Int // e.g., 1=day1, 3=day3, 7=day7, 14=day14
+  completed          Boolean         @default(false)
+  result_score       Int?
+
+  wrong_question_review_logs WrongQuestionReviewLog[]
+
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  @@index([user_id, review_date, completed])
+  @@index([user_id, subject_id])
+  @@index([subject_id, unit_id])
+}
+
+model QuestionGroup {
+  id          String       @id @default(cuid())
+  user_id     String
+  user        User         @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  subject_id  String
+  subject     Subject      @relation(fields: [subject_id], references: [id], onDelete: Cascade)
+  topic       String
+  unit_id     String?
+  unit        SubjectUnit? @relation(fields: [unit_id], references: [id], onDelete: SetNull)
+  external_id String?
+  title       String?
+  context     String // 共同題幹 / 情境段落
+
+  questions Question[]
+
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  @@index([user_id, subject_id])
+  @@index([subject_id, unit_id])
+  @@unique([user_id, subject_id, external_id])
+}
+
+model Question {
+  id                    String         @id @default(cuid())
+  user_id               String
+  user                  User           @relation(fields: [user_id], references: [id])
+  subject_id            String
+  subject               Subject        @relation(fields: [subject_id], references: [id])
+  topic                 String
+  unit_id               String
+  unit                  SubjectUnit    @relation(fields: [unit_id], references: [id], onDelete: Restrict)
+  external_id           String?
+  question              String
+  question_type         String         @default("multiple_choice") // "multiple_choice" | "fill_in_blank"
+  options               String // Stored as JSON string e.g. '["A", "B", "C", "D"]'; empty "[]" for FIB
+  answer                Int // Index of correct option (MC); 0 for FIB
+  text_answer           String? // Pipe-separated accepted answers for FIB, e.g. "光合作用|photosynthesis"
+  explanation           String?
+  image_url             String?
+  visibility            String         @default("private") // private / study_group
+  shared_study_group_id String?
+  shared_study_group    StudyGroup?    @relation(fields: [shared_study_group_id], references: [id], onDelete: SetNull)
+  group_id              String?
+  group_order           Int?
+  group                 QuestionGroup? @relation(fields: [group_id], references: [id], onDelete: SetNull)
+
+  wrong_questions WrongQuestion[]
+
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  @@unique([user_id, subject_id, question]) // Prevent import duplicates
+  @@index([subject_id, unit_id])
+}
+
+model VocabularyWord {
+  id                           String               @id @default(cuid())
+  user_id                      String
+  user                         User                 @relation(fields: [user_id], references: [id])
+  subject_id                   String
+  subject                      Subject              @relation(fields: [subject_id], references: [id])
+  word                         String
+  part_of_speech               String? // n. / v. / adj. / adv. / prep. / conj. / pron. / interj. / phrase
+  meaning                      String
+  example_sentence             String
+  example_sentence_translation String? // 例句中文翻譯
+  status                       VocabularyWordStatus
+  ease_factor                  Float                @default(2.5)
+  interval_days                Float                @default(0)
+  review_count                 Int                  @default(0)
+  lapse_count                  Int                  @default(0)
+  average_response_ms          Float?
+  average_confidence           Float?
+  last_reviewed_at             DateTime?
+  next_review_date             DateTime?
+
+  review_tasks ReviewTask[]
+  review_logs  VocabularyReviewLog[]
+
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  @@unique([user_id, subject_id, word])
+  @@index([user_id, next_review_date])
+  @@index([user_id, status])
+}
+
+model VocabularyReviewLog {
+  id                 String         @id @default(cuid())
+  user_id            String
+  user               User           @relation(fields: [user_id], references: [id])
+  subject_id         String
+  subject            Subject        @relation(fields: [subject_id], references: [id])
+  vocabulary_word_id String
+  vocabulary_word    VocabularyWord @relation(fields: [vocabulary_word_id], references: [id])
+  review_task_id     String?
+  rating             String
+  confidence         Int
+  response_ms        Int
+  quality            Int
+  scheduled_days     Float
+  elapsed_days       Float
+  interval_days      Float
+  ease_factor        Float
+
+  created_at DateTime @default(now())
+
+  @@index([user_id, vocabulary_word_id, created_at])
+}
+
+model RewardDraw {
+  id                String    @id @default(cuid())
+  user_id           String
+  user              User      @relation(fields: [user_id], references: [id])
+  prize_key         String
+  prize_label       String
+  prize_type        String // cash / item
+  prize_value       Int
+  probability_label String
+  draw_cost_minutes Int       @default(60)
+  redeemed          Boolean   @default(false)
+  redeemed_at       DateTime?
+
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  @@index([user_id, created_at])
+}
+
+model Account {
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String?
+  access_token      String?
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String?
+  session_state     String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([provider, providerAccountId])
+}
+
+model Session {
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@id([identifier, token])
+}
+
+model TargetProgram {
+  id              String  @id @default(cuid())
+  user_id         String
+  user            User    @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  school_name     String
+  department_name String
+  exam_year       Int
+  last_year_line  Float
+  safe_line       Float
+  ideal_line      Float
+  notes           String?
+
+  prediction_snapshots PredictionSnapshot[]
+
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  @@index([user_id])
+}
+
+model PredictionSnapshot {
+  id                           String        @id @default(cuid())
+  user_id                      String
+  user                         User          @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  target_program_id            String
+  target_program               TargetProgram @relation(fields: [target_program_id], references: [id], onDelete: Cascade)
+  snapshot_date                DateTime      @default(now())
+  estimated_total_conservative Float
+  estimated_total_median       Float
+  estimated_total_optimistic   Float
+  gap_vs_last_year_line        Float
+  admission_level              String // high_chance/good_chance/coin_flip/risky/very_risky
+  confidence_level             String // low/medium/high
+
+  created_at DateTime @default(now())
+
+  @@index([user_id, target_program_id, snapshot_date])
+}

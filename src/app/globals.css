@@ -1,0 +1,189 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
+
+@custom-variant dark (&:is(.dark *));
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-sans);
+  --font-mono: var(--font-geist-mono);
+  --font-heading: var(--font-sans);
+  --color-sidebar-ring: var(--sidebar-ring);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar: var(--sidebar);
+  --color-chart-5: var(--chart-5);
+  --color-chart-4: var(--chart-4);
+  --color-chart-3: var(--chart-3);
+  --color-chart-2: var(--chart-2);
+  --color-chart-1: var(--chart-1);
+  --color-ring: var(--ring);
+  --color-input: var(--input);
+  --color-border: var(--border);
+  --color-destructive: var(--destructive);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-accent: var(--accent);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-muted: var(--muted);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-secondary: var(--secondary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary: var(--primary);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-popover: var(--popover);
+  --color-card-foreground: var(--card-foreground);
+  --color-card: var(--card);
+  --radius-sm: calc(var(--radius) * 0.6);
+  --radius-md: calc(var(--radius) * 0.8);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) * 1.35);
+  --radius-2xl: calc(var(--radius) * 1.7);
+  --radius-3xl: calc(var(--radius) * 2.2);
+  --radius-4xl: calc(var(--radius) * 2.6);
+}
+
+:root {
+  --font-sans: "SF Pro Text", "SF Pro TC", "Noto Sans TC", "PingFang TC",
+    "Microsoft JhengHei", system-ui, sans-serif;
+  --font-geist-mono: "SFMono-Regular", "JetBrains Mono", "Fira Code", monospace;
+  --background: oklch(0.985 0.01 250);
+  --foreground: oklch(0.29 0.03 255);
+  --card: oklch(0.995 0.004 255 / 0.9);
+  --card-foreground: oklch(0.29 0.03 255);
+  --popover: oklch(1 0.003 255 / 0.96);
+  --popover-foreground: oklch(0.29 0.03 255);
+  --primary: oklch(0.55 0.18 275);
+  --primary-foreground: oklch(0.985 0.01 250);
+  --secondary: oklch(0.95 0.02 180);
+  --secondary-foreground: oklch(0.33 0.04 240);
+  --muted: oklch(0.965 0.01 245);
+  --muted-foreground: oklch(0.53 0.035 250);
+  --accent: oklch(0.95 0.025 225);
+  --accent-foreground: oklch(0.34 0.05 255);
+  --destructive: oklch(0.61 0.2 25);
+  --border: oklch(0.9 0.015 245);
+  --input: oklch(0.925 0.012 245);
+  --ring: oklch(0.72 0.11 275 / 0.42);
+  --chart-1: oklch(0.61 0.17 275);
+  --chart-2: oklch(0.67 0.11 210);
+  --chart-3: oklch(0.72 0.12 165);
+  --chart-4: oklch(0.76 0.13 90);
+  --chart-5: oklch(0.66 0.12 20);
+  --radius: 0.95rem;
+  --sidebar: oklch(0.975 0.01 245 / 0.94);
+  --sidebar-foreground: oklch(0.29 0.03 255);
+  --sidebar-primary: oklch(0.55 0.18 275);
+  --sidebar-primary-foreground: oklch(0.985 0.01 250);
+  --sidebar-accent: oklch(0.95 0.018 230);
+  --sidebar-accent-foreground: oklch(0.34 0.05 255);
+  --sidebar-border: oklch(0.9 0.015 245 / 0.85);
+  --sidebar-ring: oklch(0.72 0.11 275 / 0.42);
+}
+
+.dark {
+  --background: oklch(0.19 0.02 260);
+  --foreground: oklch(0.95 0.012 250);
+  --card: oklch(0.25 0.02 258 / 0.92);
+  --card-foreground: oklch(0.95 0.012 250);
+  --popover: oklch(0.24 0.02 258 / 0.96);
+  --popover-foreground: oklch(0.95 0.012 250);
+  --primary: oklch(0.72 0.14 275);
+  --primary-foreground: oklch(0.2 0.02 260);
+  --secondary: oklch(0.3 0.03 205);
+  --secondary-foreground: oklch(0.95 0.012 250);
+  --muted: oklch(0.28 0.018 255);
+  --muted-foreground: oklch(0.76 0.015 250);
+  --accent: oklch(0.31 0.03 240);
+  --accent-foreground: oklch(0.95 0.012 250);
+  --destructive: oklch(0.69 0.19 25);
+  --border: oklch(1 0 0 / 10%);
+  --input: oklch(1 0 0 / 14%);
+  --ring: oklch(0.72 0.14 275 / 0.42);
+  --chart-1: oklch(0.74 0.13 275);
+  --chart-2: oklch(0.72 0.1 210);
+  --chart-3: oklch(0.78 0.11 165);
+  --chart-4: oklch(0.8 0.11 95);
+  --chart-5: oklch(0.75 0.13 25);
+  --sidebar: oklch(0.22 0.02 258 / 0.96);
+  --sidebar-foreground: oklch(0.95 0.012 250);
+  --sidebar-primary: oklch(0.72 0.14 275);
+  --sidebar-primary-foreground: oklch(0.2 0.02 260);
+  --sidebar-accent: oklch(0.3 0.02 252);
+  --sidebar-accent-foreground: oklch(0.95 0.012 250);
+  --sidebar-border: oklch(1 0 0 / 9%);
+  --sidebar-ring: oklch(0.72 0.14 275 / 0.42);
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+
+  html {
+    @apply font-sans antialiased;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  body {
+    @apply bg-background text-foreground;
+    min-height: 100dvh;
+    background-image:
+      radial-gradient(circle at top, color-mix(in oklab, var(--primary) 9%, transparent) 0%, transparent 34%),
+      radial-gradient(circle at 100% 0%, color-mix(in oklab, var(--secondary) 18%, transparent) 0%, transparent 22%);
+  }
+
+  ::selection {
+    background: color-mix(in oklab, var(--primary) 24%, white);
+    color: var(--foreground);
+  }
+}
+
+@layer utilities {
+  .surface-card {
+    @apply rounded-2xl border border-border/80 bg-card/95 shadow-[0_10px_30px_rgba(76,95,140,0.06)] backdrop-blur-sm;
+  }
+
+  .surface-subtle {
+    @apply rounded-2xl border border-border/70 bg-background/85 backdrop-blur-sm;
+  }
+
+  .section-heading {
+    @apply text-lg font-semibold tracking-tight text-foreground;
+  }
+
+  .section-copy {
+    @apply text-sm leading-6 text-muted-foreground;
+  }
+}
+
+/* Scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: color-mix(in oklab, var(--muted-foreground) 30%, transparent);
+  border-radius: 99px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: color-mix(in oklab, var(--muted-foreground) 50%, transparent);
+}
+
+/* Page fade-in */
+@keyframes page-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+main > * {
+  animation: page-in 0.22s ease both;
+}
