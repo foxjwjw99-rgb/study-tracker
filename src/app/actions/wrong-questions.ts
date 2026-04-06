@@ -197,39 +197,77 @@ export async function addToWrongBook(
     source: "SYSTEM",
   })
 
-  const wq = await prisma.wrongQuestion.create({
-    data: {
-      user_id: user.id,
-      subject_id: ownedSubject.id,
-      question_id,
-      unit_id: resolvedUnit.unitId,
-      topic: resolvedUnit.topicSnapshot || question.topic,
-      question_text: question.question,
-      correct_answer_text: getQuestionCorrectAnswerText(question),
-      source_type,
-      source: "手動加入",
-      first_wrong_date: now,
-      last_wrong_date: now,
-      status: WRONG_QUESTION_STATUS.pending,
-      wrong_count: 1,
-      next_review_date: nextReviewDate,
-      is_manual_added: true,
-      is_careless: source_type === "careless_mistake",
-    },
+  const existingWq = await prisma.wrongQuestion.findFirst({
+    where: { user_id: user.id, question_id, status: { not: "ARCHIVED" } },
+    select: { id: true, status: true },
   })
 
-  await prisma.reviewTask.create({
-    data: {
-      user_id: user.id,
-      subject_id: ownedSubject.id,
-      topic: resolvedUnit.topicSnapshot || question.topic,
-      unit_id: resolvedUnit.unitId,
-      wrong_question_id: wq.id,
-      source_type: REVIEW_TASK_SOURCE_TYPES.wrongQuestion,
-      review_date: nextReviewDate,
-      review_stage: WRONG_QUESTION_REVIEW_STAGES[0],
-    },
-  })
+  let wqId: string
+  if (existingWq) {
+    const wasAlreadyMastered = existingWq.status === "MASTERED"
+    await prisma.wrongQuestion.update({
+      where: { id: existingWq.id },
+      data: {
+        wrong_count: { increment: 1 },
+        last_wrong_date: now,
+        is_careless: source_type === "careless_mistake" ? true : undefined,
+        ...(wasAlreadyMastered ? {
+          status: WRONG_QUESTION_STATUS.pending,
+          next_review_date: nextReviewDate,
+          correct_streak: 0,
+        } : {}),
+      },
+    })
+    wqId = existingWq.id
+    if (wasAlreadyMastered) {
+      await prisma.reviewTask.create({
+        data: {
+          user_id: user.id,
+          subject_id: ownedSubject.id,
+          topic: resolvedUnit.topicSnapshot || question.topic,
+          unit_id: resolvedUnit.unitId,
+          wrong_question_id: existingWq.id,
+          source_type: REVIEW_TASK_SOURCE_TYPES.wrongQuestion,
+          review_date: nextReviewDate,
+          review_stage: WRONG_QUESTION_REVIEW_STAGES[0],
+        },
+      })
+    }
+  } else {
+    const wq = await prisma.wrongQuestion.create({
+      data: {
+        user_id: user.id,
+        subject_id: ownedSubject.id,
+        question_id,
+        unit_id: resolvedUnit.unitId,
+        topic: resolvedUnit.topicSnapshot || question.topic,
+        question_text: question.question,
+        correct_answer_text: getQuestionCorrectAnswerText(question),
+        source_type,
+        source: "手動加入",
+        first_wrong_date: now,
+        last_wrong_date: now,
+        status: WRONG_QUESTION_STATUS.pending,
+        wrong_count: 1,
+        next_review_date: nextReviewDate,
+        is_manual_added: true,
+        is_careless: source_type === "careless_mistake",
+      },
+    })
+    wqId = wq.id
+    await prisma.reviewTask.create({
+      data: {
+        user_id: user.id,
+        subject_id: ownedSubject.id,
+        topic: resolvedUnit.topicSnapshot || question.topic,
+        unit_id: resolvedUnit.unitId,
+        wrong_question_id: wq.id,
+        source_type: REVIEW_TASK_SOURCE_TYPES.wrongQuestion,
+        review_date: nextReviewDate,
+        review_stage: WRONG_QUESTION_REVIEW_STAGES[0],
+      },
+    })
+  }
 
   revalidatePath("/practice")
   revalidatePath("/wrong-questions")
@@ -244,8 +282,8 @@ export async function addToWrongBook(
 
   return {
     success: true,
-    message: labelMap[source_type],
-    wrongQuestionId: wq.id,
+    message: existingWq ? `${labelMap[source_type]}（已更新現有紀錄）` : labelMap[source_type],
+    wrongQuestionId: wqId,
   }
 }
 

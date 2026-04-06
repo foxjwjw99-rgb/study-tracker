@@ -223,17 +223,22 @@ function ReviewTaskCard({
           />
         ) : null}
       </div>
-      {task.source_type === "vocabulary" ? null : (
-        <form
-          action={async () => {
-            "use server"
-            await completeReviewTask(task.id, 100)
-          }}
-          className="w-full sm:w-auto"
-        >
-          <Button size="sm" className="w-full sm:w-auto">完成</Button>
-        </form>
-      )}
+      {task.source_type === "vocabulary" ? null
+        : task.source_type === "wrong_question" ? (
+          <Link href="/wrong-questions/review" className={buttonVariants({ size: "sm" }) + " w-full sm:w-auto"}>
+            去作答
+          </Link>
+        ) : (
+          <form
+            action={async () => {
+              "use server"
+              await completeReviewTask(task.id, 100)
+            }}
+            className="w-full sm:w-auto"
+          >
+            <Button size="sm" className="w-full sm:w-auto">完成</Button>
+          </form>
+        )}
     </div>
   )
 }
