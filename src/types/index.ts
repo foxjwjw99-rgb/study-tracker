@@ -107,6 +107,14 @@ export type DashboardReviewFocusItem = {
   }
 }
 
+export type ReadinessFactorBreakdown = {
+  studyScore: number
+  accuracyScore: number
+  memoryScore: number
+  coverageScore: number
+  penaltyReason: string | null
+}
+
 export type DashboardSubjectReadinessItem = {
   subjectId: string
   subjectName: string
@@ -124,6 +132,7 @@ export type DashboardSubjectReadinessItem = {
   vocabularyDue: number
   vocabularyFamiliarRate: number | null
   vocabularyTotalWords: number
+  factors: ReadinessFactorBreakdown
 }
 
 export type DashboardWeakAreaItem = {
@@ -138,6 +147,7 @@ export type DashboardWeakAreaItem = {
   studyMinutes7d: number
   priority: "high" | "medium" | "low"
   note: string
+  factors: ReadinessFactorBreakdown
 }
 
 export type DashboardPlanItem = {
@@ -191,6 +201,11 @@ export type DashboardTopicDetailItem = {
   hasActivity: boolean
   hasQuestionBank: boolean
   note: string
+  studyScore: number
+  accuracyScore: number
+  memoryScore: number
+  coverageScore: number
+  penaltyReason: string | null
 }
 
 export type DashboardSubjectTopicSectionItem = {
@@ -520,6 +535,10 @@ export type PracticeQuestionItem = {
   topic: string
   unit_id?: string | null
   unit_name?: string | null
+  group_id?: string | null
+  group_title?: string | null
+  group_context?: string | null
+  group_order?: number | null
   question: string
   question_type: QuestionType
   options: string[]

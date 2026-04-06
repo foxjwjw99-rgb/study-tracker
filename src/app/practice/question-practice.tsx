@@ -109,6 +109,12 @@ export function QuestionPractice({ questionBank, initialSubjectId, initialTopic 
   }, [effectiveQuestionCount])
 
   const currentQuestion = session ? session.questions[session.currentIndex] : null
+  const previousQuestion = session && session.currentIndex > 0 ? session.questions[session.currentIndex - 1] : null
+  const showGroupContext = Boolean(
+    currentQuestion?.group_id &&
+    currentQuestion.group_context &&
+    currentQuestion.group_id !== previousQuestion?.group_id
+  )
   const currentAnswer = currentQuestion
     ? session?.answers.find((answer) => answer.question_id === currentQuestion.id) ?? null
     : null
@@ -502,6 +508,16 @@ export function QuestionPractice({ questionBank, initialSubjectId, initialTopic 
                 </span>
               </div>
             </div>
+            {showGroupContext ? (
+              <div className="rounded-2xl border border-sky-200 bg-sky-50 p-4 text-sm dark:border-sky-900/50 dark:bg-sky-950/20">
+                <p className="text-xs font-medium uppercase tracking-[0.18em] text-sky-700 dark:text-sky-300">
+                  {currentQuestion.group_title || "共同題幹"}
+                </p>
+                <div className="mt-2 leading-7 text-foreground">
+                  <MathText text={currentQuestion.group_context ?? ""} className="leading-7" />
+                </div>
+              </div>
+            ) : null}
             {currentQuestion.image_url && (
               <div>
                 <Image

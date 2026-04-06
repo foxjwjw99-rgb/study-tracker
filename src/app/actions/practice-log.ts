@@ -8,7 +8,13 @@ import {
   getCurrentUserOrThrow,
   OWNERSHIP_ERROR_MESSAGE,
 } from "@/lib/current-user"
+import { resolveSubjectUnit } from "@/lib/subject-unit"
 import { REVIEW_TASK_SOURCE_TYPES } from "@/lib/vocabulary"
+import {
+  getWrongQuestionInitialReviewDate,
+  WRONG_QUESTION_REVIEW_STAGES,
+  WRONG_QUESTION_STATUS,
+} from "@/lib/wrong-question-review"
 
 import type { PracticeLogListItem } from "@/types"
 import type {
@@ -259,6 +265,13 @@ export async function getPracticeQuestions(
       ...(topic ? { topic } : {}),
     },
     include: {
+      group: {
+        select: {
+          id: true,
+          title: true,
+          context: true,
+        },
+      },
       shared_study_group: {
         select: {
           id: true,
@@ -266,57 +279,10 @@ export async function getPracticeQuestions(
         },
       },
     },
-    orderBy: {
-      created_at: "desc",
-    },
+    orderBy: [{ created_at: "desc" }],
   })
 
-  const parsedQuestions: PracticeQuestionItem[] = questions.flatMap((question): PracticeQuestionItem[] => {
-    const isFib = question.question_type === "fill_in_blank"
-
-    if (isFib) {
-      return [{
-        id: createAnswerKey(question.id, practiceSubjectId),
-        source_question_id: question.id,
-        subject_id: practiceSubjectId,
-        subject_name: normalizedSubjectName,
-        topic: question.topic,
-        question: question.question,
-        question_type: "fill_in_blank" as const,
-        options: [],
-        answer: 0,
-        text_answer: question.text_answer ?? null,
-        explanation: question.explanation,
-        image_url: question.image_url,
-        visibility: question.visibility === "study_group" ? "study_group" : "private",
-        shared_study_group_id: question.shared_study_group_id,
-        shared_study_group_name: question.shared_study_group?.name ?? null,
-      }]
-    }
-
-    const options = safeParseOptions(question.options)
-    if (options.length === 0) return []
-
-    return [{
-      id: createAnswerKey(question.id, practiceSubjectId),
-      source_question_id: question.id,
-      subject_id: practiceSubjectId,
-      subject_name: normalizedSubjectName,
-      topic: question.topic,
-      question: question.question,
-      question_type: "multiple_choice" as const,
-      options,
-      answer: question.answer,
-      text_answer: null,
-      explanation: question.explanation,
-      image_url: question.image_url,
-      visibility: question.visibility === "study_group" ? "study_group" : "private",
-      shared_study_group_id: question.shared_study_group_id,
-      shared_study_group_name: question.shared_study_group?.name ?? null,
-    }]
-  })
-
-  shuffleInPlace(parsedQuestions)
+  const parsedQuestions = buildPracticeSessionQuestions(questions, practiceSubjectId, normalizedSubjectName)
 
   if (requestedCount <= 0 || requestedCount >= parsedQuestions.length) {
     return parsedQuestions
@@ -352,70 +318,29 @@ export async function getPracticeQuestionsWeakFirst(
       subject: { name: normalizedSubjectName },
     },
     include: {
+      group: {
+        select: {
+          id: true,
+          title: true,
+          context: true,
+        },
+      },
       shared_study_group: { select: { id: true, name: true } },
     },
-    orderBy: { created_at: "desc" },
+    orderBy: [{ created_at: "desc" }],
   })
 
-  const toItem = (question: (typeof allQuestions)[number]): PracticeQuestionItem | null => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const q = question as any
-    const isFib = q.question_type === "fill_in_blank"
-    if (isFib) {
-      return {
-        id: createAnswerKey(question.id, practiceSubjectId),
-        source_question_id: question.id,
-        subject_id: practiceSubjectId,
-        subject_name: normalizedSubjectName,
-        topic: question.topic,
-        question: question.question,
-        question_type: "fill_in_blank" as const,
-        options: [],
-        answer: 0,
-        text_answer: (q.text_answer ?? null) as string | null,
-        explanation: question.explanation,
-        image_url: question.image_url,
-        visibility: question.visibility === "study_group" ? "study_group" : "private",
-        shared_study_group_id: question.shared_study_group_id,
-        shared_study_group_name: question.shared_study_group?.name ?? null,
-      }
-    }
-    const options = safeParseOptions(question.options)
-    if (options.length === 0) return null
-    return {
-      id: createAnswerKey(question.id, practiceSubjectId),
-      source_question_id: question.id,
-      subject_id: practiceSubjectId,
-      subject_name: normalizedSubjectName,
-      topic: question.topic,
-      question: question.question,
-      question_type: "multiple_choice" as const,
-      options,
-      answer: question.answer,
-      text_answer: null,
-      explanation: question.explanation,
-      image_url: question.image_url,
-      visibility: question.visibility === "study_group" ? "study_group" : "private",
-      shared_study_group_id: question.shared_study_group_id,
-      shared_study_group_name: question.shared_study_group?.name ?? null,
-    }
-  }
-
+  const orderedQuestions = buildPracticeSessionQuestions(allQuestions, practiceSubjectId, normalizedSubjectName)
   const weakQuestions: PracticeQuestionItem[] = []
   const otherQuestions: PracticeQuestionItem[] = []
 
-  for (const q of allQuestions) {
-    const item = toItem(q)
-    if (!item) continue
-    if (weakTopicSet.has(q.topic)) {
+  for (const item of orderedQuestions) {
+    if (weakTopicSet.has(item.topic)) {
       weakQuestions.push(item)
     } else {
       otherQuestions.push(item)
     }
   }
-
-  shuffleInPlace(weakQuestions)
-  shuffleInPlace(otherQuestions)
 
   const result = [...weakQuestions, ...otherQuestions]
 
@@ -624,24 +549,41 @@ export async function submitPracticeQuestionSession(data: {
   const correctQuestions = questions.length - wrongQuestions.length
   const durationMinutes = Math.max(1, Math.round(data.duration_seconds / 60))
   const practiceDate = new Date()
+  const uniqueUnitIds = [...new Set(questions.map((question) => question.unit_id).filter(Boolean))]
   const uniqueTopics = [...new Set(questions.map((question) => question.topic))]
+  const unitNameById = new Map<string, string>()
+  for (const question of questions) {
+    if (question.unit_id && !unitNameById.has(question.unit_id)) {
+      unitNameById.set(question.unit_id, question.topic)
+    }
+  }
+  const uniqueUnitNames = [...unitNameById.values()]
   const topicLabel =
-    uniqueTopics.length === 1
-      ? uniqueTopics[0]
-      : `題庫練習（${uniqueTopics.length} 個單元）`
+    uniqueUnitNames.length === 1
+      ? uniqueUnitNames[0]
+      : uniqueTopics.length === 1
+        ? uniqueTopics[0]
+        : `題庫練習（${Math.max(uniqueUnitIds.length, uniqueTopics.length)} 個單元）`
   const usedSharedQuestions = questions.some((question) => question.visibility === "study_group")
 
   const questionResults = await prisma.$transaction(async (tx) => {
     const sessionUnit =
-      uniqueTopics.length === 1
+      uniqueUnitIds.length === 1
         ? await resolveSubjectUnit(tx, {
             subjectId: ownedSubject.id,
             unitId: questions[0]?.unit_id ?? null,
-            topic: uniqueTopics[0],
+            topic: uniqueUnitNames[0] ?? uniqueTopics[0] ?? topicLabel,
             createIfMissing: true,
             source: "SYSTEM",
           })
-        : { unitId: null, topicSnapshot: topicLabel }
+        : uniqueUnitNames.length === 1
+          ? await resolveSubjectUnit(tx, {
+              subjectId: ownedSubject.id,
+              topic: uniqueUnitNames[0],
+              createIfMissing: true,
+              source: "SYSTEM",
+            })
+          : { unitId: null, topicSnapshot: topicLabel }
 
     await tx.practiceLog.create({
       data: {
@@ -848,6 +790,93 @@ function parseSourceQuestionId(questionId: string) {
 
 function createAnswerKey(sourceQuestionId: string, practiceSubjectId: string) {
   return `${sourceQuestionId}::${practiceSubjectId}`
+}
+
+function buildPracticeQuestionItem(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  question: any,
+  practiceSubjectId: string,
+  subjectName: string,
+): PracticeQuestionItem | null {
+  const isFib = question.question_type === "fill_in_blank"
+  const base = {
+    id: createAnswerKey(question.id, practiceSubjectId),
+    source_question_id: question.id,
+    subject_id: practiceSubjectId,
+    subject_name: subjectName,
+    topic: question.topic,
+    unit_id: question.unit_id ?? null,
+    unit_name: question.topic,
+    group_id: question.group_id ?? null,
+    group_title: question.group?.title ?? null,
+    group_context: question.group?.context ?? null,
+    group_order: question.group_order ?? null,
+    question: question.question,
+    explanation: question.explanation,
+    image_url: question.image_url,
+    visibility: question.visibility === "study_group" ? "study_group" : "private",
+    shared_study_group_id: question.shared_study_group_id,
+    shared_study_group_name: question.shared_study_group?.name ?? null,
+  } satisfies Omit<PracticeQuestionItem, "question_type" | "options" | "answer" | "text_answer">
+
+  if (isFib) {
+    return {
+      ...base,
+      question_type: "fill_in_blank",
+      options: [],
+      answer: 0,
+      text_answer: question.text_answer ?? null,
+    }
+  }
+
+  const options = safeParseOptions(question.options)
+  if (options.length === 0) return null
+
+  return {
+    ...base,
+    question_type: "multiple_choice",
+    options,
+    answer: question.answer,
+    text_answer: null,
+  }
+}
+
+function buildPracticeSessionQuestions(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  questions: any[],
+  practiceSubjectId: string,
+  subjectName: string,
+) {
+  const grouped = new Map<string, PracticeQuestionItem[]>()
+  const standalone: PracticeQuestionItem[] = []
+
+  for (const question of questions) {
+    const item = buildPracticeQuestionItem(question, practiceSubjectId, subjectName)
+    if (!item) continue
+
+    if (item.group_id) {
+      const key = item.group_id
+      const current = grouped.get(key) ?? []
+      current.push(item)
+      grouped.set(key, current)
+      continue
+    }
+
+    standalone.push(item)
+  }
+
+  const groupedBlocks = Array.from(grouped.values()).map((items) =>
+    items.sort((a, b) => {
+      const orderDiff = (a.group_order ?? Number.MAX_SAFE_INTEGER) - (b.group_order ?? Number.MAX_SAFE_INTEGER)
+      if (orderDiff !== 0) return orderDiff
+      return a.id.localeCompare(b.id, "zh-Hant")
+    })
+  )
+
+  shuffleInPlace(standalone)
+  shuffleInPlace(groupedBlocks)
+
+  return [...groupedBlocks.flat(), ...standalone]
 }
 
 function safeParseOptions(rawOptions: string) {

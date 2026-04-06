@@ -249,7 +249,7 @@ export default async function DashboardPage() {
       <section className="space-y-4">
         <div className="space-y-1">
           <h2 className="section-heading">三科準備狀態</h2>
-          <p className="section-copy">把每一科拆開看，直接知道目前穩不穩、卡在哪裡、下一步該怎麼補。</p>
+          <p className="section-copy">把每一科拆開看，直接知道目前穩不穩、卡在哪個單元、下一步該怎麼補。</p>
         </div>
 
         {data.subjectReadiness.length > 0 ? (
@@ -277,7 +277,7 @@ export default async function DashboardPage() {
       <section className="space-y-4">
         <div className="space-y-1">
           <h2 className="section-heading">考試範圍覆蓋率</h2>
-          <p className="section-copy">先確認每科有哪些 topic 已碰過、哪些還是空白，避免考前才發現漏章節。</p>
+          <p className="section-copy">先確認每科有哪些單元已碰過、哪些還是空白，避免考前才發現漏章節。</p>
         </div>
 
         {data.subjectCoverage.length > 0 ? (
@@ -417,7 +417,7 @@ export default async function DashboardPage() {
               <ActionTile
                 href="/practice"
                 title="做一組題目"
-                description="最快能更新準備度，也最容易看出哪個 topic 真正有問題。"
+                description="最快能更新準備度，也最容易看出哪個單元真正有問題。"
               />
               <ActionTile
                 href="/study-log"
@@ -528,6 +528,15 @@ function SubjectReadinessCard({ item }: { item: DashboardSubjectReadinessItem })
             目前弱點：{item.weakTopic ? `${item.subjectName}・${item.weakTopic}` : "還在累積資料"}
           </p>
           <p className="mt-2 leading-6 text-muted-foreground">{item.suggestedAction}</p>
+          <div className="mt-3 grid gap-2 sm:grid-cols-2">
+            <MiniMetric label="投入分" value={`${item.factors.studyScore}`} />
+            <MiniMetric label="正確率分" value={`${item.factors.accuracyScore}`} />
+            <MiniMetric label="記憶分" value={`${item.factors.memoryScore}`} />
+            <MiniMetric label="覆蓋分" value={`${item.factors.coverageScore}`} />
+          </div>
+          {item.factors.penaltyReason ? (
+            <p className="mt-3 text-xs text-amber-700 dark:text-amber-400">低分主因：{item.factors.penaltyReason}</p>
+          ) : null}
           {item.vocabularyFamiliarRate !== null ? (
             <p className="mt-2 text-xs text-muted-foreground">
               單字熟悉度 {item.vocabularyFamiliarRate}% · 到期單字 {item.vocabularyDue} 個
@@ -578,9 +587,9 @@ function CoverageOverviewCard({ item }: { item: DashboardSubjectCoverageItem }) 
           <p className="mt-2 text-muted-foreground">
             {item.totalTopics > 0
               ? item.untouchedTopics > 0
-                ? `還有 ${item.untouchedTopics} 個 topic 沒正式碰過，這些最容易在考前變成盲區。`
+                ? `還有 ${item.untouchedTopics} 個單元沒正式碰過，這些最容易在考前變成盲區。`
                 : "這科目前沒有明顯的範圍空洞，接下來要做的是把弱點拉穩。"
-              : "目前還沒有足夠的 topic 資料。"}
+              : "目前還沒有足夠的單元資料。"}
           </p>
         </div>
       </CardContent>
@@ -595,9 +604,9 @@ function SubjectTopicSectionCard({ section }: { section: DashboardSubjectTopicSe
   return (
     <Card>
       <CardHeader>
-        <CardTitle>{section.subjectName} topic 明細</CardTitle>
+        <CardTitle>{section.subjectName} 單元明細</CardTitle>
         <CardDescription>
-          已覆蓋 {section.coverage.coveredTopics}/{section.coverage.totalTopics} 個 topic · 未碰 {section.coverage.untouchedTopics} 個
+          已覆蓋 {section.coverage.coveredTopics}/{section.coverage.totalTopics} 個單元 · 未碰 {section.coverage.untouchedTopics} 個
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-3">
@@ -605,7 +614,7 @@ function SubjectTopicSectionCard({ section }: { section: DashboardSubjectTopicSe
           visibleTopics.map((topic) => <TopicDetailRow key={topic.key} item={topic} />)
         ) : (
           <InlineEmptyState
-            title="這科還沒有 topic 資料"
+            title="這科還沒有單元資料"
             description="先匯入題目或記錄學習，這裡就會開始整理章節明細。"
             href="/import"
             cta="去匯入"
@@ -614,7 +623,7 @@ function SubjectTopicSectionCard({ section }: { section: DashboardSubjectTopicSe
 
         {remainingCount > 0 ? (
           <div className="rounded-2xl border border-dashed border-border bg-background/60 px-4 py-3 text-sm text-muted-foreground">
-            還有 {remainingCount} 個 topic 沒有展開，之後可以再把這區做成獨立頁面。
+            還有 {remainingCount} 個單元沒有展開，之後可以再把這區做成獨立頁面。
           </div>
         ) : null}
       </CardContent>
@@ -643,7 +652,14 @@ function TopicDetailRow({ item }: { item: DashboardTopicDetailItem }) {
           value={item.practiceAccuracy14d !== null ? `${item.practiceAccuracy14d}%` : item.hasActivity ? "—" : "未覆蓋"}
         />
         <MiniMetric label="待補量" value={`${item.dueReviews + item.wrongCount}`} />
+        <MiniMetric label="投入分" value={`${item.studyScore}`} />
+        <MiniMetric label="正確率分" value={`${item.accuracyScore}`} />
+        <MiniMetric label="記憶分" value={`${item.memoryScore}`} />
+        <MiniMetric label="覆蓋分" value={`${item.coverageScore}`} />
       </div>
+      {item.penaltyReason ? (
+        <p className="mt-3 text-xs text-amber-700 dark:text-amber-400">低分主因：{item.penaltyReason}</p>
+      ) : null}
     </div>
   )
 }
