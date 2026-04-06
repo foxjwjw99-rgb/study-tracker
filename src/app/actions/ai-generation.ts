@@ -21,6 +21,7 @@ export async function generateQuestionAiExplanation(
       where: { id: questionId },
       include: {
         group: true,
+        subject: true,
       },
     })
 
@@ -59,7 +60,8 @@ export async function generateQuestionAiExplanation(
       question.question,
       options,
       correctAnswerText,
-      question.explanation || undefined
+      question.explanation || undefined,
+      question.subject?.name || undefined
     )
 
     // 存進資料庫

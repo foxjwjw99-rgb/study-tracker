@@ -81,12 +81,14 @@ export async function generateQuestionExplanation(
   question: string,
   options: string[] | null,
   correctAnswer: string,
-  existingExplanation?: string
+  existingExplanation?: string,
+  subject?: string
 ): Promise<string> {
-  let prompt = `請為以下題目生成簡潔的解析。\n\n`
+  const teacherDesc = subject ? `你是一位${subject}老師` : `你是一位老師`
+  let prompt = `${teacherDesc}，請為以下選擇題撰寫一份清晰的解析，幫助學生理解解題思路。\n\n`
 
   if (existingExplanation) {
-    prompt += `參考既有解析：${existingExplanation}\n\n`
+    prompt += `參考簡解（請以此為基礎擴展說明）：${existingExplanation}\n\n`
   }
 
   prompt += `題目：${question}\n`
@@ -96,8 +98,13 @@ export async function generateQuestionExplanation(
   }
 
   prompt += `正確答案：${correctAnswer}\n\n`
-  prompt += `請用 200-300 字清楚解釋為什麼這是正確答案。\n\n`
-  prompt += `回應格式：直接輸出解析文本，不要添加任何額外的結構、標記或思考過程。`
+  prompt += `撰寫要求：\n`
+  prompt += `1. 先說明已知條件與解題目標\n`
+  prompt += `2. 條理清晰地展示解題步驟（若有多種解法，可簡述第二種方法）\n`
+  prompt += `3. 說明每個關鍵步驟的依據（公式、定理、概念、規則）\n`
+  prompt += `4. 最後點明正確選項\n`
+  prompt += `5. 使用繁體中文，字數 200-300 字\n\n`
+  prompt += `直接輸出解析文字，不要加任何標題、標記、或思考過程。`
 
   return callGemmaAPI(prompt)
 }
