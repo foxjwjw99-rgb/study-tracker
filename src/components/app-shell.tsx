@@ -41,7 +41,7 @@ export function AppShell({ children, currentUser }: AppShellProps) {
   return (
     <div className="flex min-h-screen bg-transparent">
       {/* Desktop Sidebar */}
-      <aside className="fixed inset-y-0 left-0 z-20 hidden w-64 flex-col border-r border-sidebar-border bg-sidebar/85 backdrop-blur md:flex">
+      <aside className="fixed inset-y-0 left-0 z-20 hidden w-64 flex-col border-r border-sidebar-border bg-sidebar md:flex">
         {/* Sidebar Header */}
         <div className="flex h-18 items-center gap-3 border-b border-sidebar-border px-5 py-4">
           <UserAvatar name={currentUser.name} />

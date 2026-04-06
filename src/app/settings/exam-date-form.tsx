@@ -43,7 +43,7 @@ export function ExamDateForm({ initialDate }: { initialDate: Date | null }) {
           )}
         >
           <CalendarIcon className="mr-2 h-4 w-4" />
-          {date ? format(date, "PPP") : <span>選擇日期</span>}
+          {date ? format(date, "yyyy年M月d日") : <span>選擇日期</span>}
         </PopoverTrigger>
         <PopoverContent className="w-auto p-0" align="start">
           <Calendar

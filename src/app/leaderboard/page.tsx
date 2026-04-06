@@ -100,7 +100,7 @@ export default async function LeaderboardPage({
                   <div>
                     <p className="text-2xl font-semibold tracking-tight text-foreground">第 {data.currentUserEntry.rank} 名</p>
                     <p className="mt-1 text-sm text-muted-foreground">
-                      {formatMinutes(data.currentUserEntry.totalMinutes)} · {data.currentUserEntry.totalSessions} 次 session
+                      {formatMinutes(data.currentUserEntry.totalMinutes)} · {data.currentUserEntry.totalSessions} 次計時
                     </p>
                   </div>
                   <Badge variant="secondary">{data.activePeriod === "today" ? "今日" : "本週"}</Badge>
@@ -114,7 +114,7 @@ export default async function LeaderboardPage({
       <Card>
         <CardHeader>
           <CardTitle>{data.activePeriod === "today" ? "今日排行" : "本週排行"}</CardTitle>
-          <CardDescription>依照 timer session 累積分鐘數排序，平手時再看 session 次數。</CardDescription>
+          <CardDescription>依照計時器累計分鐘數排序，平手時再看次數。</CardDescription>
         </CardHeader>
         <CardContent className="space-y-3">
           {data.entries.length === 0 ? (
@@ -149,7 +149,7 @@ export default async function LeaderboardPage({
                         <p className="text-base font-semibold text-foreground">{entry.userName}</p>
                         {entry.isCurrentUser ? <Badge variant="outline">你</Badge> : null}
                       </div>
-                      <p className="mt-1 text-sm text-muted-foreground">{entry.totalSessions} 次 timer session</p>
+                      <p className="mt-1 text-sm text-muted-foreground">{entry.totalSessions} 次計時</p>
                     </div>
                   </div>
 

@@ -40,7 +40,7 @@ export function ManualWrongQuestionForm({ subjects }: { subjects: Subject[] }) {
   const formRef = useRef<HTMLFormElement>(null)
   const router = useRouter()
   const [subjectId, setSubjectId] = useState<string>(subjects[0]?.id ?? "")
-  const [errorReason, setErrorReason] = useState<string>("__none__")
+  const [errorReason, setErrorReason] = useState<string>("")
 
   async function handleAction(formData: FormData) {
     const subject_id = formData.get("subject_id") as string
@@ -49,7 +49,7 @@ export function ManualWrongQuestionForm({ subjects }: { subjects: Subject[] }) {
     const correct_answer_text = (formData.get("correct_answer_text") as string | null)?.trim() ?? ""
     const user_answer_text = (formData.get("user_answer_text") as string | null)?.trim() || undefined
     const notes = (formData.get("notes") as string | null)?.trim() || undefined
-    const error_reason = errorReason === "__none__" ? undefined : errorReason
+    const error_reason = errorReason || undefined
 
     if (!subject_id) { toast.error("請選擇科目。"); return }
     if (!topic) { toast.error("請填寫單元／主題。"); return }
@@ -75,7 +75,7 @@ export function ManualWrongQuestionForm({ subjects }: { subjects: Subject[] }) {
       toast.success(result.message)
       formRef.current?.reset()
       setSubjectId(subjects[0]?.id ?? "")
-      setErrorReason("__none__")
+      setErrorReason("")
       router.refresh()
     } catch {
       toast.error("加入失敗，請稍後再試。")
@@ -95,7 +95,9 @@ export function ManualWrongQuestionForm({ subjects }: { subjects: Subject[] }) {
             required
           >
             <SelectTrigger className="w-full">
-              <SelectValue placeholder="選擇科目" />
+              <SelectValue placeholder="選擇科目">
+                {subjects.find(s => s.id === subjectId)?.name}
+              </SelectValue>
             </SelectTrigger>
             <SelectContent>
               {subjects.map((s) => (
@@ -107,12 +109,14 @@ export function ManualWrongQuestionForm({ subjects }: { subjects: Subject[] }) {
 
         <div className="space-y-2">
           <Label>錯誤原因</Label>
-          <Select value={errorReason} onValueChange={(v) => setErrorReason(v ?? "__none__")}>
+          <Select value={errorReason} onValueChange={(v) => setErrorReason(v ?? "")}>
             <SelectTrigger className="w-full">
-              <SelectValue placeholder="選填" />
+              <SelectValue placeholder="選填（不填請留空）">
+                {errorReason ? (ERROR_REASON_OPTIONS.find(o => o.value === errorReason)?.label ?? errorReason) : undefined}
+              </SelectValue>
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="__none__">不填</SelectItem>
+              <SelectItem value="">不填</SelectItem>
               {ERROR_REASON_OPTIONS.map((opt) => (
                 <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
               ))}
