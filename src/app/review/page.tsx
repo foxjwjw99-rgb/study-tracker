@@ -225,9 +225,11 @@ function ReviewTaskCard({
       </div>
       {task.source_type === "vocabulary" ? null
         : task.source_type === "wrong_question" ? (
-          <Link href="/wrong-questions/review" className="inline-flex w-full items-center justify-center rounded-xl bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground transition-all hover:bg-primary/90 sm:w-auto">
-            去作答
-          </Link>
+          task.wrong_question_id ? (
+            <Link href={`/wrong-questions/review?questionId=${task.wrong_question_id}`} className="inline-flex w-full items-center justify-center rounded-xl bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground transition-all hover:bg-primary/90 sm:w-auto">
+              去作答
+            </Link>
+          ) : null
         ) : (
           <form
             action={async () => {

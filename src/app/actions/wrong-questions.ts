@@ -154,6 +154,31 @@ export async function getDueWrongQuestions(subject_id?: string): Promise<WrongQu
   }) as Promise<WrongQuestionWithQuestion[]>
 }
 
+export async function getWrongQuestionById(
+  id: string,
+): Promise<WrongQuestionWithQuestion | null> {
+  const user = await getCurrentUserOrThrow()
+
+  return prisma.wrongQuestion.findFirst({
+    where: { id, user_id: user.id },
+    include: {
+      subject: { select: { id: true, name: true } },
+      question: {
+        select: {
+          id: true,
+          question: true,
+          question_type: true,
+          options: true,
+          answer: true,
+          text_answer: true,
+          explanation: true,
+          topic: true,
+        },
+      },
+    },
+  }) as Promise<WrongQuestionWithQuestion | null>
+}
+
 export async function addToWrongBook(
   question_id: string,
   subject_id: string,
