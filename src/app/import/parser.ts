@@ -86,6 +86,11 @@ function normalizeQuestionLike(value: unknown): unknown {
     }
   }
 
+  // Normalize short_answer → fill_in_blank (both use text_answer field)
+  if (normalized.question_type === "short_answer") {
+    normalized.question_type = "fill_in_blank"
+  }
+
   return normalized
 }
 
