@@ -1,7 +1,7 @@
 "use server"
 
 import { revalidatePath } from "next/cache"
-import { endOfDay } from "date-fns"
+import { getEndOfTodayUTC } from "@/lib/date-utils"
 
 import { vocabularyImportSchema } from "@/app/import/vocabulary-schema"
 import { getCurrentUserOrThrow } from "@/lib/current-user"
@@ -279,7 +279,7 @@ export async function getVocabularyWords(filters?: {
 }): Promise<VocabularyWordItem[]> {
   const user = await getCurrentUserOrThrow()
   const statusFilter = filters?.status ?? "all"
-  const todayEnd = endOfDay(new Date())
+  const todayEnd = getEndOfTodayUTC()
   const words = await prisma.vocabularyWord.findMany({
     where: {
       user_id: user.id,

@@ -5,10 +5,14 @@ import { getCurrentUserOrThrow } from "@/lib/current-user"
 import {
   differenceInCalendarDays,
   differenceInDays,
-  endOfDay,
-  startOfDay,
-  subDays,
 } from "date-fns"
+import {
+  formatShortDateInTaipei,
+  getEndOfTodayUTC,
+  getStartOfDayInTaipeiUTC,
+  getStartOfDaysAgoUTC,
+  getStartOfTodayUTC,
+} from "@/lib/date-utils"
 
 import type {
   DashboardData,
@@ -61,12 +65,11 @@ type AreaSeed = {
 
 export async function getDashboardData(): Promise<DashboardData> {
   const user = await getCurrentUserOrThrow()
-  const today = new Date()
-  const startOfToday = startOfDay(today)
-  const endOfToday = endOfDay(today)
-  const startOf7DaysAgo = startOfDay(subDays(today, 6))
-  const startOf14DaysAgo = startOfDay(subDays(today, 13))
-  const daysUntilExam = user.exam_date ? differenceInDays(new Date(user.exam_date), today) : null
+  const startOfToday = getStartOfTodayUTC()
+  const endOfToday = getEndOfTodayUTC()
+  const startOf7DaysAgo = getStartOfDaysAgoUTC(6)
+  const startOf14DaysAgo = getStartOfDaysAgoUTC(13)
+  const daysUntilExam = user.exam_date ? differenceInDays(new Date(user.exam_date), startOfToday) : null
 
   const [
     subjects,
@@ -252,7 +255,7 @@ export async function getDashboardData(): Promise<DashboardData> {
     const vocabularyStats = vocabularyStatsBySubject.get(subject.id) || { total: 0, familiar: 0, due: 0, sumEaseFactor: 0, sumLapseCount: 0 }
     const vocabularyFamiliarRate = vocabularyStats.total > 0 ? Math.round((vocabularyStats.familiar / vocabularyStats.total) * 100) : null
     const lastActivity = lastActivityBySubject.get(subject.id)
-    const lastActivityDays = lastActivity ? differenceInCalendarDays(endOfToday, startOfDay(lastActivity)) : null
+    const lastActivityDays = lastActivity ? differenceInCalendarDays(endOfToday, getStartOfDayInTaipeiUTC(lastActivity)) : null
     const recencyScore = getRecencyScore(lastActivityDays)
     const avgEaseFactor = vocabularyStats.total > 0 ? vocabularyStats.sumEaseFactor / vocabularyStats.total : null
     const avgLapseCount = vocabularyStats.total > 0 ? vocabularyStats.sumLapseCount / vocabularyStats.total : null
@@ -307,7 +310,7 @@ export async function getDashboardData(): Promise<DashboardData> {
     { id: "start-first-session", title: "開始第一次練習 / 讀書 session", description: "有第一筆紀錄後，Dashboard 才會真的有用。", href: questionAreasRaw.length > 0 ? "/practice" : "/study-log", completed: studyDates.length > 0 || Boolean(practiceLogExists) },
   ]
 
-  const studyDatesUnique = Array.from(new Set(studyDates.map((item) => startOfDay(item.study_date).toISOString()))).map((iso) => new Date(iso))
+  const studyDatesUnique = Array.from(new Set(studyDates.map((item) => getStartOfDayInTaipeiUTC(item.study_date).toISOString()))).map((iso) => new Date(iso))
   let streakDays = 0
   let previousDay: Date | null = null
   for (const day of studyDatesUnique) {
@@ -343,10 +346,10 @@ export async function getDashboardData(): Promise<DashboardData> {
   else if (todaysAccuracy === null) recommendation = "今天已有投入，接下來補一組題目，讓系統開始校準你的表現。"
   else recommendation = "今天節奏不錯，清完待辦後可以再做一組題目鞏固手感。"
 
-  const studyByDateKey = new Map(last7DaysStudy.map((s) => [formatShortDate(new Date(s.study_date)), s._sum.duration_minutes || 0]))
+  const studyByDateKey = new Map(last7DaysStudy.map((s) => [formatShortDateInTaipei(new Date(s.study_date)), s._sum.duration_minutes || 0]))
   const trendData: DashboardTrendPoint[] = Array.from({ length: 7 }, (_, i) => {
-    const day = subDays(today, 6 - i)
-    const dateKey = formatShortDate(day)
+    const day = getStartOfDaysAgoUTC(6 - i)
+    const dateKey = formatShortDateInTaipei(day)
     return { date: dateKey, minutes: studyByDateKey.get(dateKey) || 0 }
   })
 
@@ -590,4 +593,3 @@ function average(values: number[]) { return values.length > 0 ? Math.round(value
 function mapAreaSeeds(items: Array<{ subject_id: string; topic: string; unit_id: string | null; unit?: { name: string } | null }>): AreaSeed[] {
   return items.map((item) => ({ subject_id: item.subject_id, topic: item.topic, unit_id: item.unit_id ?? null, unit_name: item.unit?.name ?? null }))
 }
-function formatShortDate(date: Date) { return `${date.getMonth() + 1}/${date.getDate()}` }
