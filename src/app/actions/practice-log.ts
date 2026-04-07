@@ -306,6 +306,7 @@ export async function getPracticeQuestions(
           id: true,
           title: true,
           context: true,
+          table_data: true,
         },
       },
       shared_study_group: {
@@ -361,6 +362,7 @@ export async function getPracticeQuestionsWeakFirst(
           id: true,
           title: true,
           context: true,
+          table_data: true,
         },
       },
       shared_study_group: {
@@ -892,8 +894,10 @@ function buildPracticeQuestionItem(
     group_id: question.group_id ?? null,
     group_title: question.group?.title ?? null,
     group_context: question.group?.context ?? null,
+    group_table_data: question.group?.table_data ?? null,
     group_order: question.group_order ?? null,
     question: question.question,
+    table_data: question.table_data ?? null,
     explanation: question.explanation,
     ai_explanation: question.ai_explanation ?? null,
     image_url: question.image_url,

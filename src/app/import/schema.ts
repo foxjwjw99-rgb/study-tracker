@@ -1,5 +1,12 @@
 import { z } from "zod"
 
+export const tableDataSchema = z.object({
+  headers: z.array(z.string()),
+  rows: z.array(z.array(z.string())),
+}).optional()
+
+export type TableData = NonNullable<z.infer<typeof tableDataSchema>>
+
 function optionalTrimmedString(message?: string) {
   return z.preprocess((value) => {
     if (typeof value !== "string") return value
@@ -33,6 +40,7 @@ const baseItemFields = {
   topic: requiredTrimmedString("單元名稱不能為空"),
   explanation: optionalTrimmedString(),
   image: optionalTrimmedString(),
+  table: tableDataSchema,
 }
 
 const baseQuestionFields = {
@@ -71,6 +79,7 @@ const groupQuestionMcSchema = z
     answer: normalizedAnswerSchema(),
     explanation: optionalTrimmedString(),
     image: optionalTrimmedString(),
+    table: tableDataSchema,
   })
   .refine((data) => data.answer >= 0 && data.answer < data.options.length, {
     message: "答案索引必須落在 options 範圍內",
@@ -86,6 +95,7 @@ const groupQuestionFibSchema = z.object({
   text_answer: requiredTrimmedString("填空題答案不能為空"),
   explanation: optionalTrimmedString(),
   image: optionalTrimmedString(),
+  table: tableDataSchema,
 })
 
 const groupQuestionSchema = z.union([groupQuestionFibSchema, groupQuestionMcSchema])
@@ -104,6 +114,7 @@ export const questionGroupSchema = z.preprocess((raw) => {
   topic: requiredTrimmedString("單元名稱不能為空"),
   group_title: optionalTrimmedString(),
   group_context: requiredTrimmedString("題組情境段落不能為空"),
+  table: tableDataSchema,
   questions: z.array(groupQuestionSchema).min(1, "題組至少需要 1 個題目"),
 }))
 

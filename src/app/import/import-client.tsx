@@ -58,6 +58,25 @@ const EXAMPLE_JSON = `[
         "text_answer": "珍惜時間|把握當下"
       }
     ]
+  },
+  {
+    "subject": "經濟",
+    "topic": "需求與供給",
+    "group_context": "根據下表，回答第 1–2 題。",
+    "table": {
+      "headers": ["年份", "需求量", "供給量"],
+      "rows": [
+        ["2022", "500", "480"],
+        ["2023", "520", "530"]
+      ]
+    },
+    "questions": [
+      {
+        "question": "2023 年市場處於何種狀態？",
+        "options": ["供過於求", "求過於供", "均衡", "無法判斷"],
+        "answer": 0
+      }
+    ]
   }
 ]`
 
@@ -512,6 +531,7 @@ export function ImportClient({ studyGroups }: ImportClientProps) {
                     <TableHead>單元</TableHead>
                     <TableHead>內容</TableHead>
                     <TableHead>題數 / 答案</TableHead>
+                    <TableHead>表格</TableHead>
                     <TableHead>圖片</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -532,6 +552,13 @@ export function ImportClient({ studyGroups }: ImportClientProps) {
                             : item.question_type === "fill_in_blank"
                               ? item.text_answer
                               : item.answer}
+                        </TableCell>
+                        <TableCell>
+                          {item.table
+                            ? `${item.table.headers.length} 欄 × ${item.table.rows.length} 列`
+                            : isGroup && item.questions.some((q) => q.table)
+                              ? `子題有表格`
+                              : <span className="text-muted-foreground">—</span>}
                         </TableCell>
                         <TableCell>
                           {!isGroup && item.image ? (
