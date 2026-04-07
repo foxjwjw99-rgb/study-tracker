@@ -2,14 +2,14 @@
 
 import prisma from "@/lib/prisma"
 import { getCurrentUserOrThrow } from "@/lib/current-user"
+import { eachDayOfInterval } from "date-fns"
 import {
-  eachDayOfInterval,
-  endOfDay,
-  format,
-  startOfDay,
-  startOfWeek,
-  subDays,
-} from "date-fns"
+  formatShortDateInTaipei,
+  getEndOfTodayUTC,
+  getStartOfDaysAgoUTC,
+  getStartOfTodayUTC,
+  getStartOfWeekUTC,
+} from "@/lib/date-utils"
 
 import type {
   AccuracyTrendPoint,
@@ -25,11 +25,10 @@ import type {
 
 export async function getAnalyticsData(): Promise<AnalyticsData> {
   const user = await getCurrentUserOrThrow()
-  const today = new Date()
-  const todayStart = startOfDay(today)
-  const todayEnd = endOfDay(today)
-  const startOf7DaysAgo = startOfDay(subDays(today, 6))
-  const weekStart = startOfWeek(today, { weekStartsOn: 1 })
+  const todayStart = getStartOfTodayUTC()
+  const todayEnd = getEndOfTodayUTC()
+  const startOf7DaysAgo = getStartOfDaysAgoUTC(6)
+  const weekStart = getStartOfWeekUTC()
 
   const subjects = await prisma.subject.findMany({ where: { user_id: user.id } })
   const subjectMap = new Map(subjects.map((s) => [s.id, s.name]))
@@ -190,16 +189,17 @@ export async function getAnalyticsData(): Promise<AnalyticsData> {
 
   const trendData: AccuracyTrendPoint[] = []
   for (let i = 6; i >= 0; i--) {
-    const d = subDays(today, i)
+    const d = getStartOfDaysAgoUTC(i)
+    const dayKey = formatShortDateInTaipei(d)
     const logsThisDay = recentPracticeLogs7Days.filter(
-      (l) => new Date(l.practice_date).toDateString() === d.toDateString()
+      (l) => formatShortDateInTaipei(new Date(l.practice_date)) === dayKey
     )
 
     const tq = logsThisDay.reduce((sum, l) => sum + l.total_questions, 0)
     const cq = logsThisDay.reduce((sum, l) => sum + l.correct_questions, 0)
 
     trendData.push({
-      date: `${d.getMonth() + 1}/${d.getDate()}`,
+      date: dayKey,
       accuracy: tq > 0 ? Math.round((cq / tq) * 100) : 0,
     })
   }
@@ -240,7 +240,7 @@ export async function getAnalyticsData(): Promise<AnalyticsData> {
   const reviewWordCountByDay = new Map<string, Set<string>>()
   const reviewCountByDay = new Map<string, number>()
   for (const log of vocabularyReviewLogs7Days) {
-    const dayKey = format(log.created_at, "M/d")
+    const dayKey = formatShortDateInTaipei(log.created_at)
     const wordSet = reviewWordCountByDay.get(dayKey) || new Set<string>()
     wordSet.add(log.vocabulary_word_id)
     reviewWordCountByDay.set(dayKey, wordSet)
@@ -251,7 +251,7 @@ export async function getAnalyticsData(): Promise<AnalyticsData> {
     start: startOf7DaysAgo,
     end: todayStart,
   }).map((day) => {
-    const dayKey = format(day, "M/d")
+    const dayKey = formatShortDateInTaipei(day)
     return {
       date: dayKey,
       reviewedWords: reviewWordCountByDay.get(dayKey)?.size || 0,

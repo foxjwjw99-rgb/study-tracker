@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache"
 
 import prisma from "@/lib/prisma"
+import { getEndOfTodayUTC } from "@/lib/date-utils"
 import { resolveSubjectUnit } from "@/lib/subject-unit"
 import { applyVocabularyReview } from "@/lib/vocabulary-review"
 import {
@@ -29,13 +30,12 @@ type WrongQuestionStatus = (typeof WRONG_QUESTION_STATUS)[keyof typeof WRONG_QUE
 
 export async function getReviewTasks(): Promise<ReviewTaskItem[]> {
   const user = await getCurrentUserOrThrow()
-  const today = new Date()
-  today.setHours(23, 59, 59, 999)
+  const endOfToday = getEndOfTodayUTC()
 
   return prisma.reviewTask.findMany({
     where: {
       user_id: user.id,
-      review_date: { lte: today },
+      review_date: { lte: endOfToday },
       completed: false,
     },
     include: {
