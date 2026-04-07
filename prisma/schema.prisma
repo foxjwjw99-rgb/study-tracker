@@ -367,6 +367,7 @@ model QuestionGroup {
   external_id String?
   title       String?
   context     String // 共同題幹 / 情境段落
+  context_structured String? // JSON: {text:string,latex:string,image_url:string}
   table_data  String? // JSON: { headers: string[], rows: string[][] }
 
   // AI 單元自動對應追蹤
@@ -395,11 +396,14 @@ model Question {
   unit                  SubjectUnit    @relation(fields: [unit_id], references: [id], onDelete: Restrict)
   external_id           String?
   question              String
+  question_structured   String? // JSON: {text:string,latex:string,image_url:string}
   question_type         String         @default("multiple_choice") // "multiple_choice" | "fill_in_blank"
   options               String // Stored as JSON string e.g. '["A", "B", "C", "D"]'; empty "[]" for FIB
+  options_structured    String? // JSON: [{text:string,latex:string,image_url:string},...]
   answer                Int // Index of correct option (MC); 0 for FIB
   text_answer           String? // Pipe-separated accepted answers for FIB, e.g. "光合作用|photosynthesis"
   explanation           String?
+  explanation_structured String? // JSON: {text:string,latex:string,image_url:string}
   ai_explanation        String? // AI 生成的解析（與人工 explanation 併存）
   image_url             String?
   table_data            String? // JSON: { headers: string[], rows: string[][] }

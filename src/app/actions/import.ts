@@ -11,8 +11,11 @@ import {
   importPayloadSchema,
   importQuestionGroupsSchema,
   isImportedQuestionGroup,
+  mathImportPayloadSchema,
+  isMathSpecFormat,
   type ImportedQuestion,
   type ImportedQuestionGroup,
+  type MathMcQuestion,
 } from "@/app/import/schema"
 import type { QuestionImportTarget } from "@/types"
 
@@ -36,6 +39,11 @@ export async function importQuestions(
   importTarget: QuestionImportTarget = DEFAULT_IMPORT_TARGET,
 ): Promise<ImportResult> {
   const user = await getCurrentUserOrThrow()
+
+  // Detect and route math spec v1.0 format
+  if (Array.isArray(data) && data.length > 0 && isMathSpecFormat(data[0])) {
+    return importMathQuestions(user.id, data, importTarget)
+  }
 
   const parsed = importPayloadSchema.safeParse(data)
   if (!parsed.success) {
@@ -591,5 +599,315 @@ async function importSingleGroup(
     duplicateGroupCount: 0,
     duplicateQuestionCount,
     errorCount,
+  }
+}
+
+// ─── 數學題庫 JSON 規格書 v1.0 匯入 ─────────────────────────────────────────
+
+type RichContent = { text: string; latex: string; image_url: string }
+
+function buildRichContent(text: string, latex: string, image_url: string): RichContent {
+  return { text, latex, image_url }
+}
+
+function richContentToLegacyText(rich: RichContent): string {
+  return (rich.text || rich.latex || "").slice(0, 2000)
+}
+
+function mathQuestionToLegacyOptions(q: MathMcQuestion): string {
+  const options = [
+    q.option_1_text || q.option_1_latex || q.option_1_image_url,
+    q.option_2_text || q.option_2_latex || q.option_2_image_url,
+    q.option_3_text || q.option_3_latex || q.option_3_image_url,
+    q.option_4_text || q.option_4_latex || q.option_4_image_url,
+  ]
+  return JSON.stringify(options)
+}
+
+function mathQuestionToStructuredOptions(q: MathMcQuestion): RichContent[] {
+  return [
+    buildRichContent(q.option_1_text, q.option_1_latex, q.option_1_image_url),
+    buildRichContent(q.option_2_text, q.option_2_latex, q.option_2_image_url),
+    buildRichContent(q.option_3_text, q.option_3_latex, q.option_3_image_url),
+    buildRichContent(q.option_4_text, q.option_4_latex, q.option_4_image_url),
+  ]
+}
+
+async function importMathQuestions(
+  userId: string,
+  rawData: unknown[],
+  importTarget: QuestionImportTarget = DEFAULT_IMPORT_TARGET,
+): Promise<ImportResult> {
+  const parsed = mathImportPayloadSchema.safeParse(rawData)
+  if (!parsed.success) {
+    return {
+      success: false,
+      message: `數學題庫格式錯誤：${parsed.error.issues[0]?.message ?? "未知錯誤"}`,
+      validCount: 0,
+      duplicateCount: 0,
+      errorCount: 0,
+      groupCount: 0,
+      groupQuestionCount: 0,
+      duplicateGroupCount: 0,
+    }
+  }
+
+  const normalizedTarget = await resolveImportTarget(userId, importTarget)
+  if (!normalizedTarget.success) {
+    return {
+      success: false,
+      message: normalizedTarget.message,
+      validCount: 0,
+      duplicateCount: 0,
+      errorCount: 0,
+      groupCount: 0,
+      groupQuestionCount: 0,
+      duplicateGroupCount: 0,
+    }
+  }
+
+  const questions = parsed.data
+  const subjectMap = await ensureSubjectsForImport(userId, questions.map((q) => q.subject))
+  if (!subjectMap) {
+    return {
+      success: false,
+      message: "建立科目失敗。",
+      validCount: 0,
+      duplicateCount: 0,
+      errorCount: questions.length,
+      groupCount: 0,
+      groupQuestionCount: 0,
+      duplicateGroupCount: 0,
+    }
+  }
+
+  // Group questions by group_id
+  const standaloneQuestions: MathMcQuestion[] = []
+  const groupedQuestions = new Map<string, MathMcQuestion[]>()
+
+  for (const q of questions) {
+    if (q.group_id) {
+      const bucket = groupedQuestions.get(q.group_id) ?? []
+      bucket.push(q)
+      groupedQuestions.set(q.group_id, bucket)
+    } else {
+      standaloneQuestions.push(q)
+    }
+  }
+
+  const target = normalizedTarget.target
+  const existing = await loadExistingImportState(userId)
+  const payloadState = createPayloadSeenState()
+  let validCount = 0
+  let duplicateCount = 0
+  let errorCount = 0
+  let groupCount = 0
+  let groupQuestionCount = 0
+  let duplicateGroupCount = 0
+
+  try {
+    await prisma.$transaction(async (tx) => {
+      // Import standalone questions
+      for (const q of standaloneQuestions) {
+        const subjectId = subjectMap.get(q.subject)
+        if (!subjectId) { errorCount += 1; continue }
+
+        const questionRich = buildRichContent(q.question_text, q.question_latex, q.question_image_url)
+        const legacyQuestion = richContentToLegacyText(questionRich)
+
+        if (q.external_id) {
+          const externalKey = questionExternalKey(subjectId, q.external_id)
+          if (existing.questionExternalIds.has(externalKey) || payloadState.questionExternalIds.has(externalKey)) {
+            duplicateCount += 1; continue
+          }
+          payloadState.questionExternalIds.add(externalKey)
+        }
+
+        const textKey = questionTextKey(subjectId, legacyQuestion)
+        if (existing.questionTextKeys.has(textKey) || payloadState.questionTextKeys.has(textKey)) {
+          duplicateCount += 1; continue
+        }
+        payloadState.questionTextKeys.add(textKey)
+
+        const resolvedUnit = await resolveSubjectUnit(tx, {
+          subjectId,
+          topic: q.topic,
+          createIfMissing: true,
+          source: "IMPORTED",
+        })
+
+        const explanationRich = buildRichContent(q.explanation_text, q.explanation_latex, q.explanation_image_url)
+
+        await tx.question.create({
+          data: {
+            user_id: userId,
+            subject_id: subjectId,
+            topic: resolvedUnit.topicSnapshot || q.topic,
+            unit_id: resolvedUnit.unitId!,
+            external_id: q.external_id ?? null,
+            question: legacyQuestion,
+            question_structured: JSON.stringify(questionRich),
+            question_type: "multiple_choice",
+            options: mathQuestionToLegacyOptions(q),
+            options_structured: JSON.stringify(mathQuestionToStructuredOptions(q)),
+            answer: q.answer,
+            explanation: richContentToLegacyText(explanationRich) || null,
+            explanation_structured: JSON.stringify(explanationRich),
+            image_url: q.question_image_url || null,
+            visibility: target.visibility,
+            shared_study_group_id:
+              target.visibility === "study_group"
+                ? target.shared_study_group_id
+                : null,
+          },
+        })
+
+        existing.questionTextKeys.add(textKey)
+        if (q.external_id) {
+          existing.questionExternalIds.add(questionExternalKey(subjectId, q.external_id))
+        }
+        validCount += 1
+      }
+
+      // Import grouped questions
+      for (const [groupId, groupItems] of groupedQuestions) {
+        if (groupItems.length === 0) continue
+        const firstItem = groupItems[0]
+        const subjectId = subjectMap.get(firstItem.subject)
+        if (!subjectId) { errorCount += groupItems.length; continue }
+
+        const contextRich = buildRichContent(firstItem.group_text, firstItem.group_latex, firstItem.group_image_url)
+        const legacyContext = firstItem.group_text || firstItem.group_latex || groupId
+
+        // Use group_id as external_id for the group
+        const groupExternalId = groupId
+        const gExternalKey = groupExternalKey(subjectId, groupExternalId)
+        if (existing.groupExternalIds.has(gExternalKey) || payloadState.groupExternalIds.has(gExternalKey)) {
+          duplicateGroupCount += 1
+          duplicateCount += groupItems.length
+          continue
+        }
+        payloadState.groupExternalIds.add(gExternalKey)
+
+        const gTextKey = groupTextKey(subjectId, legacyContext)
+        if (existing.groupTextKeys.has(gTextKey) || payloadState.groupTextKeys.has(gTextKey)) {
+          duplicateGroupCount += 1
+          duplicateCount += groupItems.length
+          continue
+        }
+        payloadState.groupTextKeys.add(gTextKey)
+
+        const resolvedUnit = await resolveSubjectUnit(tx, {
+          subjectId,
+          topic: firstItem.topic,
+          createIfMissing: true,
+          source: "IMPORTED",
+        })
+
+        const createdGroup = await tx.questionGroup.create({
+          data: {
+            user_id: userId,
+            subject_id: subjectId,
+            topic: resolvedUnit.topicSnapshot || firstItem.topic,
+            unit_id: resolvedUnit.unitId,
+            external_id: groupExternalId,
+            title: firstItem.group_title || null,
+            context: legacyContext,
+            context_structured: JSON.stringify(contextRich),
+          },
+        })
+
+        existing.groupTextKeys.add(gTextKey)
+        existing.groupExternalIds.add(gExternalKey)
+        groupCount += 1
+
+        for (let index = 0; index < groupItems.length; index += 1) {
+          const q = groupItems[index]
+          const qSubjectId = subjectMap.get(q.subject) ?? subjectId
+
+          const questionRich = buildRichContent(q.question_text, q.question_latex, q.question_image_url)
+          const legacyQuestion = richContentToLegacyText(questionRich)
+          const explanationRich = buildRichContent(q.explanation_text, q.explanation_latex, q.explanation_image_url)
+
+          const groupChildTextKey = questionTextKey(qSubjectId, `${legacyContext}::${legacyQuestion}`)
+          const plainTextKey = questionTextKey(qSubjectId, legacyQuestion)
+          if (
+            existing.questionTextKeys.has(plainTextKey) ||
+            payloadState.questionTextKeys.has(groupChildTextKey) ||
+            payloadState.questionTextKeys.has(plainTextKey)
+          ) {
+            duplicateCount += 1
+            continue
+          }
+          payloadState.questionTextKeys.add(groupChildTextKey)
+          payloadState.questionTextKeys.add(plainTextKey)
+
+          try {
+            await tx.question.create({
+              data: {
+                user_id: userId,
+                subject_id: qSubjectId,
+                topic: resolvedUnit.topicSnapshot || q.topic,
+                unit_id: resolvedUnit.unitId!,
+                external_id: q.external_id ?? null,
+                question: legacyQuestion,
+                question_structured: JSON.stringify(questionRich),
+                question_type: "multiple_choice",
+                options: mathQuestionToLegacyOptions(q),
+                options_structured: JSON.stringify(mathQuestionToStructuredOptions(q)),
+                answer: q.answer,
+                explanation: richContentToLegacyText(explanationRich) || null,
+                explanation_structured: JSON.stringify(explanationRich),
+                image_url: q.question_image_url || null,
+                visibility: target.visibility,
+                shared_study_group_id:
+                  target.visibility === "study_group"
+                    ? target.shared_study_group_id
+                    : null,
+                group_id: createdGroup.id,
+                group_order: index,
+              },
+            })
+            groupQuestionCount += 1
+            existing.questionTextKeys.add(plainTextKey)
+            if (q.external_id) {
+              existing.questionExternalIds.add(questionExternalKey(qSubjectId, q.external_id))
+            }
+          } catch (err) {
+            console.error("Error creating math grouped question", err)
+            errorCount += 1
+          }
+        }
+      }
+    })
+  } catch (error) {
+    console.error("Error importing math question payload", error)
+    return {
+      success: false,
+      message: "匯入過程中發生錯誤，請稍後再試。",
+      validCount,
+      duplicateCount,
+      errorCount: errorCount + 1,
+      groupCount,
+      groupQuestionCount,
+      duplicateGroupCount,
+    }
+  }
+
+  revalidatePath("/practice")
+  revalidatePath("/import")
+
+  return {
+    success: true,
+    message:
+      target.visibility === "study_group"
+        ? "匯入結束，題目已分享到讀書房。"
+        : "匯入結束。",
+    validCount,
+    duplicateCount,
+    errorCount,
+    groupCount,
+    groupQuestionCount,
+    duplicateGroupCount,
   }
 }
