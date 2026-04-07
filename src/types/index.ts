@@ -538,8 +538,10 @@ export type PracticeQuestionItem = {
   group_id?: string | null
   group_title?: string | null
   group_context?: string | null
+  group_table_data?: string | null
   group_order?: number | null
   question: string
+  table_data?: string | null
   question_type: QuestionType
   options: string[]
   answer: number

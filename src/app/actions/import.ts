@@ -447,6 +447,7 @@ async function importSingleQuestion(
       text_answer: isFib ? question.text_answer : null,
       explanation: question.explanation ?? null,
       image_url: question.image ?? null,
+      table_data: question.table ? JSON.stringify(question.table) : null,
       visibility: importTarget.visibility,
       shared_study_group_id: importTarget.visibility === "study_group" ? importTarget.shared_study_group_id : null,
     },
@@ -500,6 +501,7 @@ async function importSingleGroup(
       external_id: group.external_id ?? null,
       title: group.group_title ?? null,
       context: group.group_context,
+      table_data: group.table ? JSON.stringify(group.table) : null,
     },
   })
 
@@ -562,6 +564,7 @@ async function importSingleGroup(
           text_answer: isFib ? question.text_answer : null,
           explanation: question.explanation ?? null,
           image_url: question.image ?? null,
+          table_data: question.table ? JSON.stringify(question.table) : null,
           visibility: importTarget.visibility,
           shared_study_group_id: importTarget.visibility === "study_group" ? importTarget.shared_study_group_id : null,
           group_id: createdGroup.id,

@@ -367,6 +367,7 @@ model QuestionGroup {
   external_id String?
   title       String?
   context     String // 共同題幹 / 情境段落
+  table_data  String? // JSON: { headers: string[], rows: string[][] }
 
   // AI 單元自動對應追蹤
   ai_unit_mapping_status AiUnitMappingStatus @default(PENDING)
@@ -401,6 +402,7 @@ model Question {
   explanation           String?
   ai_explanation        String? // AI 生成的解析（與人工 explanation 併存）
   image_url             String?
+  table_data            String? // JSON: { headers: string[], rows: string[][] }
   visibility            String         @default("private") // private / study_group
   shared_study_group_id String?
   shared_study_group    StudyGroup?    @relation(fields: [shared_study_group_id], references: [id], onDelete: SetNull)

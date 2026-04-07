@@ -18,6 +18,7 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { MathText } from "@/components/math-text"
+import { QuestionTable } from "@/components/question-table"
 import {
   Select,
   SelectContent,
@@ -515,6 +516,7 @@ export function QuestionPractice({ questionBank, initialSubjectId }: QuestionPra
                 <div className="mt-2 leading-7 text-foreground">
                   <MathText text={currentQuestion.group_context ?? ""} className="leading-7" />
                 </div>
+                <QuestionTable tableData={currentQuestion.group_table_data} />
               </div>
             ) : null}
             {currentQuestion.image_url && (
@@ -529,6 +531,7 @@ export function QuestionPractice({ questionBank, initialSubjectId }: QuestionPra
                 />
               </div>
             )}
+            <QuestionTable tableData={currentQuestion.table_data} />
             <CardTitle className="text-xl font-medium leading-8">
               <MathText text={currentQuestion.question} className="leading-8" />
             </CardTitle>

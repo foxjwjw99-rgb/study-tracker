@@ -63,6 +63,8 @@ function parseRows(rows: Record<string, string>[]): ImportedQuestionGroup[] {
         question,
         question_type: "fill_in_blank" as const,
         text_answer: answerRaw,
+        options: [],
+        answer: 0,
         explanation,
       }
     }
