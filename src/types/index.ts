@@ -541,14 +541,18 @@ export type PracticeQuestionItem = {
   group_table_data?: string | null
   group_order?: number | null
   question: string
+  question_structured?: { text: string; latex: string; image_url: string } | null
   table_data?: string | null
   question_type: QuestionType
   options: string[]
+  options_structured?: Array<{ text: string; latex: string; image_url: string }> | null
   answer: number
   text_answer: string | null  // pipe-separated accepted answers for FIB
   explanation: string | null
+  explanation_structured?: { text: string; latex: string; image_url: string } | null
   ai_explanation?: string | null  // AI generated explanation
   image_url?: string | null
+  group_context_structured?: { text: string; latex: string; image_url: string } | null
   visibility?: QuestionVisibility
   shared_study_group_id?: string | null
   shared_study_group_name?: string | null

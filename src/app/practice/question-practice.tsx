@@ -33,6 +33,25 @@ import type {
   PracticeQuestionSessionResult,
 } from "@/types"
 
+type RichField = { text: string; latex: string; image_url: string }
+
+function RichContent({ rich, fallback, className }: { rich?: RichField | null; fallback?: string | null; className?: string }) {
+  if (rich) {
+    return (
+      <span className={className}>
+        {rich.text ? <MathText text={rich.text} /> : null}
+        {rich.latex ? <MathText text={`$$${rich.latex}$$`} /> : null}
+        {rich.image_url ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={rich.image_url} alt="" className="max-w-full rounded" />
+        ) : null}
+      </span>
+    )
+  }
+  if (fallback) return <MathText text={fallback} className={className} />
+  return null
+}
+
 type QuestionPracticeProps = {
   questionBank: PracticeQuestionBankSummary[]
   initialSubjectId?: string
@@ -514,7 +533,7 @@ export function QuestionPractice({ questionBank, initialSubjectId }: QuestionPra
                   {currentQuestion.group_title || "共同題幹"}
                 </p>
                 <div className="mt-2 leading-7 text-foreground">
-                  <MathText text={currentQuestion.group_context ?? ""} className="leading-7" />
+                  <RichContent rich={currentQuestion.group_context_structured} fallback={currentQuestion.group_context ?? ""} className="leading-7" />
                 </div>
                 <QuestionTable tableData={currentQuestion.group_table_data} />
               </div>
@@ -533,7 +552,7 @@ export function QuestionPractice({ questionBank, initialSubjectId }: QuestionPra
             )}
             <QuestionTable tableData={currentQuestion.table_data} />
             <CardTitle className="text-xl font-medium leading-8">
-              <MathText text={currentQuestion.question} className="leading-8" />
+              <RichContent rich={currentQuestion.question_structured} fallback={currentQuestion.question} className="leading-8" />
             </CardTitle>
             <CardDescription>先做完一輪，再回頭看哪個單元最需要補強。</CardDescription>
           </CardHeader>
@@ -583,9 +602,9 @@ export function QuestionPractice({ questionBank, initialSubjectId }: QuestionPra
                             {currentQuestion.text_answer?.replace(/\|/g, " / ") ?? ""}
                           </span>
                         </p>
-                        {currentQuestion.explanation ? (
+                        {(currentQuestion.explanation_structured || currentQuestion.explanation) ? (
                           <p className="break-words text-muted-foreground">
-                            解析：<MathText text={currentQuestion.explanation} className="inline" />
+                            解析：<RichContent rich={currentQuestion.explanation_structured} fallback={currentQuestion.explanation} className="inline" />
                           </p>
                         ) : null}
                         <div className="flex gap-2 pt-1">
@@ -681,7 +700,11 @@ export function QuestionPractice({ questionBank, initialSubjectId }: QuestionPra
                           String.fromCharCode(65 + index)
                         )}
                       </div>
-                      <MathText text={option} className="inline break-words" />
+                      <RichContent
+                        rich={currentQuestion.options_structured?.[index]}
+                        fallback={option}
+                        className="inline break-words"
+                      />
                     </button>
                   )
                 })}
@@ -721,15 +744,16 @@ export function QuestionPractice({ questionBank, initialSubjectId }: QuestionPra
                             <span className="font-medium text-foreground">
                               {String.fromCharCode(65 + currentQuestion.answer)}.
                             </span>{" "}
-                            <MathText
-                              text={currentQuestion.options[currentQuestion.answer]}
+                            <RichContent
+                              rich={currentQuestion.options_structured?.[currentQuestion.answer]}
+                              fallback={currentQuestion.options[currentQuestion.answer]}
                               className="inline"
                             />
                           </p>
                         )}
-                        {currentQuestion.explanation ? (
+                        {(currentQuestion.explanation_structured || currentQuestion.explanation) ? (
                           <p className="break-words text-muted-foreground">
-                            解析：<MathText text={currentQuestion.explanation} className="inline" />
+                            解析：<RichContent rich={currentQuestion.explanation_structured} fallback={currentQuestion.explanation} className="inline" />
                           </p>
                         ) : null}
                       </div>

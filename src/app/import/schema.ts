@@ -121,6 +121,59 @@ export const questionGroupSchema = z.preprocess((raw) => {
 export const importQuestionsSchema = z.array(questionSchema)
 export const importQuestionGroupsSchema = z.array(questionGroupSchema)
 
+// ─── 數學題庫 JSON 規格書 v1.0 ───────────────────────────────────────────────
+
+function optionalRichString() {
+  return z.string().default("")
+}
+
+export const mathMcQuestionSchema = z.object({
+  external_id: optionalTrimmedString(),
+  subject: requiredTrimmedString("科目名稱不能為空"),
+  topic: requiredTrimmedString("單元名稱不能為空"),
+  group_id: optionalRichString(),
+  group_title: optionalRichString(),
+  group_text: optionalRichString(),
+  group_latex: optionalRichString(),
+  group_image_url: optionalRichString(),
+  question_text: optionalRichString(),
+  question_latex: optionalRichString(),
+  question_image_url: optionalRichString(),
+  option_1_text: optionalRichString(),
+  option_1_latex: optionalRichString(),
+  option_1_image_url: optionalRichString(),
+  option_2_text: optionalRichString(),
+  option_2_latex: optionalRichString(),
+  option_2_image_url: optionalRichString(),
+  option_3_text: optionalRichString(),
+  option_3_latex: optionalRichString(),
+  option_3_image_url: optionalRichString(),
+  option_4_text: optionalRichString(),
+  option_4_latex: optionalRichString(),
+  option_4_image_url: optionalRichString(),
+  answer: normalizedAnswerSchema(),
+  explanation_text: optionalRichString(),
+  explanation_latex: optionalRichString(),
+  explanation_image_url: optionalRichString(),
+}).refine(
+  (d) => !!(d.question_text || d.question_latex || d.question_image_url),
+  { message: "題目至少需要 question_text、question_latex、question_image_url 其中一個", path: ["question_text"] }
+).refine(
+  (d) => d.answer >= 0 && d.answer <= 3,
+  { message: "answer 必須為 0~3（對應 option_1~option_4）", path: ["answer"] }
+)
+
+export const mathImportPayloadSchema = z.array(mathMcQuestionSchema)
+
+export type MathMcQuestion = z.infer<typeof mathMcQuestionSchema>
+
+/** 偵測是否為數學題庫 JSON 規格書 v1.0 格式 */
+export function isMathSpecFormat(item: unknown): boolean {
+  if (!item || typeof item !== "object" || Array.isArray(item)) return false
+  const keys = Object.keys(item as Record<string, unknown>)
+  return keys.includes("question_text") || keys.includes("question_latex") || keys.includes("option_1_text")
+}
+
 export const importItemSchema = z.preprocess((raw) => {
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) return raw
   const value = raw as Record<string, unknown>

@@ -306,6 +306,7 @@ export async function getPracticeQuestions(
           id: true,
           title: true,
           context: true,
+          context_structured: true,
           table_data: true,
         },
       },
@@ -362,6 +363,7 @@ export async function getPracticeQuestionsWeakFirst(
           id: true,
           title: true,
           context: true,
+          context_structured: true,
           table_data: true,
         },
       },
@@ -894,23 +896,33 @@ function buildPracticeQuestionItem(
     group_id: question.group_id ?? null,
     group_title: question.group?.title ?? null,
     group_context: question.group?.context ?? null,
+    group_context_structured: question.group?.context_structured
+      ? safeParseJson(question.group.context_structured) as { text: string; latex: string; image_url: string } | null
+      : null,
     group_table_data: question.group?.table_data ?? null,
     group_order: question.group_order ?? null,
     question: question.question,
+    question_structured: question.question_structured
+      ? safeParseJson(question.question_structured) as { text: string; latex: string; image_url: string } | null
+      : null,
     table_data: question.table_data ?? null,
     explanation: question.explanation,
+    explanation_structured: question.explanation_structured
+      ? safeParseJson(question.explanation_structured) as { text: string; latex: string; image_url: string } | null
+      : null,
     ai_explanation: question.ai_explanation ?? null,
     image_url: question.image_url,
     visibility: question.visibility === "study_group" ? "study_group" : "private",
     shared_study_group_id: question.shared_study_group_id,
     shared_study_group_name: question.shared_study_group?.name ?? null,
-  } satisfies Omit<PracticeQuestionItem, "question_type" | "options" | "answer" | "text_answer">
+  } satisfies Omit<PracticeQuestionItem, "question_type" | "options" | "answer" | "text_answer" | "options_structured">
 
   if (isFib) {
     return {
       ...base,
       question_type: "fill_in_blank",
       options: [],
+      options_structured: null,
       answer: 0,
       text_answer: question.text_answer ?? null,
     }
@@ -923,6 +935,9 @@ function buildPracticeQuestionItem(
     ...base,
     question_type: "multiple_choice",
     options,
+    options_structured: question.options_structured
+      ? safeParseJson(question.options_structured) as Array<{ text: string; latex: string; image_url: string }> | null
+      : null,
     answer: question.answer,
     text_answer: null,
   }
@@ -977,6 +992,14 @@ function safeParseOptions(rawOptions: string) {
   }
 
   return []
+}
+
+function safeParseJson(raw: string): unknown | null {
+  try {
+    return JSON.parse(raw) as unknown
+  } catch {
+    return null
+  }
 }
 
 function shuffleInPlace<T>(items: T[]) {
