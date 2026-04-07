@@ -74,11 +74,28 @@ export default async function ImportPage() {
         "answer": 0
       }
     ]
+  },
+  {
+    "subject": "經濟",
+    "topic": "市場均衡",
+    "group_context": "根據下表，回答問題。",
+    "table": {
+      "headers": ["年份", "需求量", "供給量"],
+      "rows": [["2022", "500", "480"], ["2023", "520", "530"]]
+    },
+    "questions": [
+      {
+        "question": "2023 年市場狀況為何？",
+        "options": ["供過於求", "求過於供", "均衡", "無法判斷"],
+        "answer": 0
+      }
+    ]
   }
 ]`}</code></pre>
             <ul>
               <li><strong>單題欄位</strong>：<code>subject</code>、<code>topic</code>、<code>question</code>、<code>question_type</code>、<code>options</code>、<code>answer</code>、<code>text_answer</code>、<code>explanation</code>、<code>external_id</code>。</li>
               <li><strong>題組欄位</strong>：<code>subject</code>、<code>topic</code>、<code>group_title</code>、<code>group_context</code>、<code>external_id</code>、<code>questions</code>。</li>
+              <li><strong>表格欄位</strong>：單題或題組均可加 <code>table</code>，格式為 <code>{`{"headers": [...], "rows": [[...], ...]}`}</code>；題組的表格顯示在共同題幹下方，單題的表格顯示在題目上方。</li>
               <li>判斷規則：有 <code>questions</code> 或 <code>group_context</code> 就視為題組，否則視為單題。</li>
               <li><strong>answer</strong> 使用 0-based index（0=A, 1=B, 2=C...）。</li>
               <li>匯入時會優先用 <strong>external_id</strong> 做去重；沒有 external_id 才退回題目文字或題組情境比對。</li>
