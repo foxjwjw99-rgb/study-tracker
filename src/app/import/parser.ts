@@ -2,13 +2,23 @@ import { z } from "zod"
 
 import {
   importPayloadSchema,
+  mathImportPayloadSchema,
+  isMathSpecFormat,
   isImportedQuestionGroup,
   type ImportedQuestionImportItem,
+  type MathMcQuestion,
 } from "./schema"
 
 export type ParseImportSuccess = {
   data: ImportedQuestionImportItem[]
   rawText: string
+  isMathFormat?: false
+}
+
+export type ParseMathImportSuccess = {
+  data: MathMcQuestion[]
+  rawText: string
+  isMathFormat: true
 }
 
 export type ParseImportFailure = {
@@ -110,7 +120,7 @@ export function formatImportIssues(error: z.ZodError) {
     .join("\n")
 }
 
-export function parseImportInput(rawText: string): ParseImportSuccess | ParseImportFailure {
+export function parseImportInput(rawText: string): ParseImportSuccess | ParseMathImportSuccess | ParseImportFailure {
   const stripped = stripMarkdownCodeFence(rawText)
 
   if (!stripped) {
@@ -121,6 +131,17 @@ export function parseImportInput(rawText: string): ParseImportSuccess | ParseImp
     const json = JSON.parse(stripped)
     if (!Array.isArray(json)) {
       return { error: "匯入內容最外層必須是 JSON 陣列。" }
+    }
+
+    // Detect math spec v1.0 format
+    if (json.length > 0 && isMathSpecFormat(json[0])) {
+      const parsed = mathImportPayloadSchema.safeParse(json)
+      if (!parsed.success) {
+        return {
+          error: `數學題庫格式不符。\n${formatImportIssues(parsed.error)}`,
+        }
+      }
+      return { data: parsed.data, rawText: stripped, isMathFormat: true }
     }
 
     const normalized = normalizeImportPayload(json)
@@ -138,6 +159,31 @@ export function parseImportInput(rawText: string): ParseImportSuccess | ParseImp
     }
   } catch {
     return { error: "解析失敗。請確認內容是有效的 JSON 陣列。" }
+  }
+}
+
+export function summarizeMathImportPreview(items: MathMcQuestion[]): ImportPreviewSummary {
+  const subjects = new Set(items.map((q) => q.subject))
+  const groupIds = new Set(items.filter((q) => q.group_id).map((q) => q.group_id))
+  const standaloneCount = items.filter((q) => !q.group_id).length
+  const seenExternalIds = new Set<string>()
+  let duplicateSuspectCount = 0
+
+  for (const q of items) {
+    if (q.external_id) {
+      const key = `${q.subject}::${q.external_id}`
+      if (seenExternalIds.has(key)) duplicateSuspectCount += 1
+      else seenExternalIds.add(key)
+    }
+  }
+
+  return {
+    totalItems: items.length,
+    singleQuestionCount: standaloneCount,
+    groupCount: groupIds.size,
+    nestedGroupQuestionCount: items.length - standaloneCount,
+    subjectCount: subjects.size,
+    duplicateSuspectCount,
   }
 }
 

@@ -3,7 +3,7 @@
 import Image from "next/image"
 import { useRef, useMemo, useState } from "react"
 import { toast } from "sonner"
-import { CheckCircle2, AlertCircle, Users, ClipboardPaste, FileJson, RefreshCcw, ImageIcon, Copy, ChevronDown, ChevronUp } from "lucide-react"
+import { CheckCircle2, AlertCircle, Users, ClipboardPaste, FileJson, RefreshCcw, ImageIcon, Copy, ChevronDown, ChevronUp, Bot } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -15,8 +15,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import { type ImportedQuestionImportItem, isImportedQuestionGroup } from "./schema"
-import { parseImportInput, summarizeImportPreview } from "./parser"
+import { type ImportedQuestionImportItem, type MathMcQuestion, isImportedQuestionGroup } from "./schema"
+import { parseImportInput, summarizeImportPreview, summarizeMathImportPreview } from "./parser"
 import { importQuestions, ImportResult } from "@/app/actions/import"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import type { QuestionVisibility, StudyGroupSummary } from "@/types"
@@ -80,6 +80,106 @@ const EXAMPLE_JSON = `[
   }
 ]`
 
+const MATH_EXAMPLE_JSON = `[
+  {
+    "external_id": "calc_001",
+    "subject": "數學",
+    "topic": "微分",
+    "group_id": "",
+    "group_title": "",
+    "group_text": "",
+    "group_latex": "",
+    "group_image_url": "",
+    "question_text": "求下列函數的導數：",
+    "question_latex": "f(x)=x^3+2x^2-5x+1",
+    "question_image_url": "",
+    "option_1_text": "",
+    "option_1_latex": "3x^2+4x-5",
+    "option_1_image_url": "",
+    "option_2_text": "",
+    "option_2_latex": "x^2+2x-5",
+    "option_2_image_url": "",
+    "option_3_text": "",
+    "option_3_latex": "3x^2+2x-5",
+    "option_3_image_url": "",
+    "option_4_text": "",
+    "option_4_latex": "3x+4x-5",
+    "option_4_image_url": "",
+    "answer": 0,
+    "explanation_text": "使用冪次法則。",
+    "explanation_latex": "f'(x)=3x^2+4x-5",
+    "explanation_image_url": ""
+  },
+  {
+    "external_id": "calc_002",
+    "subject": "數學",
+    "topic": "極限",
+    "group_id": "lim-group-01",
+    "group_title": "極限計算題組",
+    "group_text": "求下列各極限值：",
+    "group_latex": "",
+    "group_image_url": "",
+    "question_text": "第 1 題",
+    "question_latex": "\\lim_{x \\to 0} \\frac{\\sin x}{x}",
+    "question_image_url": "",
+    "option_1_text": "0",
+    "option_1_latex": "",
+    "option_1_image_url": "",
+    "option_2_text": "1",
+    "option_2_latex": "",
+    "option_2_image_url": "",
+    "option_3_text": "不存在",
+    "option_3_latex": "",
+    "option_3_image_url": "",
+    "option_4_text": "無限大",
+    "option_4_latex": "",
+    "option_4_image_url": "",
+    "answer": 1,
+    "explanation_text": "此為重要基本極限。",
+    "explanation_latex": "\\lim_{x \\to 0} \\frac{\\sin x}{x} = 1",
+    "explanation_image_url": ""
+  }
+]`
+
+const MATH_AI_PROMPT = `請將以下題目轉換成 JSON 陣列格式。
+
+規則：
+1. 一般文字放在 *_text
+2. 數學公式放在 *_latex（必須使用標準 LaTeX 語法）
+3. 圖片放在 *_image_url（僅 URL）
+4. 沒有內容請填空字串 ""
+5. 所有欄位必須完整，不可省略
+6. answer 為正確選項索引（從 0 開始，0=選項1、1=選項2、2=選項3、3=選項4）
+7. 輸出純 JSON 陣列，不要額外說明文字
+8. 題組題：同一題組的所有題目填入相同的 group_id（自訂字串）
+
+格式如下：
+[
+  {
+    "external_id": "唯一編號",
+    "subject": "科目",
+    "topic": "單元",
+    "group_id": "",
+    "group_title": "",
+    "group_text": "",
+    "group_latex": "",
+    "group_image_url": "",
+    "question_text": "",
+    "question_latex": "",
+    "question_image_url": "",
+    "option_1_text": "", "option_1_latex": "", "option_1_image_url": "",
+    "option_2_text": "", "option_2_latex": "", "option_2_image_url": "",
+    "option_3_text": "", "option_3_latex": "", "option_3_image_url": "",
+    "option_4_text": "", "option_4_latex": "", "option_4_image_url": "",
+    "answer": 0,
+    "explanation_text": "",
+    "explanation_latex": "",
+    "explanation_image_url": ""
+  }
+]
+
+以下是要轉換的題目：
+（在此貼上你的題目）`
 
 type ImportClientProps = {
   studyGroups: StudyGroupSummary[]
@@ -88,6 +188,13 @@ type ImportClientProps = {
 type ParseSuccess = {
   data: ImportedQuestionImportItem[]
   rawText: string
+  isMathFormat?: false
+}
+
+type ParseMathSuccess = {
+  data: MathMcQuestion[]
+  rawText: string
+  isMathFormat: true
 }
 
 function parseCsvRow(row: string): string[] {
@@ -169,19 +276,21 @@ function parseCsvInput(rawText: string): ParseSuccess | { error: string } {
   return { data: questions, rawText }
 }
 
-function parseQuestionsInput(rawText: string): ParseSuccess | { error: string } {
+function parseQuestionsInput(rawText: string): ParseSuccess | ParseMathSuccess | { error: string } {
   return parseImportInput(rawText)
 }
 
 export function ImportClient({ studyGroups }: ImportClientProps) {
   const [inputText, setInputText] = useState("")
   const [previewData, setPreviewData] = useState<ImportedQuestionImportItem[] | null>(null)
+  const [mathPreviewData, setMathPreviewData] = useState<MathMcQuestion[] | null>(null)
   const [parsingError, setParsingError] = useState<string | null>(null)
   const [isImporting, setIsImporting] = useState(false)
   const [result, setResult] = useState<ImportResult | null>(null)
   const [visibility, setVisibility] = useState<QuestionVisibility>("private")
   const [sharedStudyGroupId, setSharedStudyGroupId] = useState<string>(studyGroups[0]?.id ?? "")
   const [showImageTool, setShowImageTool] = useState(false)
+  const [showAiPrompt, setShowAiPrompt] = useState(false)
   const [imageBase64, setImageBase64] = useState<string | null>(null)
   const [imagePreviewUrl, setImagePreviewUrl] = useState<string | null>(null)
   const imageInputRef = useRef<HTMLInputElement>(null)
@@ -193,13 +302,15 @@ export function ImportClient({ studyGroups }: ImportClientProps) {
   )
 
   const previewSummary = useMemo(() => {
+    if (mathPreviewData) return summarizeMathImportPreview(mathPreviewData)
     if (!previewData) return null
     return summarizeImportPreview(previewData)
-  }, [previewData])
+  }, [previewData, mathPreviewData])
 
   const resetPreviewState = () => {
     setParsingError(null)
     setPreviewData(null)
+    setMathPreviewData(null)
     setResult(null)
   }
 
@@ -213,7 +324,11 @@ export function ImportClient({ studyGroups }: ImportClientProps) {
     }
 
     setInputText(parsed.rawText)
-    setPreviewData(parsed.data)
+    if (parsed.isMathFormat) {
+      setMathPreviewData(parsed.data)
+    } else {
+      setPreviewData(parsed.data)
+    }
   }
 
   const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -244,6 +359,16 @@ export function ImportClient({ studyGroups }: ImportClientProps) {
     resetPreviewState()
   }
 
+  const handleFillMathExample = () => {
+    setInputText(MATH_EXAMPLE_JSON)
+    resetPreviewState()
+  }
+
+  const handleCopyAiPrompt = () => {
+    navigator.clipboard.writeText(MATH_AI_PROMPT)
+    toast.success("已複製 AI 提示詞！")
+  }
+
   const handlePreview = () => {
     applyParsedInput(inputText)
   }
@@ -251,12 +376,14 @@ export function ImportClient({ studyGroups }: ImportClientProps) {
   const handleReset = () => {
     setInputText("")
     setPreviewData(null)
+    setMathPreviewData(null)
     setParsingError(null)
     setResult(null)
   }
 
   const handleImport = async () => {
-    if (!previewData) return
+    const activeData = mathPreviewData ?? previewData
+    if (!activeData) return
     if (visibility === "study_group" && !sharedStudyGroupId) {
       toast.error("請先選擇要分享的讀書房。")
       return
@@ -264,7 +391,7 @@ export function ImportClient({ studyGroups }: ImportClientProps) {
 
     setIsImporting(true)
     try {
-      const res = await importQuestions(previewData, {
+      const res = await importQuestions(activeData, {
         visibility,
         shared_study_group_id: visibility === "study_group" ? sharedStudyGroupId : undefined,
       })
@@ -376,9 +503,14 @@ export function ImportClient({ studyGroups }: ImportClientProps) {
                 <ClipboardPaste className="h-4 w-4" />
                 直接貼上 JSON
               </div>
-              <Button type="button" variant="ghost" size="sm" onClick={handleFillExample} className="text-xs h-7 px-2">
-                填入範例
-              </Button>
+              <div className="flex items-center gap-1">
+                <Button type="button" variant="ghost" size="sm" onClick={handleFillMathExample} className="text-xs h-7 px-2">
+                  數學格式範例
+                </Button>
+                <Button type="button" variant="ghost" size="sm" onClick={handleFillExample} className="text-xs h-7 px-2">
+                  填入範例
+                </Button>
+              </div>
             </div>
             <textarea
               value={inputText}
@@ -488,10 +620,50 @@ export function ImportClient({ studyGroups }: ImportClientProps) {
         )}
       </Card>
 
-      {previewData && previewSummary ? (
+      <Card>
+        <CardHeader className="cursor-pointer select-none" onClick={() => setShowAiPrompt((v) => !v)}>
+          <CardTitle className="flex items-center justify-between text-base">
+            <span className="flex items-center gap-2">
+              <Bot className="h-4 w-4" />
+              AI 生成提示詞（數學題庫格式）
+            </span>
+            {showAiPrompt ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+          </CardTitle>
+          <CardDescription>複製以下 Prompt，貼給 AI 後附上原始題目，即可自動轉換為數學題庫 JSON 格式。</CardDescription>
+        </CardHeader>
+        {showAiPrompt && (
+          <CardContent className="space-y-3">
+            <div className="rounded-lg border border-dashed bg-muted/35 px-3 py-3 text-sm text-muted-foreground">
+              <p className="font-medium text-foreground">使用方式</p>
+              <ol className="mt-2 list-decimal space-y-1 pl-5">
+                <li>按下「複製提示詞」。</li>
+                <li>開啟你的 AI 工具（ChatGPT、Claude 等），貼上提示詞。</li>
+                <li>在提示詞最後附上你想轉換的題目內容。</li>
+                <li>AI 會回傳符合數學題庫格式的 JSON，複製後貼回左側匯入欄即可。</li>
+              </ol>
+            </div>
+            <div className="flex justify-end">
+              <Button type="button" variant="outline" size="sm" onClick={handleCopyAiPrompt}>
+                <Copy className="mr-1 h-3 w-3" />
+                複製提示詞
+              </Button>
+            </div>
+            <textarea
+              readOnly
+              value={MATH_AI_PROMPT}
+              className="min-h-[260px] w-full rounded-md border bg-muted/50 px-3 py-2 text-xs font-mono"
+            />
+          </CardContent>
+        )}
+      </Card>
+
+      {(previewData || mathPreviewData) && previewSummary ? (
         <Card>
           <CardHeader>
-            <CardTitle>預覽 ({previewSummary.totalItems} 個項目)</CardTitle>
+            <CardTitle>
+              預覽 ({previewSummary.totalItems} 個項目)
+              {mathPreviewData ? <span className="ml-2 text-sm font-normal text-sky-600 dark:text-sky-400">數學題庫格式</span> : null}
+            </CardTitle>
             <CardDescription>在匯入到資料庫之前，先確認單題 / 題組數量、疑似重複與內容。</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
@@ -526,17 +698,41 @@ export function ImportClient({ studyGroups }: ImportClientProps) {
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>類型</TableHead>
-                    <TableHead>科目</TableHead>
-                    <TableHead>單元</TableHead>
-                    <TableHead>內容</TableHead>
-                    <TableHead>題數 / 答案</TableHead>
-                    <TableHead>表格</TableHead>
-                    <TableHead>圖片</TableHead>
+                    {mathPreviewData ? (
+                      <>
+                        <TableHead>external_id</TableHead>
+                        <TableHead>科目</TableHead>
+                        <TableHead>單元</TableHead>
+                        <TableHead>題目（文字）</TableHead>
+                        <TableHead>公式</TableHead>
+                        <TableHead>答案</TableHead>
+                        <TableHead>題組</TableHead>
+                      </>
+                    ) : (
+                      <>
+                        <TableHead>類型</TableHead>
+                        <TableHead>科目</TableHead>
+                        <TableHead>單元</TableHead>
+                        <TableHead>內容</TableHead>
+                        <TableHead>題數 / 答案</TableHead>
+                        <TableHead>表格</TableHead>
+                        <TableHead>圖片</TableHead>
+                      </>
+                    )}
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {previewData.slice(0, 10).map((item, idx) => {
+                  {mathPreviewData ? mathPreviewData.slice(0, 10).map((item, idx) => (
+                    <TableRow key={`math-${idx}`}>
+                      <TableCell className="max-w-[100px] truncate text-muted-foreground">{item.external_id ?? "—"}</TableCell>
+                      <TableCell>{item.subject}</TableCell>
+                      <TableCell>{item.topic}</TableCell>
+                      <TableCell className="max-w-[180px] truncate" title={item.question_text}>{item.question_text || <span className="text-muted-foreground">—</span>}</TableCell>
+                      <TableCell className="max-w-[180px] truncate font-mono text-xs" title={item.question_latex}>{item.question_latex || <span className="text-muted-foreground">—</span>}</TableCell>
+                      <TableCell>{item.answer + 1}</TableCell>
+                      <TableCell>{item.group_id || <span className="text-muted-foreground">—</span>}</TableCell>
+                    </TableRow>
+                  )) : previewData ? previewData.slice(0, 10).map((item, idx) => {
                     const isGroup = isImportedQuestionGroup(item)
                     return (
                       <TableRow key={`${item.subject}-${idx}`}>
@@ -576,11 +772,11 @@ export function ImportClient({ studyGroups }: ImportClientProps) {
                         </TableCell>
                       </TableRow>
                     )
-                  })}
-                  {previewData.length > 10 ? (
+                  }) : null}
+                  {(mathPreviewData ?? previewData ?? []).length > 10 ? (
                     <TableRow>
-                      <TableCell colSpan={6} className="text-center text-muted-foreground">
-                        ... 同時還有其他 {previewData.length - 10} 個匯入項目
+                      <TableCell colSpan={7} className="text-center text-muted-foreground">
+                        ... 同時還有其他 {(mathPreviewData ?? previewData ?? []).length - 10} 個匯入項目
                       </TableCell>
                     </TableRow>
                   ) : null}
