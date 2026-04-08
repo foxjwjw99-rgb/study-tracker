@@ -3,7 +3,7 @@
 import Image from "next/image"
 import { useRef, useMemo, useState } from "react"
 import { toast } from "sonner"
-import { CheckCircle2, AlertCircle, Users, ClipboardPaste, FileJson, RefreshCcw, ImageIcon, Copy, ChevronDown, ChevronUp, Bot } from "lucide-react"
+import { CheckCircle2, AlertCircle, Users, ClipboardPaste, FileJson, RefreshCcw, ImageIcon, Copy, ChevronDown, ChevronUp, Bot, Wrench } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -289,8 +289,7 @@ export function ImportClient({ studyGroups }: ImportClientProps) {
   const [result, setResult] = useState<ImportResult | null>(null)
   const [visibility, setVisibility] = useState<QuestionVisibility>("private")
   const [sharedStudyGroupId, setSharedStudyGroupId] = useState<string>(studyGroups[0]?.id ?? "")
-  const [showImageTool, setShowImageTool] = useState(false)
-  const [showAiPrompt, setShowAiPrompt] = useState(false)
+  const [showTools, setShowTools] = useState(false)
   const [imageBase64, setImageBase64] = useState<string | null>(null)
   const [imagePreviewUrl, setImagePreviewUrl] = useState<string | null>(null)
   const imageInputRef = useRef<HTMLInputElement>(null)
@@ -560,99 +559,99 @@ export function ImportClient({ studyGroups }: ImportClientProps) {
       </Card>
 
       <Card>
-        <CardHeader className="cursor-pointer select-none" onClick={() => setShowImageTool((v) => !v)}>
+        <CardHeader className="cursor-pointer select-none" onClick={() => setShowTools((v) => !v)}>
           <CardTitle className="flex items-center justify-between text-base">
             <span className="flex items-center gap-2">
-              <ImageIcon className="h-4 w-4" />
-              圖片轉 base64 小工具
+              <Wrench className="h-4 w-4" />
+              輔助工具
             </span>
-            {showImageTool ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+            {showTools ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
           </CardTitle>
-          <CardDescription>將圖片轉成 base64 字串，複製後貼入 JSON 的 "image" 欄位即可。</CardDescription>
+          <CardDescription>圖片轉 base64、AI 生成提示詞（數學格式）</CardDescription>
         </CardHeader>
-        {showImageTool && (
-          <CardContent className="space-y-4">
-            <div className="rounded-lg border border-dashed bg-muted/35 px-3 py-3 text-sm text-muted-foreground">
-              <p className="font-medium text-foreground">怎麼用這個工具</p>
-              <ol className="mt-2 list-decimal space-y-1 pl-5">
-                <li>如果你的題目沒有圖片，這段可以直接跳過。</li>
-                <li>如果題目有圖片，先在下面選一張圖片。</li>
-                <li>系統會自動產生一段 base64 字串，按「複製」。</li>
-                <li>把它貼進 JSON 裡的 <code>"image"</code> 欄位，例如：<code>"image": "data:image/png;base64,..."</code></li>
-              </ol>
-            </div>
-            <input
-              ref={imageInputRef}
-              type="file"
-              accept="image/*"
-              onChange={handleImageSelect}
-              className="block w-full text-sm text-slate-500 file:mr-4 file:rounded-md file:border-0 file:bg-primary/10 file:px-4 file:py-2 file:text-sm file:font-semibold file:text-primary hover:file:bg-primary/20"
-            />
-            {imagePreviewUrl && (
-              <div className="space-y-3">
-                <Image
-                  src={imagePreviewUrl}
-                  alt="預覽"
-                  width={640}
-                  height={320}
-                  unoptimized
-                  className="max-h-48 w-auto rounded-lg border object-contain"
-                />
-                {imageBase64 && (
-                  <div className="space-y-2">
-                    <div className="flex items-center justify-between">
-                      <p className="text-sm text-muted-foreground">複製以下字串，貼入 JSON 的 <code className="rounded bg-muted px-1">"image"</code> 欄位：</p>
-                      <Button type="button" variant="outline" size="sm" onClick={handleCopyBase64}>
-                        <Copy className="mr-1 h-3 w-3" />
-                        複製
-                      </Button>
-                    </div>
-                    <textarea
-                      readOnly
-                      value={imageBase64}
-                      className="min-h-[80px] w-full rounded-md border bg-muted/50 px-3 py-2 text-xs font-mono"
-                    />
-                  </div>
-                )}
+        {showTools && (
+          <CardContent className="space-y-6">
+            <div className="space-y-4">
+              <h4 className="text-sm font-medium flex items-center gap-2">
+                <ImageIcon className="h-4 w-4" />
+                圖片轉 base64 小工具
+              </h4>
+              <p className="text-sm text-muted-foreground">將圖片轉成 base64 字串，複製後貼入 JSON 的 &quot;image&quot; 欄位即可。</p>
+              <div className="rounded-lg border border-dashed bg-muted/35 px-3 py-3 text-sm text-muted-foreground">
+                <p className="font-medium text-foreground">怎麼用這個工具</p>
+                <ol className="mt-2 list-decimal space-y-1 pl-5">
+                  <li>如果你的題目沒有圖片，這段可以直接跳過。</li>
+                  <li>如果題目有圖片，先在下面選一張圖片。</li>
+                  <li>系統會自動產生一段 base64 字串，按「複製」。</li>
+                  <li>把它貼進 JSON 裡的 <code>&quot;image&quot;</code> 欄位，例如：<code>&quot;image&quot;: &quot;data:image/png;base64,...&quot;</code></li>
+                </ol>
               </div>
-            )}
-          </CardContent>
-        )}
-      </Card>
+              <input
+                ref={imageInputRef}
+                type="file"
+                accept="image/*"
+                onChange={handleImageSelect}
+                className="block w-full text-sm text-slate-500 file:mr-4 file:rounded-md file:border-0 file:bg-primary/10 file:px-4 file:py-2 file:text-sm file:font-semibold file:text-primary hover:file:bg-primary/20"
+              />
+              {imagePreviewUrl && (
+                <div className="space-y-3">
+                  <Image
+                    src={imagePreviewUrl}
+                    alt="預覽"
+                    width={640}
+                    height={320}
+                    unoptimized
+                    className="max-h-48 w-auto rounded-lg border object-contain"
+                  />
+                  {imageBase64 && (
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between">
+                        <p className="text-sm text-muted-foreground">複製以下字串，貼入 JSON 的 <code className="rounded bg-muted px-1">&quot;image&quot;</code> 欄位：</p>
+                        <Button type="button" variant="outline" size="sm" onClick={handleCopyBase64}>
+                          <Copy className="mr-1 h-3 w-3" />
+                          複製
+                        </Button>
+                      </div>
+                      <textarea
+                        readOnly
+                        value={imageBase64}
+                        className="min-h-[80px] w-full rounded-md border bg-muted/50 px-3 py-2 text-xs font-mono"
+                      />
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
 
-      <Card>
-        <CardHeader className="cursor-pointer select-none" onClick={() => setShowAiPrompt((v) => !v)}>
-          <CardTitle className="flex items-center justify-between text-base">
-            <span className="flex items-center gap-2">
-              <Bot className="h-4 w-4" />
-              AI 生成提示詞（數學題庫格式）
-            </span>
-            {showAiPrompt ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
-          </CardTitle>
-          <CardDescription>複製以下 Prompt，貼給 AI 後附上原始題目，即可自動轉換為數學題庫 JSON 格式。</CardDescription>
-        </CardHeader>
-        {showAiPrompt && (
-          <CardContent className="space-y-3">
-            <div className="rounded-lg border border-dashed bg-muted/35 px-3 py-3 text-sm text-muted-foreground">
-              <p className="font-medium text-foreground">使用方式</p>
-              <ol className="mt-2 list-decimal space-y-1 pl-5">
-                <li>按下「複製提示詞」。</li>
-                <li>開啟你的 AI 工具（ChatGPT、Claude 等），貼上提示詞。</li>
-                <li>在提示詞最後附上你想轉換的題目內容。</li>
-                <li>AI 會回傳符合數學題庫格式的 JSON，複製後貼回左側匯入欄即可。</li>
-              </ol>
+            <div className="border-t" />
+
+            <div className="space-y-3">
+              <h4 className="text-sm font-medium flex items-center gap-2">
+                <Bot className="h-4 w-4" />
+                AI 生成提示詞（數學題庫格式）
+              </h4>
+              <p className="text-sm text-muted-foreground">複製以下 Prompt，貼給 AI 後附上原始題目，即可自動轉換為數學題庫 JSON 格式。</p>
+              <div className="rounded-lg border border-dashed bg-muted/35 px-3 py-3 text-sm text-muted-foreground">
+                <p className="font-medium text-foreground">使用方式</p>
+                <ol className="mt-2 list-decimal space-y-1 pl-5">
+                  <li>按下「複製提示詞」。</li>
+                  <li>開啟你的 AI 工具（ChatGPT、Claude 等），貼上提示詞。</li>
+                  <li>在提示詞最後附上你想轉換的題目內容。</li>
+                  <li>AI 會回傳符合數學題庫格式的 JSON，複製後貼回左側匯入欄即可。</li>
+                </ol>
+              </div>
+              <div className="flex justify-end">
+                <Button type="button" variant="outline" size="sm" onClick={handleCopyAiPrompt}>
+                  <Copy className="mr-1 h-3 w-3" />
+                  複製提示詞
+                </Button>
+              </div>
+              <textarea
+                readOnly
+                value={MATH_AI_PROMPT}
+                className="min-h-[260px] w-full rounded-md border bg-muted/50 px-3 py-2 text-xs font-mono"
+              />
             </div>
-            <div className="flex justify-end">
-              <Button type="button" variant="outline" size="sm" onClick={handleCopyAiPrompt}>
-                <Copy className="mr-1 h-3 w-3" />
-                複製提示詞
-              </Button>
-            </div>
-            <textarea
-              readOnly
-              value={MATH_AI_PROMPT}
-              className="min-h-[260px] w-full rounded-md border bg-muted/50 px-3 py-2 text-xs font-mono"
-            />
           </CardContent>
         )}
       </Card>

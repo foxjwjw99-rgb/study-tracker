@@ -37,13 +37,18 @@ export default async function ImportPage() {
 
         <TabsContent value="questions" className="space-y-6">
           <ImportClient studyGroups={studyGroups} />
-          <div className="prose max-w-none prose-sm dark:prose-invert">
-            <div className="not-prose flex items-center justify-between mb-2">
-              <h3 className="text-base font-semibold">統一題目 JSON 格式要求</h3>
-              <CopyPromptButton />
-            </div>
-            <p>同一個 JSON 陣列裡，可以混合放入單題、填充題與題組：</p>
-            <pre className="overflow-x-auto"><code>{`[
+          <details className="group rounded-lg border">
+            <summary className="flex cursor-pointer select-none list-none items-center justify-between px-4 py-3 text-sm font-medium [&::-webkit-details-marker]:hidden">
+              格式說明
+              <svg className="h-4 w-4 shrink-0 transition-transform group-open:rotate-180" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m6 9 6 6 6-6"/></svg>
+            </summary>
+            <div className="prose max-w-none prose-sm dark:prose-invert px-4 pb-4 pt-2">
+              <div className="not-prose flex items-center justify-between mb-2">
+                <h3 className="text-base font-semibold">統一題目 JSON 格式要求</h3>
+                <CopyPromptButton />
+              </div>
+              <p>同一個 JSON 陣列裡，可以混合放入單題、填充題與題組：</p>
+              <pre className="overflow-x-auto"><code>{`[
   {
     "external_id": "math-basic-001",
     "subject": "數學",
@@ -92,24 +97,30 @@ export default async function ImportPage() {
     ]
   }
 ]`}</code></pre>
-            <ul>
-              <li><strong>單題欄位</strong>：<code>subject</code>、<code>topic</code>、<code>question</code>、<code>question_type</code>、<code>options</code>、<code>answer</code>、<code>text_answer</code>、<code>explanation</code>、<code>external_id</code>。</li>
-              <li><strong>題組欄位</strong>：<code>subject</code>、<code>topic</code>、<code>group_title</code>、<code>group_context</code>、<code>external_id</code>、<code>questions</code>。</li>
-              <li><strong>表格欄位</strong>：單題或題組均可加 <code>table</code>，格式為 <code>{`{"headers": [...], "rows": [[...], ...]}`}</code>；題組的表格顯示在共同題幹下方，單題的表格顯示在題目上方。</li>
-              <li>判斷規則：有 <code>questions</code> 或 <code>group_context</code> 就視為題組，否則視為單題。</li>
-              <li><strong>answer</strong> 使用 0-based index（0=A, 1=B, 2=C...）。</li>
-              <li>匯入時會優先用 <strong>external_id</strong> 做去重；沒有 external_id 才退回題目文字或題組情境比對。</li>
-              <li><strong>請直接貼原始 JSON 陣列</strong>，不要加說明文字；如果有 markdown code fence，系統會先自動去掉。</li>
-            </ul>
-          </div>
+              <ul>
+                <li><strong>單題欄位</strong>：<code>subject</code>、<code>topic</code>、<code>question</code>、<code>question_type</code>、<code>options</code>、<code>answer</code>、<code>text_answer</code>、<code>explanation</code>、<code>external_id</code>。</li>
+                <li><strong>題組欄位</strong>：<code>subject</code>、<code>topic</code>、<code>group_title</code>、<code>group_context</code>、<code>external_id</code>、<code>questions</code>。</li>
+                <li><strong>表格欄位</strong>：單題或題組均可加 <code>table</code>，格式為 <code>{`{"headers": [...], "rows": [[...], ...]}`}</code>；題組的表格顯示在共同題幹下方，單題的表格顯示在題目上方。</li>
+                <li>判斷規則：有 <code>questions</code> 或 <code>group_context</code> 就視為題組，否則視為單題。</li>
+                <li><strong>answer</strong> 使用 0-based index（0=A, 1=B, 2=C...）。</li>
+                <li>匯入時會優先用 <strong>external_id</strong> 做去重；沒有 external_id 才退回題目文字或題組情境比對。</li>
+                <li><strong>請直接貼原始 JSON 陣列</strong>，不要加說明文字；如果有 markdown code fence，系統會先自動去掉。</li>
+              </ul>
+            </div>
+          </details>
         </TabsContent>
 
         <TabsContent value="question-groups" className="space-y-6">
           <QuestionGroupImportClient studyGroups={studyGroups} />
-          <div className="prose max-w-none prose-sm dark:prose-invert">
-            <h3>題組表格 / 補充格式說明</h3>
-            <p><strong>JSON 格式</strong>：若你只想匯入題組，也可在這裡使用一個題組物件陣列：</p>
-            <pre className="overflow-x-auto"><code>{`[
+          <details className="group rounded-lg border">
+            <summary className="flex cursor-pointer select-none list-none items-center justify-between px-4 py-3 text-sm font-medium [&::-webkit-details-marker]:hidden">
+              格式說明
+              <svg className="h-4 w-4 shrink-0 transition-transform group-open:rotate-180" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m6 9 6 6 6-6"/></svg>
+            </summary>
+            <div className="prose max-w-none prose-sm dark:prose-invert px-4 pb-4 pt-2">
+              <h3>題組表格 / 補充格式說明</h3>
+              <p><strong>JSON 格式</strong>：若你只想匯入題組，也可在這裡使用一個題組物件陣列：</p>
+              <pre className="overflow-x-auto"><code>{`[
   {
     "subject": "國文",
     "topic": "閱讀測驗",
@@ -130,14 +141,15 @@ export default async function ImportPage() {
     ]
   }
 ]`}</code></pre>
-            <p><strong>表格格式（CSV / Excel）</strong>：需包含以下欄位標題：</p>
-            <pre className="overflow-x-auto"><code>{`subject, topic, group_title, group_context, question, option_A, option_B, option_C, option_D, answer, explanation`}</code></pre>
-            <ul>
-              <li>相同 <strong>subject + topic + group_context</strong> 的列會自動歸為同一題組。</li>
-              <li><strong>answer</strong> 填 A/B/C/D 或 1/2/3/4；若無選項欄位則視為填空題。</li>
-              <li>重複的題組（相同科目 + 相同情境）將自動跳過。</li>
-            </ul>
-          </div>
+              <p><strong>表格格式（CSV / Excel）</strong>：需包含以下欄位標題：</p>
+              <pre className="overflow-x-auto"><code>{`subject, topic, group_title, group_context, question, option_A, option_B, option_C, option_D, answer, explanation`}</code></pre>
+              <ul>
+                <li>相同 <strong>subject + topic + group_context</strong> 的列會自動歸為同一題組。</li>
+                <li><strong>answer</strong> 填 A/B/C/D 或 1/2/3/4；若無選項欄位則視為填空題。</li>
+                <li>重複的題組（相同科目 + 相同情境）將自動跳過。</li>
+              </ul>
+            </div>
+          </details>
         </TabsContent>
 
         <TabsContent value="unit-mapping" className="space-y-6">
@@ -157,10 +169,15 @@ export default async function ImportPage() {
 
         <TabsContent value="vocabulary" className="space-y-6">
           <VocabularyImportClient studyGroups={studyGroups} />
-          <div className="prose max-w-none prose-sm dark:prose-invert">
-            <h3>英文單字 JSON 格式要求</h3>
-            <p>英文單字匯入也必須是一個物件陣列，結構如下：</p>
-            <pre className="overflow-x-auto"><code>{`[
+          <details className="group rounded-lg border">
+            <summary className="flex cursor-pointer select-none list-none items-center justify-between px-4 py-3 text-sm font-medium [&::-webkit-details-marker]:hidden">
+              格式說明
+              <svg className="h-4 w-4 shrink-0 transition-transform group-open:rotate-180" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m6 9 6 6 6-6"/></svg>
+            </summary>
+            <div className="prose max-w-none prose-sm dark:prose-invert px-4 pb-4 pt-2">
+              <h3>英文單字 JSON 格式要求</h3>
+              <p>英文單字匯入也必須是一個物件陣列，結構如下：</p>
+              <pre className="overflow-x-auto"><code>{`[
   {
     "subject": "英文",
     "word": "abandon",
@@ -170,14 +187,15 @@ export default async function ImportPage() {
     "example_sentence_translation": "他決定放棄這個計畫。"
   }
 ]`}</code></pre>
-            <ul>
-              <li><strong>subject</strong>, <strong>word</strong>, <strong>meaning</strong>, <strong>example_sentence</strong> 為必填。</li>
-              <li><strong>part_of_speech</strong>、<strong>example_sentence_translation</strong> 為選填。</li>
-              <li><strong>part_of_speech</strong> 目前接受：<code>n.</code>、<code>v.</code>、<code>adj.</code>、<code>adv.</code>、<code>prep.</code>、<code>conj.</code>、<code>pron.</code>、<code>interj.</code>、<code>phrase</code>、<code>常用搭配詞</code>。</li>
-              <li>同一使用者、同一科目、同一單字若已存在，匯入時會自動跳過。</li>
-              <li>若選擇分享到讀書房，會把這批單字分發給目前房內成員；每個人的複習進度仍各自獨立。</li>
-            </ul>
-          </div>
+              <ul>
+                <li><strong>subject</strong>, <strong>word</strong>, <strong>meaning</strong>, <strong>example_sentence</strong> 為必填。</li>
+                <li><strong>part_of_speech</strong>、<strong>example_sentence_translation</strong> 為選填。</li>
+                <li><strong>part_of_speech</strong> 目前接受：<code>n.</code>、<code>v.</code>、<code>adj.</code>、<code>adv.</code>、<code>prep.</code>、<code>conj.</code>、<code>pron.</code>、<code>interj.</code>、<code>phrase</code>、<code>常用搭配詞</code>。</li>
+                <li>同一使用者、同一科目、同一單字若已存在，匯入時會自動跳過。</li>
+                <li>若選擇分享到讀書房，會把這批單字分發給目前房內成員；每個人的複習進度仍各自獨立。</li>
+              </ul>
+            </div>
+          </details>
         </TabsContent>
       </Tabs>
     </div>
