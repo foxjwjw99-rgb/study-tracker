@@ -29,6 +29,22 @@ const DEFAULT_IMPORT_TARGET: QuestionImportTarget = {
   visibility: "private",
 }
 
+function buildVocabularyImportResult(
+  partial: Pick<ImportResult, "success" | "message"> &
+    Partial<Omit<ImportResult, "success" | "message">>
+): ImportResult {
+  return {
+    success: partial.success,
+    message: partial.message,
+    validCount: partial.validCount ?? 0,
+    duplicateCount: partial.duplicateCount ?? 0,
+    errorCount: partial.errorCount ?? 0,
+    groupCount: partial.groupCount ?? 0,
+    groupQuestionCount: partial.groupQuestionCount ?? 0,
+    duplicateGroupCount: partial.duplicateGroupCount ?? 0,
+  }
+}
+
 export async function importVocabularyWords(
   data: unknown,
   importTarget: QuestionImportTarget = DEFAULT_IMPORT_TARGET
@@ -37,24 +53,18 @@ export async function importVocabularyWords(
   const parsed = vocabularyImportSchema.safeParse(data)
 
   if (!parsed.success) {
-    return {
+    return buildVocabularyImportResult({
       success: false,
       message: "JSON 格式錯誤。請檢查英文單字匯入格式。",
-      validCount: 0,
-      duplicateCount: 0,
-      errorCount: 0,
-    }
+    })
   }
 
   const normalizedTarget = await resolveVocabularyImportTarget(user.id, importTarget)
   if (!normalizedTarget.success) {
-    return {
+    return buildVocabularyImportResult({
       success: false,
       message: normalizedTarget.message,
-      validCount: 0,
-      duplicateCount: 0,
-      errorCount: 0,
-    }
+    })
   }
 
   const items = parsed.data
@@ -97,13 +107,11 @@ export async function importVocabularyWords(
           }
         } catch (e) {
           console.error("Error creating subjects", e)
-          return {
+          return buildVocabularyImportResult({
             success: false,
             message: "建立科目失敗。",
-            validCount: 0,
-            duplicateCount: 0,
             errorCount: items.length,
-          }
+          })
         }
       }
 
@@ -159,20 +167,20 @@ export async function importVocabularyWords(
     }
   } catch (error) {
     console.error("Error during vocabulary import:", error)
-    return {
+    return buildVocabularyImportResult({
       success: false,
       message: "匯入過程發生錯誤，請稍後再試。",
       validCount,
       duplicateCount,
       errorCount: items.length - validCount - duplicateCount,
-    }
+    })
   }
 
   revalidatePath("/import")
   revalidatePath("/vocabulary")
   revalidatePath("/review")
 
-  return {
+  return buildVocabularyImportResult({
     success: true,
     message:
       normalizedTarget.visibility === "study_group"
@@ -181,7 +189,7 @@ export async function importVocabularyWords(
     validCount,
     duplicateCount,
     errorCount,
-  }
+  })
 }
 
 async function resolveVocabularyImportTarget(userId: string, importTarget: QuestionImportTarget) {

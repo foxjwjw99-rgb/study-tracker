@@ -3,11 +3,15 @@
 import { randomBytes } from "crypto"
 
 import { revalidatePath } from "next/cache"
-import { endOfDay, startOfDay, subDays } from "date-fns"
 
 import prisma from "@/lib/prisma"
 
 import { getCurrentUserOrThrow } from "@/lib/current-user"
+import {
+  getEndOfTodayUTC,
+  getStartOfDaysAgoUTC,
+  getStartOfTodayUTC,
+} from "@/lib/date-utils"
 import type {
   ActionResult,
   LeaderboardPeriod,
@@ -241,17 +245,15 @@ async function generateInviteCode() {
 }
 
 function getPeriodRange(period: LeaderboardPeriod) {
-  const now = new Date()
-
   if (period === "today") {
     return {
-      start: startOfDay(now),
-      end: endOfDay(now),
+      start: getStartOfTodayUTC(),
+      end: getEndOfTodayUTC(),
     }
   }
 
   return {
-    start: startOfDay(subDays(now, 6)),
-    end: endOfDay(now),
+    start: getStartOfDaysAgoUTC(6),
+    end: getEndOfTodayUTC(),
   }
 }

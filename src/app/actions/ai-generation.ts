@@ -3,7 +3,15 @@
 import { revalidatePath } from "next/cache"
 import prisma from "@/lib/prisma"
 import { getCurrentUserOrThrow } from "@/lib/current-user"
-import { generateQuestionExplanation, generateWeaknessDiagnosis, suggestUnitForGroup, type UnitSuggestion, type WeakTopicStat } from "@/lib/ai/gemma"
+import {
+  generateQuestionExplanation,
+  generateWeaknessDiagnosis,
+  suggestUnitForGroup,
+  suggestUnitForQuestion,
+  type UnitSuggestion,
+  type WeakTopicStat,
+} from "@/lib/ai/gemma"
+import { normalizeUnitAlias } from "@/lib/subject-unit"
 import type { AiUnitMappingStatus } from "@prisma/client"
 
 /**
@@ -107,25 +115,24 @@ export async function previewUnitMapping(
         aliases: true,
       },
     })
+    const availableUnits = units.map((unit) => ({
+      id: unit.id,
+      name: unit.name,
+      aliases: unit.aliases.map((alias) => alias.alias),
+    }))
 
     if (mode === 'groups') {
-      let query: Parameters<typeof prisma.questionGroup.findMany>[0] = {
+      const groups = await prisma.questionGroup.findMany({
         where: {
           subject_id: subjectId,
           user_id: user.id,
+          ...(itemIds && itemIds.length > 0 ? { id: { in: itemIds.slice(0, 20) } } : {}),
         },
         include: {
           unit: true,
         },
-      }
-
-      if (itemIds && itemIds.length > 0) {
-        query.where = { ...query.where, id: { in: itemIds.slice(0, 20) } }
-      } else {
-        query.take = 20
-      }
-
-      const groups = await prisma.questionGroup.findMany(query)
+        ...(itemIds && itemIds.length > 0 ? {} : { take: 20 }),
+      })
       const results: MapPreviewResult[] = []
 
       for (const group of groups) {
@@ -139,11 +146,7 @@ export async function previewUnitMapping(
         const suggestion = await suggestUnitForGroup(
           group.topic,
           group.context,
-          units.map((u) => ({
-            id: u.id,
-            name: u.name,
-            aliases: u.aliases.map((a) => a.alias),
-          }))
+          availableUnits
         )
 
         if (suggestion) {
@@ -155,23 +158,17 @@ export async function previewUnitMapping(
 
       return { success: true, data: results }
     } else {
-      let query: Parameters<typeof prisma.question.findMany>[0] = {
+      const questions = await prisma.question.findMany({
         where: {
           user_id: user.id,
           subject: { id: subjectId },
+          ...(itemIds && itemIds.length > 0 ? { id: { in: itemIds.slice(0, 20) } } : {}),
         },
         include: {
           subject: true,
         },
-      }
-
-      if (itemIds && itemIds.length > 0) {
-        query.where = { ...query.where, id: { in: itemIds.slice(0, 20) } }
-      } else {
-        query.take = 20
-      }
-
-      const questions = await prisma.question.findMany(query)
+        ...(itemIds && itemIds.length > 0 ? {} : { take: 20 }),
+      })
       const results: MapPreviewResult[] = []
 
       for (const question of questions) {
@@ -195,11 +192,7 @@ export async function previewUnitMapping(
         const suggestion = await suggestUnitForQuestion(
           question.topic,
           questionContext,
-          units.map((u) => ({
-            id: u.id,
-            name: u.name,
-            aliases: u.aliases.map((a) => a.alias),
-          }))
+          availableUnits
         )
 
         if (suggestion) {
@@ -237,40 +230,57 @@ export async function confirmUnitMapping(
     let updatedCount = 0
 
     await prisma.$transaction(async (tx) => {
+      const groupIds = [...new Set(mappings.map((mapping) => mapping.groupId))]
+      const unitIds = [...new Set(mappings.map((mapping) => mapping.unitId))]
+
+      const [groups, units] = await Promise.all([
+        tx.questionGroup.findMany({
+          where: {
+            id: { in: groupIds },
+            user_id: user.id,
+            subject_id: subjectId,
+          },
+          select: {
+            id: true,
+            topic: true,
+          },
+        }),
+        tx.subjectUnit.findMany({
+          where: {
+            id: { in: unitIds },
+            subject_id: subjectId,
+          },
+          select: {
+            id: true,
+            name: true,
+          },
+        }),
+      ])
+
+      const groupById = new Map(groups.map((group) => [group.id, group]))
+      const unitById = new Map(units.map((unit) => [unit.id, unit]))
+
       for (const mapping of mappings) {
-        // 驗證題組與單元
-        const group = await tx.questionGroup.findUnique({
-          where: { id: mapping.groupId },
-        })
+        const group = groupById.get(mapping.groupId)
+        const unit = unitById.get(mapping.unitId)
 
-        if (!group || group.user_id !== user.id || group.subject_id !== subjectId) {
+        if (!group || !unit) {
           continue
         }
 
-        const unit = await tx.subjectUnit.findUnique({
-          where: { id: mapping.unitId },
-        })
-
-        if (!unit || unit.subject_id !== subjectId) {
-          continue
-        }
-
-        // 取得舊 topic，待會寫成 alias
         const oldTopic = group.topic
 
-        // 更新題組
         await tx.questionGroup.update({
           where: { id: mapping.groupId },
           data: {
             unit_id: mapping.unitId,
-            topic: unit.name, // 同步 topic 到單元名稱
+            topic: unit.name,
             ai_unit_mapping_status: "COMPLETED" as AiUnitMappingStatus,
             ai_unit_mapping_note: `自動對應 (信心度: ${mapping.confidence.toFixed(2)}) - ${mapping.reason}`,
             ai_unit_mapping_at: new Date(),
           },
         })
 
-        // 同時更新子題的 unit_id 和 topic
         await tx.question.updateMany({
           where: { group_id: mapping.groupId },
           data: {
@@ -279,9 +289,8 @@ export async function confirmUnitMapping(
           },
         })
 
-        // 舊 topic 寫成 alias（未來複用）
         if (oldTopic !== unit.name) {
-          const normalizedAlias = oldTopic.toLowerCase().trim()
+          const normalizedAlias = normalizeUnitAlias(oldTopic)
           await tx.subjectUnitAlias.upsert({
             where: {
               subject_id_normalized_alias: {

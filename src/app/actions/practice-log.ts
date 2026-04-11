@@ -9,12 +9,8 @@ import {
   OWNERSHIP_ERROR_MESSAGE,
 } from "@/lib/current-user"
 import { resolveSubjectUnit } from "@/lib/subject-unit"
-import { REVIEW_TASK_SOURCE_TYPES } from "@/lib/vocabulary"
-import {
-  getWrongQuestionInitialReviewDate,
-  WRONG_QUESTION_REVIEW_STAGES,
-  WRONG_QUESTION_STATUS,
-} from "@/lib/wrong-question-review"
+import { resetWrongQuestionReviewSchedule } from "@/lib/wrong-question-workflow"
+import { WRONG_QUESTION_STATUS } from "@/lib/wrong-question-review"
 
 import type { PracticeLogListItem } from "@/types"
 import type {
@@ -474,51 +470,53 @@ export async function addWrongQuestion(data: {
 
   assertOwnedRecord(subject, OWNERSHIP_ERROR_MESSAGE)
 
-  const next_review_date = getWrongQuestionInitialReviewDate(data.first_wrong_date)
+  const wq = await prisma.$transaction(async (tx) => {
+    const resolvedUnit = await resolveSubjectUnit(tx, {
+      subjectId: data.subject_id,
+      unitId: data.unit_id,
+      unitName: data.unit_name,
+      topic: data.topic,
+      createIfMissing: true,
+      source: "SYSTEM",
+    })
 
-  const resolvedUnit = await resolveSubjectUnit(prisma, {
-    subjectId: data.subject_id,
-    unitId: data.unit_id,
-    unitName: data.unit_name,
-    topic: data.topic,
-    createIfMissing: true,
-    source: "SYSTEM",
-  })
+    const createdWrongQuestion = await tx.wrongQuestion.create({
+      data: {
+        user_id: user.id,
+        subject_id: data.subject_id,
+        topic: resolvedUnit.topicSnapshot || data.topic,
+        unit_id: resolvedUnit.unitId,
+        question_id: data.question_id ?? null,
+        question_text: data.question_text ?? null,
+        correct_answer_text: data.correct_answer_text ?? null,
+        user_answer_text: data.user_answer_text ?? null,
+        source: data.source,
+        source_type: "manual_add",
+        error_reason: data.error_reason,
+        first_wrong_date: data.first_wrong_date,
+        last_wrong_date: data.first_wrong_date,
+        status: WRONG_QUESTION_STATUS.pending,
+        next_review_date: data.first_wrong_date,
+        wrong_count: 1,
+        notes: data.notes,
+        is_manual_added: true,
+      },
+    })
 
-  const wq = await prisma.wrongQuestion.create({
-    data: {
-      user_id: user.id,
-      subject_id: data.subject_id,
+    const nextReviewDate = await resetWrongQuestionReviewSchedule({
+      tx,
+      userId: user.id,
+      subjectId: data.subject_id,
       topic: resolvedUnit.topicSnapshot || data.topic,
-      unit_id: resolvedUnit.unitId,
-      question_id: data.question_id ?? null,
-      question_text: data.question_text ?? null,
-      correct_answer_text: data.correct_answer_text ?? null,
-      user_answer_text: data.user_answer_text ?? null,
-      source: data.source,
-      source_type: "manual_add",
-      error_reason: data.error_reason,
-      first_wrong_date: data.first_wrong_date,
-      last_wrong_date: data.first_wrong_date,
-      status: WRONG_QUESTION_STATUS.pending,
-      next_review_date,
-      wrong_count: 1,
-      notes: data.notes,
-      is_manual_added: true,
-    },
-  })
+      unitId: resolvedUnit.unitId,
+      wrongQuestionId: createdWrongQuestion.id,
+      baseDate: data.first_wrong_date,
+    })
 
-  await prisma.reviewTask.create({
-    data: {
-      user_id: user.id,
-      subject_id: data.subject_id,
-      topic: resolvedUnit.topicSnapshot || data.topic,
-      unit_id: resolvedUnit.unitId,
-      wrong_question_id: wq.id,
-      source_type: REVIEW_TASK_SOURCE_TYPES.wrongQuestion,
-      review_date: next_review_date,
-      review_stage: WRONG_QUESTION_REVIEW_STAGES[0],
-    },
+    return tx.wrongQuestion.update({
+      where: { id: createdWrongQuestion.id },
+      data: { next_review_date: nextReviewDate },
+    })
   })
 
   revalidatePath("/review")
@@ -672,9 +670,42 @@ export async function submitPracticeQuestionSession(data: {
       })
     }
 
-    for (const wrongQuestion of wrongQuestions) {
-      const nextReviewDate = getWrongQuestionInitialReviewDate(practiceDate)
+    const existingWrongQuestions = wrongQuestions.length
+      ? await tx.wrongQuestion.findMany({
+          where: {
+            user_id: user.id,
+            question_id: { in: wrongQuestions.map((question) => question.id) },
+            status: { not: "ARCHIVED" },
+          },
+          select: { id: true, question_id: true },
+        })
+      : []
+    const existingWrongQuestionByQuestionId = new Map(
+      existingWrongQuestions
+        .filter((item): item is { id: string; question_id: string } => Boolean(item.question_id))
+        .map((item) => [item.question_id, item])
+    )
+    const resolvedUnitCache = new Map<string, Awaited<ReturnType<typeof resolveSubjectUnit>>>()
 
+    const getResolvedUnit = async (unitId: string | null, topic: string) => {
+      const cacheKey = `${unitId ?? "null"}::${topic}`
+      const cached = resolvedUnitCache.get(cacheKey)
+      if (cached) {
+        return cached
+      }
+
+      const resolved = await resolveSubjectUnit(tx, {
+        subjectId: ownedSubject.id,
+        unitId,
+        topic,
+        createIfMissing: true,
+        source: "SYSTEM",
+      })
+      resolvedUnitCache.set(cacheKey, resolved)
+      return resolved
+    }
+
+    for (const wrongQuestion of wrongQuestions) {
       const answer = answerMap.get(createAnswerKey(wrongQuestion.id, ownedSubject.id))
       let selectedAnswerText: string
       let correctAnswerText: string
@@ -692,62 +723,52 @@ export async function submitPracticeQuestionSession(data: {
           parsedOptions[wrongQuestion.answer] || `選項 ${wrongQuestion.answer + 1}`
       }
 
-      const resolvedUnit = await resolveSubjectUnit(tx, {
-        subjectId: ownedSubject.id,
-        unitId: wrongQuestion.unit_id,
-        topic: wrongQuestion.topic,
-        createIfMissing: true,
-        source: "SYSTEM",
-      })
-
+      const resolvedUnit = await getResolvedUnit(wrongQuestion.unit_id, wrongQuestion.topic)
       const sourceLabel = wrongQuestion.visibility === "study_group" ? "共享題庫" : "題庫練習"
+      const normalizedTopic = resolvedUnit.topicSnapshot || wrongQuestion.topic
       const newNotes = `題目：${wrongQuestion.question}\n你的答案：${selectedAnswerText}\n正確答案：${correctAnswerText}`
-
-      const existingWq = await tx.wrongQuestion.findFirst({
-        where: { user_id: user.id, question_id: wrongQuestion.id, status: { not: "ARCHIVED" } },
-        select: { id: true, status: true },
-      })
+      const existingWq = existingWrongQuestionByQuestionId.get(wrongQuestion.id)
 
       let wqId: string
       if (existingWq) {
-        const wasAlreadyMastered = existingWq.status === "MASTERED"
+        const nextReviewDate = await resetWrongQuestionReviewSchedule({
+          tx,
+          userId: user.id,
+          subjectId: ownedSubject.id,
+          topic: normalizedTopic,
+          unitId: resolvedUnit.unitId,
+          wrongQuestionId: existingWq.id,
+          baseDate: practiceDate,
+        })
+
         await tx.wrongQuestion.update({
           where: { id: existingWq.id },
           data: {
+            unit_id: resolvedUnit.unitId,
+            topic: normalizedTopic,
+            question_text: wrongQuestion.question,
+            correct_answer_text: correctAnswerText,
+            user_answer_text: selectedAnswerText,
+            source: sourceLabel,
+            source_type: "wrong_answer",
+            error_reason: "題庫練習答錯",
             wrong_count: { increment: 1 },
             last_wrong_date: practiceDate,
-            user_answer_text: selectedAnswerText,
+            status: WRONG_QUESTION_STATUS.pending,
+            next_review_date: nextReviewDate,
+            correct_streak: 0,
             notes: newNotes,
-            ...(wasAlreadyMastered ? {
-              status: WRONG_QUESTION_STATUS.pending,
-              next_review_date: nextReviewDate,
-              correct_streak: 0,
-            } : {}),
           },
         })
         wqId = existingWq.id
-        if (wasAlreadyMastered) {
-          await tx.reviewTask.create({
-            data: {
-              user_id: user.id,
-              subject_id: ownedSubject.id,
-              topic: resolvedUnit.topicSnapshot || wrongQuestion.topic,
-              unit_id: resolvedUnit.unitId,
-              wrong_question_id: existingWq.id,
-              source_type: REVIEW_TASK_SOURCE_TYPES.wrongQuestion,
-              review_date: nextReviewDate,
-              review_stage: WRONG_QUESTION_REVIEW_STAGES[0],
-            },
-          })
-        }
       } else {
-        const wq = await tx.wrongQuestion.create({
+        const createdWrongQuestion = await tx.wrongQuestion.create({
           data: {
             user_id: user.id,
             subject_id: ownedSubject.id,
             question_id: wrongQuestion.id,
             unit_id: resolvedUnit.unitId,
-            topic: resolvedUnit.topicSnapshot || wrongQuestion.topic,
+            topic: normalizedTopic,
             question_text: wrongQuestion.question,
             correct_answer_text: correctAnswerText,
             user_answer_text: selectedAnswerText,
@@ -758,23 +779,28 @@ export async function submitPracticeQuestionSession(data: {
             last_wrong_date: practiceDate,
             status: WRONG_QUESTION_STATUS.pending,
             wrong_count: 1,
-            next_review_date: nextReviewDate,
+            next_review_date: null,
             notes: newNotes,
           },
         })
-        wqId = wq.id
-        await tx.reviewTask.create({
+
+        const nextReviewDate = await resetWrongQuestionReviewSchedule({
+          tx,
+          userId: user.id,
+          subjectId: ownedSubject.id,
+          topic: normalizedTopic,
+          unitId: resolvedUnit.unitId,
+          wrongQuestionId: createdWrongQuestion.id,
+          baseDate: practiceDate,
+        })
+
+        await tx.wrongQuestion.update({
+          where: { id: createdWrongQuestion.id },
           data: {
-            user_id: user.id,
-            subject_id: ownedSubject.id,
-            topic: resolvedUnit.topicSnapshot || wrongQuestion.topic,
-            unit_id: resolvedUnit.unitId,
-            wrong_question_id: wq.id,
-            source_type: REVIEW_TASK_SOURCE_TYPES.wrongQuestion,
-            review_date: nextReviewDate,
-            review_stage: WRONG_QUESTION_REVIEW_STAGES[0],
+            next_review_date: nextReviewDate,
           },
         })
+        wqId = createdWrongQuestion.id
       }
 
       const resultEntry = questionResults.find((r) => r.question_id === wrongQuestion.id)

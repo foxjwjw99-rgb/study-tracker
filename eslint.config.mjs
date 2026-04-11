@@ -15,6 +15,7 @@ const eslintConfig = defineConfig([
     // Local assistant worktrees / scratch directories:
     ".claude/**",
     ".learnings/**",
+    "second-brain/**",
   ]),
   {
     rules: {

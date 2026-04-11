@@ -44,6 +44,10 @@ function computeAdmissionLevel(gap: number): AdmissionLevel {
   return "very_risky"
 }
 
+function buildSyllabusCoverageKey(unitId: string | null, unitName: string) {
+  return unitId ? `unit:${unitId}` : `topic:${unitName}`
+}
+
 // ─── getAdmissionEvaluationV2 ─────────────────────────────────────────────────
 
 export async function getAdmissionEvaluationV2(
@@ -85,7 +89,7 @@ export async function getAdmissionEvaluationV2(
       name: true,
       exam_weight: true,
       exam_syllabus_units: {
-        select: { unit_name: true, weight: true, mastery_score: true },
+        select: { unit_name: true, unit_id: true, weight: true, mastery_score: true },
         orderBy: { unit_name: "asc" },
       },
     },
@@ -133,7 +137,7 @@ export async function getAdmissionEvaluationV2(
   since90.setDate(since90.getDate() - 90)
 
   const unitPracticeLogs = await prisma.practiceLog.groupBy({
-    by: ["subject_id", "topic"],
+    by: ["subject_id", "unit_id", "topic"],
     where: {
       user_id: user.id,
       practice_date: { gte: since90 },
@@ -142,12 +146,15 @@ export async function getAdmissionEvaluationV2(
     _sum: { correct_questions: true, total_questions: true },
   })
 
-  const unitAccuracyMap = new Map<string, number>() // `subjectId:topic` → 0–1
+  const unitAccuracyMap = new Map<string, number>() // `subjectId:unit|topic` → 0–1
   for (const row of unitPracticeLogs) {
     const correct = row._sum.correct_questions ?? 0
     const total = row._sum.total_questions ?? 0
     if (total > 0) {
-      unitAccuracyMap.set(`${row.subject_id}:${row.topic}`, correct / total)
+      unitAccuracyMap.set(
+        `${row.subject_id}:${row.unit_id ? `unit:${row.unit_id}` : `topic:${row.topic}`}`,
+        correct / total
+      )
     }
   }
 
@@ -229,7 +236,9 @@ export async function getAdmissionEvaluationV2(
     const rawWeightSum = units.reduce((s, u) => s + u.weight, 0)
 
     // --- coverage_score: % of units with any practice data (0–100) ---
-    const coveredUnits = units.filter((u) => unitAccuracyMap.has(`${subject.id}:${u.unit_name}`))
+    const coveredUnits = units.filter((u) =>
+      unitAccuracyMap.has(`${subject.id}:${buildSyllabusCoverageKey(u.unit_id ?? null, u.unit_name)}`)
+    )
     const coverageRate = rawWeightSum > 0 ? coveredUnits.length / units.length : 0
     const coverageScore = coverageRate * 100
 

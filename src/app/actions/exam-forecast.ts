@@ -8,6 +8,7 @@ import {
   getCurrentUserOrThrow,
   OWNERSHIP_ERROR_MESSAGE,
 } from "@/lib/current-user"
+import { resolveSubjectUnit } from "@/lib/subject-unit"
 import type {
   ActionResult,
   ExamForecastData,
@@ -55,6 +56,10 @@ function dangerLevel(masteryScore: number | null): UnitDangerLevel {
   return "A"
 }
 
+function buildSyllabusCoverageKey(unitId: string | null, unitName: string) {
+  return unitId ? `unit:${unitId}` : `topic:${unitName}`
+}
+
 // ─── getExamForecastData ──────────────────────────────────────────────────────
 
 export async function getExamForecastData(): Promise<ExamForecastData> {
@@ -68,7 +73,7 @@ export async function getExamForecastData(): Promise<ExamForecastData> {
       target_score: true,
       exam_weight: true,
       exam_syllabus_units: {
-        select: { id: true, unit_name: true, weight: true, mastery_score: true },
+        select: { id: true, unit_name: true, unit_id: true, weight: true, mastery_score: true },
         orderBy: { unit_name: "asc" },
       },
     },
@@ -91,7 +96,7 @@ export async function getExamForecastData(): Promise<ExamForecastData> {
   since90.setDate(since90.getDate() - 90)
 
   const practiceLogs = await prisma.practiceLog.groupBy({
-    by: ["subject_id", "topic"],
+    by: ["subject_id", "unit_id", "topic"],
     where: { user_id: user.id, practice_date: { gte: since90 }, total_questions: { gt: 0 } },
     _sum: { correct_questions: true, total_questions: true },
   })
@@ -104,7 +109,10 @@ export async function getExamForecastData(): Promise<ExamForecastData> {
     const correct = row._sum.correct_questions ?? 0
     const total = row._sum.total_questions ?? 0
     if (total > 0) {
-      accuracyMap.set(`${row.subject_id}:${row.topic}`, correct / total)
+      accuracyMap.set(
+        `${row.subject_id}:${row.unit_id ? `unit:${row.unit_id}` : `topic:${row.topic}`}`,
+        correct / total
+      )
       subjectTotalCorrect.set(
         row.subject_id,
         (subjectTotalCorrect.get(row.subject_id) ?? 0) + correct,
@@ -167,7 +175,9 @@ export async function getExamForecastData(): Promise<ExamForecastData> {
     // ── Build unit items ──
     const units: UnitForecastItem[] = subject.exam_syllabus_units.map((unit) => {
       const normW = rawUnitWeightSum > 0 ? unit.weight / rawUnitWeightSum : 0
-      const accuracy = accuracyMap.get(`${subject.id}:${unit.unit_name}`) ?? null
+      const accuracy =
+        accuracyMap.get(`${subject.id}:${buildSyllabusCoverageKey(unit.unit_id ?? null, unit.unit_name)}`) ??
+        null
       const dl = dangerLevel(unit.mastery_score)
       // contribution uses both if available
       const manualNorm = unit.mastery_score != null ? unit.mastery_score / 5 : null
@@ -340,20 +350,49 @@ export async function upsertExamSyllabusUnit(data: {
   })
   assertOwnedRecord(subject, OWNERSHIP_ERROR_MESSAGE)
 
-  await prisma.examSyllabusUnit.upsert({
-    where: { subject_id_unit_name: { subject_id: data.subjectId, unit_name: unitName } },
-    create: {
-      user_id: user.id,
-      subject_id: data.subjectId,
-      unit_name: unitName,
-      weight: data.weight / 100,
-      mastery_score: data.masteryScore ?? null,
-    },
-    update: {
-      weight: data.weight / 100,
-      ...(data.masteryScore !== undefined && { mastery_score: data.masteryScore }),
-    },
+  const resolvedUnit = await resolveSubjectUnit(prisma, {
+    subjectId: data.subjectId,
+    unitName,
+    topic: unitName,
+    createIfMissing: true,
+    source: "MANUAL",
   })
+  const normalizedUnitName = resolvedUnit.unitName || resolvedUnit.topicSnapshot || unitName
+
+  const existingUnit = await prisma.examSyllabusUnit.findFirst({
+    where: {
+      subject_id: data.subjectId,
+      OR: [
+        { unit_name: unitName },
+        { unit_name: normalizedUnitName },
+        ...(resolvedUnit.unitId ? [{ unit_id: resolvedUnit.unitId }] : []),
+      ],
+    },
+    select: { id: true },
+  })
+
+  if (existingUnit) {
+    await prisma.examSyllabusUnit.update({
+      where: { id: existingUnit.id },
+      data: {
+        unit_name: normalizedUnitName,
+        unit_id: resolvedUnit.unitId,
+        weight: data.weight / 100,
+        ...(data.masteryScore !== undefined && { mastery_score: data.masteryScore }),
+      },
+    })
+  } else {
+    await prisma.examSyllabusUnit.create({
+      data: {
+        user_id: user.id,
+        subject_id: data.subjectId,
+        unit_name: normalizedUnitName,
+        unit_id: resolvedUnit.unitId,
+        weight: data.weight / 100,
+        mastery_score: data.masteryScore ?? null,
+      },
+    })
+  }
 
   revalidatePath("/settings")
   revalidatePath("/dashboard")
@@ -590,28 +629,51 @@ export async function bulkUpsertSyllabusUnits(
           ? undefined
           : Math.min(5, Math.max(0, Math.round(Number(masteryRaw))))
 
-      const existing = await prisma.examSyllabusUnit.findUnique({
-        where: { subject_id_unit_name: { subject_id: entry.subjectId, unit_name: name } },
+      const resolvedUnit = await resolveSubjectUnit(prisma, {
+        subjectId: entry.subjectId,
+        unitName: name,
+        topic: name,
+        createIfMissing: true,
+        source: "MANUAL",
+      })
+      const normalizedUnitName = resolvedUnit.unitName || resolvedUnit.topicSnapshot || name
+
+      const existing = await prisma.examSyllabusUnit.findFirst({
+        where: {
+          subject_id: entry.subjectId,
+          OR: [
+            { unit_name: name },
+            { unit_name: normalizedUnitName },
+            ...(resolvedUnit.unitId ? [{ unit_id: resolvedUnit.unitId }] : []),
+          ],
+        },
         select: { id: true },
       })
 
-      await prisma.examSyllabusUnit.upsert({
-        where: { subject_id_unit_name: { subject_id: entry.subjectId, unit_name: name } },
-        create: {
-          user_id: user.id,
-          subject_id: entry.subjectId,
-          unit_name: name,
-          weight: weight / 100,
-          mastery_score: mastery ?? null,
-        },
-        update: {
-          weight: weight / 100,
-          ...(mastery !== undefined && { mastery_score: mastery }),
-        },
-      })
-
-      if (existing) updated++
-      else created++
+      if (existing) {
+        await prisma.examSyllabusUnit.update({
+          where: { id: existing.id },
+          data: {
+            unit_name: normalizedUnitName,
+            unit_id: resolvedUnit.unitId,
+            weight: weight / 100,
+            ...(mastery !== undefined && { mastery_score: mastery }),
+          },
+        })
+        updated++
+      } else {
+        await prisma.examSyllabusUnit.create({
+          data: {
+            user_id: user.id,
+            subject_id: entry.subjectId,
+            unit_name: normalizedUnitName,
+            unit_id: resolvedUnit.unitId,
+            weight: weight / 100,
+            mastery_score: mastery ?? null,
+          },
+        })
+        created++
+      }
     }
   }
 

@@ -51,7 +51,7 @@ export async function callGemmaAPI(prompt: string): Promise<string> {
           maxOutputTokens: 2048,
         },
       }),
-      timeout: 30000,
+      signal: AbortSignal.timeout(30000),
     })
 
     if (!response.ok) {

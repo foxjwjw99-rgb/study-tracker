@@ -1,7 +1,6 @@
 "use server"
 
 import { revalidatePath } from "next/cache"
-import { startOfDay } from "date-fns"
 
 import prisma from "@/lib/prisma"
 import {
@@ -9,13 +8,17 @@ import {
   getCurrentUserOrThrow,
   OWNERSHIP_ERROR_MESSAGE,
 } from "@/lib/current-user"
+import {
+  getEndOfTodayUTC,
+  getStartOfDaysAgoUTC,
+} from "@/lib/date-utils"
 import { resolveSubjectUnit } from "@/lib/subject-unit"
+import { resetWrongQuestionReviewSchedule } from "@/lib/wrong-question-workflow"
 import { REVIEW_TASK_SOURCE_TYPES } from "@/lib/vocabulary"
 import {
   getNextWrongQuestionReviewStage,
-  getWrongQuestionInitialReviewDate,
+  getWrongQuestionCurrentReviewStage,
   getWrongQuestionNextReviewDate,
-  WRONG_QUESTION_REVIEW_STAGES,
   WRONG_QUESTION_STATUS,
 } from "@/lib/wrong-question-review"
 import type { ActionResult } from "@/types"
@@ -74,7 +77,7 @@ export async function getWrongQuestionsWithFilters(params: {
   limit?: number
 }): Promise<WrongQuestionWithQuestion[]> {
   const user = await getCurrentUserOrThrow()
-  const now = new Date()
+  const dueCutoff = getEndOfTodayUTC()
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const where: Record<string, any> = { user_id: user.id }
@@ -89,7 +92,7 @@ export async function getWrongQuestionsWithFilters(params: {
     where.is_careless = true
   }
   if (params.overdue_only) {
-    where.next_review_date = { lte: now }
+    where.next_review_date = { lte: dueCutoff }
     where.status = { notIn: ["MASTERED", "ARCHIVED"] }
   }
 
@@ -124,13 +127,13 @@ export async function getWrongQuestionsWithFilters(params: {
 
 export async function getDueWrongQuestions(subject_id?: string): Promise<WrongQuestionWithQuestion[]> {
   const user = await getCurrentUserOrThrow()
-  const now = new Date()
+  const dueCutoff = getEndOfTodayUTC()
 
   return prisma.wrongQuestion.findMany({
     where: {
       user_id: user.id,
       status: { notIn: ["MASTERED", "ARCHIVED"] as never[] },
-      next_review_date: { lte: now },
+      next_review_date: { lte: dueCutoff },
       question_id: { not: null },
       ...(subject_id ? { subject_id } : {}),
     },
@@ -194,12 +197,26 @@ export async function addToWrongBook(
     OWNERSHIP_ERROR_MESSAGE
   )
 
+  const accessibleGroupIds = await getAccessibleStudyGroupIds(user.id)
   const question = await prisma.question.findFirst({
-    where: { id: question_id },
+    where: {
+      id: question_id,
+      subject: { name: ownedSubject.name },
+      OR: [
+        { user_id: user.id },
+        ...(accessibleGroupIds.length > 0
+          ? [
+              {
+                visibility: "study_group",
+                shared_study_group_id: { in: accessibleGroupIds },
+              },
+            ]
+          : []),
+      ],
+    },
     select: {
       id: true,
       topic: true,
-      subject_id: true,
       unit_id: true,
       question: true,
       question_type: true,
@@ -209,90 +226,103 @@ export async function addToWrongBook(
     },
   })
   if (!question) {
-    return { success: false, message: "找不到題目。" }
+    return { success: false, message: "找不到題目或沒有存取權限。" }
   }
 
   const now = new Date()
-  const nextReviewDate = getWrongQuestionInitialReviewDate(now)
-  const resolvedUnit = await resolveSubjectUnit(prisma, {
-    subjectId: ownedSubject.id,
-    unitId: question.unit_id,
-    topic: question.topic,
-    createIfMissing: true,
-    source: "SYSTEM",
-  })
+  const result = await prisma.$transaction(async (tx) => {
+    const resolvedUnit = await resolveSubjectUnit(tx, {
+      subjectId: ownedSubject.id,
+      unitId: question.unit_id,
+      topic: question.topic,
+      createIfMissing: true,
+      source: "SYSTEM",
+    })
+    const normalizedTopic = resolvedUnit.topicSnapshot || question.topic
+    const correctAnswerText = getQuestionCorrectAnswerText(question)
 
-  const existingWq = await prisma.wrongQuestion.findFirst({
-    where: { user_id: user.id, question_id, status: { not: "ARCHIVED" } },
-    select: { id: true, status: true },
-  })
+    const existingWq = await tx.wrongQuestion.findFirst({
+      where: { user_id: user.id, question_id, status: { not: "ARCHIVED" } },
+      select: { id: true },
+    })
 
-  let wqId: string
-  if (existingWq) {
-    const wasAlreadyMastered = existingWq.status === "MASTERED"
-    await prisma.wrongQuestion.update({
-      where: { id: existingWq.id },
-      data: {
-        wrong_count: { increment: 1 },
-        last_wrong_date: now,
-        is_careless: source_type === "careless_mistake" ? true : undefined,
-        ...(wasAlreadyMastered ? {
+    if (existingWq) {
+      const nextReviewDate = await resetWrongQuestionReviewSchedule({
+        tx,
+        userId: user.id,
+        subjectId: ownedSubject.id,
+        topic: normalizedTopic,
+        unitId: resolvedUnit.unitId,
+        wrongQuestionId: existingWq.id,
+        baseDate: now,
+      })
+
+      await tx.wrongQuestion.update({
+        where: { id: existingWq.id },
+        data: {
+          unit_id: resolvedUnit.unitId,
+          topic: normalizedTopic,
+          question_text: question.question,
+          correct_answer_text: correctAnswerText,
+          source_type,
+          source: "手動加入",
+          wrong_count: { increment: 1 },
+          last_wrong_date: now,
           status: WRONG_QUESTION_STATUS.pending,
           next_review_date: nextReviewDate,
           correct_streak: 0,
-        } : {}),
-      },
-    })
-    wqId = existingWq.id
-    if (wasAlreadyMastered) {
-      await prisma.reviewTask.create({
-        data: {
-          user_id: user.id,
-          subject_id: ownedSubject.id,
-          topic: resolvedUnit.topicSnapshot || question.topic,
-          unit_id: resolvedUnit.unitId,
-          wrong_question_id: existingWq.id,
-          source_type: REVIEW_TASK_SOURCE_TYPES.wrongQuestion,
-          review_date: nextReviewDate,
-          review_stage: WRONG_QUESTION_REVIEW_STAGES[0],
+          is_manual_added: true,
+          is_careless: source_type === "careless_mistake",
         },
       })
+
+      return {
+        wrongQuestionId: existingWq.id,
+        reusedExisting: true,
+      }
     }
-  } else {
-    const wq = await prisma.wrongQuestion.create({
+
+    const createdWrongQuestion = await tx.wrongQuestion.create({
       data: {
         user_id: user.id,
         subject_id: ownedSubject.id,
         question_id,
         unit_id: resolvedUnit.unitId,
-        topic: resolvedUnit.topicSnapshot || question.topic,
+        topic: normalizedTopic,
         question_text: question.question,
-        correct_answer_text: getQuestionCorrectAnswerText(question),
+        correct_answer_text: correctAnswerText,
         source_type,
         source: "手動加入",
         first_wrong_date: now,
         last_wrong_date: now,
         status: WRONG_QUESTION_STATUS.pending,
         wrong_count: 1,
-        next_review_date: nextReviewDate,
+        next_review_date: null,
         is_manual_added: true,
         is_careless: source_type === "careless_mistake",
       },
     })
-    wqId = wq.id
-    await prisma.reviewTask.create({
-      data: {
-        user_id: user.id,
-        subject_id: ownedSubject.id,
-        topic: resolvedUnit.topicSnapshot || question.topic,
-        unit_id: resolvedUnit.unitId,
-        wrong_question_id: wq.id,
-        source_type: REVIEW_TASK_SOURCE_TYPES.wrongQuestion,
-        review_date: nextReviewDate,
-        review_stage: WRONG_QUESTION_REVIEW_STAGES[0],
-      },
+
+    const nextReviewDate = await resetWrongQuestionReviewSchedule({
+      tx,
+      userId: user.id,
+      subjectId: ownedSubject.id,
+      topic: normalizedTopic,
+      unitId: resolvedUnit.unitId,
+      wrongQuestionId: createdWrongQuestion.id,
+      baseDate: now,
     })
-  }
+
+    await tx.wrongQuestion.update({
+      where: { id: createdWrongQuestion.id },
+      data: { next_review_date: nextReviewDate },
+    })
+
+    return {
+      wrongQuestionId: createdWrongQuestion.id,
+      reusedExisting: false,
+    }
+  })
 
   revalidatePath("/practice")
   revalidatePath("/wrong-questions")
@@ -307,8 +337,8 @@ export async function addToWrongBook(
 
   return {
     success: true,
-    message: existingWq ? `${labelMap[source_type]}（已更新現有紀錄）` : labelMap[source_type],
-    wrongQuestionId: wqId,
+    message: result.reusedExisting ? `${labelMap[source_type]}（已更新現有紀錄）` : labelMap[source_type],
+    wrongQuestionId: result.wrongQuestionId,
   }
 }
 
@@ -358,7 +388,7 @@ export async function submitWrongQuestionReview(data: {
   const now = new Date()
 
   await prisma.$transaction(async (tx) => {
-    const currentStage = WRONG_QUESTION_REVIEW_STAGES[Math.min(wq.review_count, WRONG_QUESTION_REVIEW_STAGES.length - 1)]
+    const currentStage = getWrongQuestionCurrentReviewStage(wq.correct_streak)
 
     await tx.wrongQuestionReviewLog.create({
       data: {
@@ -378,8 +408,10 @@ export async function submitWrongQuestionReview(data: {
 
     const nextStage = getNextWrongQuestionReviewStage(currentStage)
     const nextReviewDate = data.answered_correctly
-      ? (nextStage === null ? null : getWrongQuestionNextReviewDate(currentStage, now))
-      : getWrongQuestionInitialReviewDate(now)
+      ? nextStage === null
+        ? null
+        : getWrongQuestionNextReviewDate(currentStage, now)
+      : null
 
     const newStatus = data.answered_correctly
       ? nextStage === null
@@ -404,7 +436,27 @@ export async function submitWrongQuestionReview(data: {
       data: { completed: true },
     })
 
-    if (data.answered_correctly && nextStage !== null && nextReviewDate) {
+    if (!data.answered_correctly) {
+      const resetReviewDate = await resetWrongQuestionReviewSchedule({
+        tx,
+        userId: user.id,
+        subjectId: wq.subject_id,
+        topic: wq.topic,
+        unitId: wq.unit_id,
+        wrongQuestionId: wq.id,
+        baseDate: now,
+      })
+
+      await tx.wrongQuestion.update({
+        where: { id: data.wrong_question_id },
+        data: {
+          next_review_date: resetReviewDate,
+        },
+      })
+      return
+    }
+
+    if (nextStage !== null && nextReviewDate) {
       await tx.reviewTask.create({
         data: {
           user_id: user.id,
@@ -429,16 +481,15 @@ export async function submitWrongQuestionReview(data: {
 
 export async function getWrongQuestionStats(subject_id?: string) {
   const user = await getCurrentUserOrThrow()
-  const now = new Date()
-  const sevenDaysAgo = startOfDay(new Date(now))
-  sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7)
+  const dueCutoff = getEndOfTodayUTC()
+  const sevenDaysAgo = getStartOfDaysAgoUTC(6)
 
   const [dueCount, unresolvedCount, recentAddedCount, recentMasteredCount] = await Promise.all([
     prisma.wrongQuestion.count({
       where: {
         user_id: user.id,
         status: { notIn: ["MASTERED", "ARCHIVED"] as never[] },
-        next_review_date: { lte: now },
+        next_review_date: { lte: dueCutoff },
         question_id: { not: null },
         ...(subject_id ? { subject_id } : {}),
       },
@@ -503,6 +554,15 @@ export async function createManualWrongQuestion(data: {
   } catch {
     return { success: false, message: "加入失敗，請稍後再試。" }
   }
+}
+
+async function getAccessibleStudyGroupIds(userId: string) {
+  const memberships = await prisma.studyGroupMember.findMany({
+    where: { user_id: userId },
+    select: { study_group_id: true },
+  })
+
+  return memberships.map((membership) => membership.study_group_id)
 }
 
 function getQuestionCorrectAnswerText(question: {

@@ -28,6 +28,15 @@ export function getNextWrongQuestionReviewStage(currentStage: number) {
   return WRONG_QUESTION_REVIEW_STAGES[currentIndex + 1] ?? null
 }
 
+export function getWrongQuestionCurrentReviewStage(correctStreak: number) {
+  const safeIndex = Math.max(
+    0,
+    Math.min(Math.floor(correctStreak), WRONG_QUESTION_REVIEW_STAGES.length - 1)
+  )
+
+  return WRONG_QUESTION_REVIEW_STAGES[safeIndex]
+}
+
 export function getWrongQuestionInitialReviewDate(firstWrongDate: Date) {
   return addDays(firstWrongDate, WRONG_QUESTION_REVIEW_STAGES[0])
 }

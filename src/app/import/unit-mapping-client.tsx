@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useMemo } from "react"
-import { Loader2, CheckCircle2, AlertCircle, ChevronDown } from "lucide-react"
+import { Loader2, CheckCircle2, AlertCircle } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import {
@@ -125,7 +125,9 @@ export function UnitMappingClient({ subjects, subjectUnits }: Props) {
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label className="text-sm font-medium">選擇科目</label>
-              <Select value={selectedSubjectId} onValueChange={setSelectedSubjectId}>
+              <Select value={selectedSubjectId} onValueChange={(value) => {
+                if (value) setSelectedSubjectId(value)
+              }}>
                 <SelectTrigger>
                   <SelectValue />
                 </SelectTrigger>
@@ -141,7 +143,11 @@ export function UnitMappingClient({ subjects, subjectUnits }: Props) {
 
             <div>
               <label className="text-sm font-medium">驗證模式</label>
-              <Select value={mode} onValueChange={(v) => setMode(v as 'groups' | 'questions')}>
+              <Select value={mode} onValueChange={(value) => {
+                if (value === "groups" || value === "questions") {
+                  setMode(value)
+                }
+              }}>
                 <SelectTrigger>
                   <SelectValue />
                 </SelectTrigger>

@@ -256,7 +256,27 @@ export async function importQuestionGroups(
   }
 }
 
-async function resolveImportTarget(userId: string, importTarget: QuestionImportTarget) {
+type ResolveImportTargetResult =
+  | {
+      success: true
+      target:
+        | {
+            visibility: "private"
+          }
+        | {
+            visibility: "study_group"
+            shared_study_group_id: string
+          }
+    }
+  | {
+      success: false
+      message: string
+    }
+
+async function resolveImportTarget(
+  userId: string,
+  importTarget: QuestionImportTarget
+): Promise<ResolveImportTargetResult> {
   if (importTarget.visibility === "private") {
     return {
       success: true as const,
@@ -299,9 +319,7 @@ async function resolveImportTarget(userId: string, importTarget: QuestionImportT
   }
 }
 
-type NormalizedImportTarget = Awaited<ReturnType<typeof resolveImportTarget>> extends { success: true; target: infer T }
-  ? T
-  : never
+type NormalizedImportTarget = Extract<ResolveImportTargetResult, { success: true }>["target"]
 
 type ExistingImportState = {
   questionExternalIds: Set<string>
