@@ -580,6 +580,7 @@ export type PracticeQuestionSessionResult = ActionResult & {
     answer: number
     text_answer: string | null
     explanation: string | null
+    ai_explanation: string | null
     isCorrect: boolean
     selectedAnswer: number | null
     typedAnswer: string | null

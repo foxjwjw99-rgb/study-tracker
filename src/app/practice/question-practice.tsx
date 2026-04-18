@@ -606,6 +606,10 @@ export function QuestionPractice({ questionBank, initialSubjectId }: QuestionPra
                           <p className="break-words text-muted-foreground">
                             解析：<RichContent rich={currentQuestion.explanation_structured} fallback={currentQuestion.explanation} className="inline" />
                           </p>
+                        ) : currentQuestion.ai_explanation ? (
+                          <p className="break-words text-muted-foreground">
+                            解析（AI 生成）：{currentQuestion.ai_explanation}
+                          </p>
                         ) : null}
                         <div className="flex gap-2 pt-1">
                           <button
@@ -755,6 +759,10 @@ export function QuestionPractice({ questionBank, initialSubjectId }: QuestionPra
                           <p className="break-words text-muted-foreground">
                             解析：<RichContent rich={currentQuestion.explanation_structured} fallback={currentQuestion.explanation} className="inline" />
                           </p>
+                        ) : currentQuestion.ai_explanation ? (
+                          <p className="break-words text-muted-foreground">
+                            解析（AI 生成）：{currentQuestion.ai_explanation}
+                          </p>
                         ) : null}
                       </div>
                     </div>
@@ -875,8 +883,9 @@ export function QuestionPractice({ questionBank, initialSubjectId }: QuestionPra
                             <div className="min-w-0">
                               <p className="break-words text-foreground">{qr.question}</p>
                               <p className="mt-1 text-xs text-muted-foreground">{qr.topic}</p>
-                              {!qr.isCorrect && qr.explanation && (
-                                <p className="mt-1 break-words text-xs text-muted-foreground">解析：{qr.explanation}</p>
+                              {!qr.isCorrect && (qr.explanation || qr.ai_explanation) && (
+                                <p className="mt-1 break-words text-xs text-muted-foreground">
+                                  解析{!qr.explanation && qr.ai_explanation ? "（AI 生成）" : ""}：{qr.explanation ?? qr.ai_explanation}</p>
                               )}
                             </div>
                           </div>

@@ -5,6 +5,7 @@ import {
   mathImportPayloadSchema,
   isMathSpecFormat,
   isImportedQuestionGroup,
+  type ImportedQuestion,
   type ImportedQuestionImportItem,
   type MathMcQuestion,
 } from "./schema"
@@ -215,10 +216,12 @@ export function summarizeImportPreview(items: ImportedQuestionImportItem[]): Imp
         else seenKeys.add(childKey)
       }
     } else {
+      // Zod v4 preprocess+union inference narrows else branch to never; cast explicitly
+      const q = item as ImportedQuestion
       singleQuestionCount += 1
-      const key = item.external_id
-        ? `single:external:${item.subject}::${item.external_id}`
-        : `single:text:${item.subject}::${item.question}`
+      const key = q.external_id
+        ? `single:external:${q.subject}::${q.external_id}`
+        : `single:text:${q.subject}::${q.question}`
       if (seenKeys.has(key)) duplicateSuspectCount += 1
       else seenKeys.add(key)
     }
