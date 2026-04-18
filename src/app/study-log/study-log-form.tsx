@@ -382,6 +382,33 @@ export function StudyLogForm({
     }
   }, [advancePhase, endAt, isRunning])
 
+  // Sync timer state to SSE backend so server can push a backup notification
+  useEffect(() => {
+    if (!isRunning || !endAt) {
+      fetch("/api/notifications/stream", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ endAt: null, title: "", body: "" }),
+      }).catch(() => {})
+      return
+    }
+
+    const title =
+      phase === "focus"
+        ? "完成一顆番茄"
+        : "休息結束，回到專注模式"
+    const body =
+      phase === "focus"
+        ? `休息 ${timerSettings.breakMinutes} 分鐘，再回來繼續。`
+        : `下一輪 ${timerSettings.focusMinutes} 分鐘。`
+
+    fetch("/api/notifications/stream", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ endAt, title, body }),
+    }).catch(() => {})
+  }, [isRunning, endAt, phase, timerSettings.breakMinutes, timerSettings.focusMinutes])
+
   const sessionMinutes = actualFocusMinutes
   const currentPresetLabel = timerSettings.label
   const selectedSubject = subjects.find((subject) => subject.id === selectedSubjectId) ?? null

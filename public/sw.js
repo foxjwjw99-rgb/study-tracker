@@ -22,8 +22,9 @@ self.addEventListener("message", (event) => {
         tag: TIMER_TAG,
         icon: "/icon-192.png",
         badge: "/icon-192.png",
-        silent: true,
-        renotify: false,
+        silent: false,
+        vibrate: [200, 100, 200],
+        renotify: true,
         requireInteraction: true,
       })
       break
@@ -34,6 +35,22 @@ self.addEventListener("message", (event) => {
       })
       break
   }
+})
+
+self.addEventListener("push", (event) => {
+  if (!event.data) return
+  const data = event.data.json()
+  event.waitUntil(
+    self.registration.showNotification(data.title, {
+      body: data.body,
+      icon: "/icon-192.png",
+      badge: "/icon-192.png",
+      tag: TIMER_TAG,
+      silent: false,
+      vibrate: [200, 100, 200],
+      requireInteraction: true,
+    })
+  )
 })
 
 // When user taps the notification, focus the app window

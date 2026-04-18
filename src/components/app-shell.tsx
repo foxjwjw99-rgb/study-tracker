@@ -6,6 +6,7 @@ import { Menu } from "lucide-react"
 import { usePathname } from "next/navigation"
 
 import { SignOutButton } from "@/components/auth/sign-out-button"
+import { NotificationCenter } from "@/components/notification-center"
 import { MainNav, BOTTOM_NAV_ITEMS, getPageTitle } from "@/components/main-nav"
 import { Button } from "@/components/ui/button"
 import {
@@ -98,8 +99,9 @@ export function AppShell({ children, currentUser }: AppShellProps) {
             <p className="truncate text-base font-semibold">{currentPageTitle}</p>
 
             {/* Desktop user info */}
-            <div className="ml-auto hidden items-center gap-3 md:flex">
-              <div className="min-w-0 text-right">
+            <div className="ml-auto flex items-center gap-2">
+              <NotificationCenter />
+              <div className="hidden min-w-0 text-right md:block">
                 <p className="truncate text-sm font-medium leading-tight">{currentUser.name}</p>
                 <p className="text-xs text-muted-foreground">目前登入</p>
               </div>
