@@ -663,6 +663,7 @@ export async function submitPracticeQuestionSession(data: {
         answer: q.answer,
         text_answer: q.text_answer ?? null,
         explanation: q.explanation ?? null,
+        ai_explanation: q.ai_explanation ?? null,
         isCorrect,
         selectedAnswer: answer?.selected_answer ?? null,
         typedAnswer: answer?.text_answer ?? null,
