@@ -9,7 +9,6 @@ import { getCurrentUserOrThrow } from "@/lib/current-user"
 import { resolveSubjectUnit } from "@/lib/subject-unit"
 import {
   importPayloadSchema,
-  importQuestionGroupsSchema,
   isImportedQuestionGroup,
   mathImportPayloadSchema,
   isMathSpecFormat,
@@ -17,7 +16,10 @@ import {
   type ImportedQuestionGroup,
   type MathMcQuestion,
 } from "@/app/import/schema"
+import { buildFailureLabel, zodErrorToFailures, type ImportFailure } from "@/app/import/parser"
 import type { QuestionImportTarget } from "@/types"
+
+export type { ImportFailure } from "@/app/import/parser"
 
 export type ImportResult = {
   success: boolean
@@ -28,6 +30,16 @@ export type ImportResult = {
   groupCount: number
   groupQuestionCount: number
   duplicateGroupCount: number
+  failures: ImportFailure[]
+}
+
+function emptyFailures(): ImportFailure[] {
+  return []
+}
+
+function describeDbError(err: unknown): string {
+  if (err instanceof Error) return err.message
+  return "寫入資料庫時發生未知錯誤"
 }
 
 const DEFAULT_IMPORT_TARGET: QuestionImportTarget = {
@@ -52,10 +64,11 @@ export async function importQuestions(
       message: "JSON 格式錯誤。請檢查匯入格式要求。",
       validCount: 0,
       duplicateCount: 0,
-      errorCount: 0,
+      errorCount: parsed.error.issues.length,
       groupCount: 0,
       groupQuestionCount: 0,
       duplicateGroupCount: 0,
+      failures: zodErrorToFailures(parsed.error, data),
     }
   }
 
@@ -70,6 +83,7 @@ export async function importQuestions(
       groupCount: 0,
       groupQuestionCount: 0,
       duplicateGroupCount: 0,
+      failures: emptyFailures(),
     }
   }
 
@@ -78,18 +92,20 @@ export async function importQuestions(
   if (!subjectMap) {
     return {
       success: false,
-      message: "建立科目失敗。",
+      message: "科目數量已達 200 上限，無法再新增。",
       validCount: 0,
       duplicateCount: 0,
       errorCount: items.length,
       groupCount: 0,
       groupQuestionCount: 0,
       duplicateGroupCount: 0,
+      failures: emptyFailures(),
     }
   }
 
   const existing = await loadExistingImportState(user.id)
   const payloadState = createPayloadSeenState()
+  const failures: ImportFailure[] = []
   let validCount = 0
   let duplicateCount = 0
   let errorCount = 0
@@ -98,11 +114,21 @@ export async function importQuestions(
   let duplicateGroupCount = 0
 
   try {
+    // NOTE: Partial import is intentional. Per-row failures are caught below so
+    // one bad row doesn't roll back the whole transaction. Only a thrown error
+    // that escapes these try/catches will roll everything back.
     await prisma.$transaction(async (tx) => {
-      for (const item of items) {
+      for (let i = 0; i < items.length; i += 1) {
+        const item = items[i]
         const subjectId = subjectMap.get(item.subject)
         if (!subjectId) {
-          errorCount += isImportedQuestionGroup(item) ? item.questions.length : 1
+          const childCount = isImportedQuestionGroup(item) ? item.questions.length : 1
+          errorCount += childCount
+          failures.push({
+            index: i,
+            label: buildFailureLabel(data, i),
+            reason: "建立科目失敗",
+          })
           continue
         }
 
@@ -113,11 +139,33 @@ export async function importQuestions(
           duplicateGroupCount += result.duplicateGroupCount
           duplicateCount += result.duplicateQuestionCount
           errorCount += result.errorCount
+          if (result.groupReason) {
+            failures.push({
+              index: i,
+              label: buildFailureLabel(data, i),
+              reason: result.groupReason,
+            })
+          }
+          for (const child of result.childFailures) {
+            failures.push({
+              index: i,
+              childIndex: child.childIndex,
+              label: buildFailureLabel(data, i, child.childIndex),
+              reason: child.reason,
+            })
+          }
         } else {
           const result = await importSingleQuestion(tx, user.id, subjectId, item, normalizedTarget.target, existing, payloadState)
           validCount += result.validCount
           duplicateCount += result.duplicateCount
           errorCount += result.errorCount
+          if (result.reason) {
+            failures.push({
+              index: i,
+              label: buildFailureLabel(data, i),
+              reason: result.reason,
+            })
+          }
         }
       }
     })
@@ -132,6 +180,7 @@ export async function importQuestions(
       groupCount,
       groupQuestionCount,
       duplicateGroupCount,
+      failures,
     }
   }
 
@@ -150,109 +199,7 @@ export async function importQuestions(
     groupCount,
     groupQuestionCount,
     duplicateGroupCount,
-  }
-}
-
-export type ImportGroupResult = {
-  success: boolean
-  message: string
-  groupCount: number
-  questionCount: number
-  duplicateGroupCount: number
-  errorCount: number
-}
-
-export async function importQuestionGroups(
-  data: unknown,
-  importTarget: QuestionImportTarget = DEFAULT_IMPORT_TARGET,
-): Promise<ImportGroupResult> {
-  const user = await getCurrentUserOrThrow()
-
-  const parsed = importQuestionGroupsSchema.safeParse(data)
-  if (!parsed.success) {
-    return {
-      success: false,
-      message: "格式錯誤。請檢查題組格式要求。",
-      groupCount: 0,
-      questionCount: 0,
-      duplicateGroupCount: 0,
-      errorCount: 0,
-    }
-  }
-
-  const normalizedTarget = await resolveImportTarget(user.id, importTarget)
-  if (!normalizedTarget.success) {
-    return {
-      success: false,
-      message: normalizedTarget.message,
-      groupCount: 0,
-      questionCount: 0,
-      duplicateGroupCount: 0,
-      errorCount: 0,
-    }
-  }
-
-  const groups = parsed.data
-  const subjectMap = await ensureSubjectsForImport(user.id, groups.map((group) => group.subject))
-  if (!subjectMap) {
-    return {
-      success: false,
-      message: "建立科目失敗。",
-      groupCount: 0,
-      questionCount: 0,
-      duplicateGroupCount: 0,
-      errorCount: groups.length,
-    }
-  }
-
-  const existing = await loadExistingImportState(user.id)
-  const payloadState = createPayloadSeenState()
-  let groupCount = 0
-  let questionCount = 0
-  let duplicateGroupCount = 0
-  let errorCount = 0
-
-  try {
-    await prisma.$transaction(async (tx) => {
-      for (const group of groups) {
-        const subjectId = subjectMap.get(group.subject)
-        if (!subjectId) {
-          errorCount += group.questions.length
-          continue
-        }
-
-        const result = await importSingleGroup(tx, user.id, subjectId, group, normalizedTarget.target, existing, payloadState)
-        groupCount += result.groupCount
-        questionCount += result.questionCount
-        duplicateGroupCount += result.duplicateGroupCount
-        errorCount += result.errorCount
-      }
-    })
-  } catch (error) {
-    console.error("Error importing question groups", error)
-    return {
-      success: false,
-      message: "題組匯入失敗，請稍後再試。",
-      groupCount,
-      questionCount,
-      duplicateGroupCount,
-      errorCount: errorCount + 1,
-    }
-  }
-
-  revalidatePath("/practice")
-  revalidatePath("/import")
-
-  return {
-    success: true,
-    message:
-      normalizedTarget.target.visibility === "study_group"
-        ? "題組匯入完成，已分享到讀書房。"
-        : "題組匯入完成。",
-    groupCount,
-    questionCount,
-    duplicateGroupCount,
-    errorCount,
+    failures,
   }
 }
 
@@ -427,6 +374,13 @@ function groupTextKey(subjectId: string, groupContext: string) {
   return JSON.stringify([subjectId, groupContext.trim()])
 }
 
+type SingleQuestionResult = {
+  validCount: number
+  duplicateCount: number
+  errorCount: number
+  reason?: string
+}
+
 async function importSingleQuestion(
   tx: Prisma.TransactionClient,
   userId: string,
@@ -435,7 +389,7 @@ async function importSingleQuestion(
   importTarget: NormalizedImportTarget,
   existing: ExistingImportState,
   payloadState: PayloadSeenState,
-) {
+): Promise<SingleQuestionResult> {
   if (question.external_id) {
     const externalKey = questionExternalKey(subjectId, question.external_id)
     if (existing.questionExternalIds.has(externalKey) || payloadState.questionExternalIds.has(externalKey)) {
@@ -459,25 +413,35 @@ async function importSingleQuestion(
     source: "IMPORTED",
   })
 
-  await tx.question.create({
-    data: {
-      user_id: userId,
-      subject_id: subjectId,
-      topic: resolvedUnit.topicSnapshot || question.topic,
-      unit_id: resolvedUnit.unitId!,
-      external_id: question.external_id,
-      question: question.question,
-      question_type: isFib ? "fill_in_blank" : "multiple_choice",
-      options: isFib ? "[]" : JSON.stringify(question.options),
-      answer: isFib ? 0 : question.answer,
-      text_answer: isFib ? question.text_answer : null,
-      explanation: question.explanation ?? null,
-      image_url: question.image ?? null,
-      table_data: question.table ? JSON.stringify(question.table) : null,
-      visibility: importTarget.visibility,
-      shared_study_group_id: importTarget.visibility === "study_group" ? importTarget.shared_study_group_id : null,
-    },
-  })
+  try {
+    await tx.question.create({
+      data: {
+        user_id: userId,
+        subject_id: subjectId,
+        topic: resolvedUnit.topicSnapshot || question.topic,
+        unit_id: resolvedUnit.unitId!,
+        external_id: question.external_id,
+        question: question.question,
+        question_type: isFib ? "fill_in_blank" : "multiple_choice",
+        options: isFib ? "[]" : JSON.stringify(question.options),
+        answer: isFib ? 0 : question.answer,
+        text_answer: isFib ? question.text_answer : null,
+        explanation: question.explanation ?? null,
+        image_url: question.image ?? null,
+        table_data: question.table ? JSON.stringify(question.table) : null,
+        visibility: importTarget.visibility,
+        shared_study_group_id: importTarget.visibility === "study_group" ? importTarget.shared_study_group_id : null,
+      },
+    })
+  } catch (err) {
+    console.error("Error creating single question", err)
+    return {
+      validCount: 0,
+      duplicateCount: 0,
+      errorCount: 1,
+      reason: `寫入題目失敗：${describeDbError(err)}`,
+    }
+  }
 
   existing.questionTextKeys.add(textKey)
   if (question.external_id) {
@@ -485,6 +449,17 @@ async function importSingleQuestion(
   }
 
   return { validCount: 1, duplicateCount: 0, errorCount: 0 }
+}
+
+type GroupChildFailure = { childIndex: number; reason: string }
+type SingleGroupResult = {
+  groupCount: number
+  questionCount: number
+  duplicateGroupCount: number
+  duplicateQuestionCount: number
+  errorCount: number
+  groupReason?: string
+  childFailures: GroupChildFailure[]
 }
 
 async function importSingleGroup(
@@ -495,18 +470,20 @@ async function importSingleGroup(
   importTarget: NormalizedImportTarget,
   existing: ExistingImportState,
   payloadState: PayloadSeenState,
-) {
+): Promise<SingleGroupResult> {
+  const childFailures: GroupChildFailure[] = []
+
   if (group.external_id) {
     const externalKey = groupExternalKey(subjectId, group.external_id)
     if (existing.groupExternalIds.has(externalKey) || payloadState.groupExternalIds.has(externalKey)) {
-      return { groupCount: 0, questionCount: 0, duplicateGroupCount: 1, duplicateQuestionCount: 0, errorCount: 0 }
+      return { groupCount: 0, questionCount: 0, duplicateGroupCount: 1, duplicateQuestionCount: 0, errorCount: 0, childFailures }
     }
     payloadState.groupExternalIds.add(externalKey)
   }
 
   const textKey = groupTextKey(subjectId, group.group_context)
   if (existing.groupTextKeys.has(textKey) || payloadState.groupTextKeys.has(textKey)) {
-    return { groupCount: 0, questionCount: 0, duplicateGroupCount: 1, duplicateQuestionCount: 0, errorCount: 0 }
+    return { groupCount: 0, questionCount: 0, duplicateGroupCount: 1, duplicateQuestionCount: 0, errorCount: 0, childFailures }
   }
 
   payloadState.groupTextKeys.add(textKey)
@@ -518,18 +495,32 @@ async function importSingleGroup(
     source: "IMPORTED",
   })
 
-  const createdGroup = await tx.questionGroup.create({
-    data: {
-      user_id: userId,
-      subject_id: subjectId,
-      topic: resolvedGroupUnit.topicSnapshot || group.topic,
-      unit_id: resolvedGroupUnit.unitId,
-      external_id: group.external_id ?? null,
-      title: group.group_title ?? null,
-      context: group.group_context,
-      table_data: group.table ? JSON.stringify(group.table) : null,
-    },
-  })
+  let createdGroup
+  try {
+    createdGroup = await tx.questionGroup.create({
+      data: {
+        user_id: userId,
+        subject_id: subjectId,
+        topic: resolvedGroupUnit.topicSnapshot || group.topic,
+        unit_id: resolvedGroupUnit.unitId,
+        external_id: group.external_id ?? null,
+        title: group.group_title ?? null,
+        context: group.group_context,
+        table_data: group.table ? JSON.stringify(group.table) : null,
+      },
+    })
+  } catch (err) {
+    console.error("Error creating question group", err)
+    return {
+      groupCount: 0,
+      questionCount: 0,
+      duplicateGroupCount: 0,
+      duplicateQuestionCount: 0,
+      errorCount: group.questions.length,
+      groupReason: `寫入題組失敗：${describeDbError(err)}`,
+      childFailures,
+    }
+  }
 
   existing.groupTextKeys.add(textKey)
   if (group.external_id) {
@@ -593,7 +584,7 @@ async function importSingleGroup(
           table_data: question.table ? JSON.stringify(question.table) : null,
           visibility: importTarget.visibility,
           shared_study_group_id: importTarget.visibility === "study_group" ? importTarget.shared_study_group_id : null,
-          group_id: createdGroup.id,
+          group_id: createdGroup!.id,
           group_order: index,
         },
       })
@@ -608,6 +599,10 @@ async function importSingleGroup(
     } catch (error) {
       console.error("Error creating grouped question", error)
       errorCount += 1
+      childFailures.push({
+        childIndex: index,
+        reason: `寫入小題失敗：${describeDbError(error)}`,
+      })
     }
   }
 
@@ -617,6 +612,7 @@ async function importSingleGroup(
     duplicateGroupCount: 0,
     duplicateQuestionCount,
     errorCount,
+    childFailures,
   }
 }
 
@@ -660,13 +656,14 @@ async function importMathQuestions(
   if (!parsed.success) {
     return {
       success: false,
-      message: `數學題庫格式錯誤：${parsed.error.issues[0]?.message ?? "未知錯誤"}`,
+      message: "數學題庫格式錯誤，請檢查下方錯誤清單。",
       validCount: 0,
       duplicateCount: 0,
-      errorCount: 0,
+      errorCount: parsed.error.issues.length,
       groupCount: 0,
       groupQuestionCount: 0,
       duplicateGroupCount: 0,
+      failures: zodErrorToFailures(parsed.error, rawData),
     }
   }
 
@@ -681,6 +678,7 @@ async function importMathQuestions(
       groupCount: 0,
       groupQuestionCount: 0,
       duplicateGroupCount: 0,
+      failures: emptyFailures(),
     }
   }
 
@@ -689,33 +687,39 @@ async function importMathQuestions(
   if (!subjectMap) {
     return {
       success: false,
-      message: "建立科目失敗。",
+      message: "科目數量已達 200 上限，無法再新增。",
       validCount: 0,
       duplicateCount: 0,
       errorCount: questions.length,
       groupCount: 0,
       groupQuestionCount: 0,
       duplicateGroupCount: 0,
+      failures: emptyFailures(),
     }
   }
 
-  // Group questions by group_id
-  const standaloneQuestions: MathMcQuestion[] = []
-  const groupedQuestions = new Map<string, MathMcQuestion[]>()
+  type IndexedMath = { q: MathMcQuestion; originalIndex: number }
 
-  for (const q of questions) {
+  // Group questions by group_id, preserving original array indices for failure reporting.
+  const standaloneQuestions: IndexedMath[] = []
+  const groupedQuestions = new Map<string, IndexedMath[]>()
+
+  for (let i = 0; i < questions.length; i += 1) {
+    const q = questions[i]
+    const entry = { q, originalIndex: i }
     if (q.group_id) {
       const bucket = groupedQuestions.get(q.group_id) ?? []
-      bucket.push(q)
+      bucket.push(entry)
       groupedQuestions.set(q.group_id, bucket)
     } else {
-      standaloneQuestions.push(q)
+      standaloneQuestions.push(entry)
     }
   }
 
   const target = normalizedTarget.target
   const existing = await loadExistingImportState(userId)
   const payloadState = createPayloadSeenState()
+  const failures: ImportFailure[] = []
   let validCount = 0
   let duplicateCount = 0
   let errorCount = 0
@@ -723,12 +727,22 @@ async function importMathQuestions(
   let groupQuestionCount = 0
   let duplicateGroupCount = 0
 
+  const pushMathFailure = (originalIndex: number, reason: string) => {
+    failures.push({ index: originalIndex, label: buildFailureLabel(rawData, originalIndex), reason })
+  }
+
   try {
+    // NOTE: Partial import intentional. Per-row try/catch prevents single bad
+    // rows from rolling back the whole transaction.
     await prisma.$transaction(async (tx) => {
       // Import standalone questions
-      for (const q of standaloneQuestions) {
+      for (const { q, originalIndex } of standaloneQuestions) {
         const subjectId = subjectMap.get(q.subject)
-        if (!subjectId) { errorCount += 1; continue }
+        if (!subjectId) {
+          errorCount += 1
+          pushMathFailure(originalIndex, "建立科目失敗")
+          continue
+        }
 
         const questionRich = buildRichContent(q.question_text, q.question_latex, q.question_image_url)
         const legacyQuestion = richContentToLegacyText(questionRich)
@@ -756,43 +770,54 @@ async function importMathQuestions(
 
         const explanationRich = buildRichContent(q.explanation_text, q.explanation_latex, q.explanation_image_url)
 
-        await tx.question.create({
-          data: {
-            user_id: userId,
-            subject_id: subjectId,
-            topic: resolvedUnit.topicSnapshot || q.topic,
-            unit_id: resolvedUnit.unitId!,
-            external_id: q.external_id ?? null,
-            question: legacyQuestion,
-            question_structured: JSON.stringify(questionRich),
-            question_type: "multiple_choice",
-            options: mathQuestionToLegacyOptions(q),
-            options_structured: JSON.stringify(mathQuestionToStructuredOptions(q)),
-            answer: q.answer,
-            explanation: richContentToLegacyText(explanationRich) || null,
-            explanation_structured: JSON.stringify(explanationRich),
-            image_url: q.question_image_url || null,
-            visibility: target.visibility,
-            shared_study_group_id:
-              target.visibility === "study_group"
-                ? target.shared_study_group_id
-                : null,
-          },
-        })
-
-        existing.questionTextKeys.add(textKey)
-        if (q.external_id) {
-          existing.questionExternalIds.add(questionExternalKey(subjectId, q.external_id))
+        try {
+          await tx.question.create({
+            data: {
+              user_id: userId,
+              subject_id: subjectId,
+              topic: resolvedUnit.topicSnapshot || q.topic,
+              unit_id: resolvedUnit.unitId!,
+              external_id: q.external_id ?? null,
+              question: legacyQuestion,
+              question_structured: JSON.stringify(questionRich),
+              question_type: "multiple_choice",
+              options: mathQuestionToLegacyOptions(q),
+              options_structured: JSON.stringify(mathQuestionToStructuredOptions(q)),
+              answer: q.answer,
+              explanation: richContentToLegacyText(explanationRich) || null,
+              explanation_structured: JSON.stringify(explanationRich),
+              image_url: q.question_image_url || null,
+              visibility: target.visibility,
+              shared_study_group_id:
+                target.visibility === "study_group"
+                  ? target.shared_study_group_id
+                  : null,
+            },
+          })
+          existing.questionTextKeys.add(textKey)
+          if (q.external_id) {
+            existing.questionExternalIds.add(questionExternalKey(subjectId, q.external_id))
+          }
+          validCount += 1
+        } catch (err) {
+          console.error("Error creating math standalone question", err)
+          errorCount += 1
+          pushMathFailure(originalIndex, `寫入題目失敗：${describeDbError(err)}`)
         }
-        validCount += 1
       }
 
       // Import grouped questions
       for (const [groupId, groupItems] of groupedQuestions) {
         if (groupItems.length === 0) continue
-        const firstItem = groupItems[0]
+        const firstEntry = groupItems[0]
+        const firstItem = firstEntry.q
+        const firstOriginalIndex = firstEntry.originalIndex
         const subjectId = subjectMap.get(firstItem.subject)
-        if (!subjectId) { errorCount += groupItems.length; continue }
+        if (!subjectId) {
+          errorCount += groupItems.length
+          for (const entry of groupItems) pushMathFailure(entry.originalIndex, "建立科目失敗")
+          continue
+        }
 
         const contextRich = buildRichContent(firstItem.group_text, firstItem.group_latex, firstItem.group_image_url)
         const legacyContext = firstItem.group_text || firstItem.group_latex || groupId
@@ -822,25 +847,33 @@ async function importMathQuestions(
           source: "IMPORTED",
         })
 
-        const createdGroup = await tx.questionGroup.create({
-          data: {
-            user_id: userId,
-            subject_id: subjectId,
-            topic: resolvedUnit.topicSnapshot || firstItem.topic,
-            unit_id: resolvedUnit.unitId,
-            external_id: groupExternalId,
-            title: firstItem.group_title || null,
-            context: legacyContext,
-            context_structured: JSON.stringify(contextRich),
-          },
-        })
+        let createdGroup
+        try {
+          createdGroup = await tx.questionGroup.create({
+            data: {
+              user_id: userId,
+              subject_id: subjectId,
+              topic: resolvedUnit.topicSnapshot || firstItem.topic,
+              unit_id: resolvedUnit.unitId,
+              external_id: groupExternalId,
+              title: firstItem.group_title || null,
+              context: legacyContext,
+              context_structured: JSON.stringify(contextRich),
+            },
+          })
+        } catch (err) {
+          console.error("Error creating math question group", err)
+          errorCount += groupItems.length
+          pushMathFailure(firstOriginalIndex, `寫入題組失敗：${describeDbError(err)}`)
+          continue
+        }
 
         existing.groupTextKeys.add(gTextKey)
         existing.groupExternalIds.add(gExternalKey)
         groupCount += 1
 
         for (let index = 0; index < groupItems.length; index += 1) {
-          const q = groupItems[index]
+          const { q, originalIndex: qOriginalIndex } = groupItems[index]
           const qSubjectId = subjectMap.get(q.subject) ?? subjectId
 
           const questionRich = buildRichContent(q.question_text, q.question_latex, q.question_image_url)
@@ -882,7 +915,7 @@ async function importMathQuestions(
                   target.visibility === "study_group"
                     ? target.shared_study_group_id
                     : null,
-                group_id: createdGroup.id,
+                group_id: createdGroup!.id,
                 group_order: index,
               },
             })
@@ -894,6 +927,7 @@ async function importMathQuestions(
           } catch (err) {
             console.error("Error creating math grouped question", err)
             errorCount += 1
+            pushMathFailure(qOriginalIndex, `寫入小題失敗：${describeDbError(err)}`)
           }
         }
       }
@@ -909,6 +943,7 @@ async function importMathQuestions(
       groupCount,
       groupQuestionCount,
       duplicateGroupCount,
+      failures,
     }
   }
 
@@ -927,5 +962,6 @@ async function importMathQuestions(
     groupCount,
     groupQuestionCount,
     duplicateGroupCount,
+    failures,
   }
 }

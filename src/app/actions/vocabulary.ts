@@ -42,6 +42,7 @@ function buildVocabularyImportResult(
     groupCount: partial.groupCount ?? 0,
     groupQuestionCount: partial.groupQuestionCount ?? 0,
     duplicateGroupCount: partial.duplicateGroupCount ?? 0,
+    failures: partial.failures ?? [],
   }
 }
 

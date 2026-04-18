@@ -35,6 +35,73 @@ export type ImportPreviewSummary = {
   duplicateSuspectCount: number
 }
 
+export type ImportFailure = {
+  index: number
+  childIndex?: number
+  label: string
+  reason: string
+}
+
+function pickString(source: unknown, keys: string[]): string | undefined {
+  if (!source || typeof source !== "object" || Array.isArray(source)) return undefined
+  const record = source as Record<string, unknown>
+  for (const key of keys) {
+    const value = record[key]
+    if (typeof value === "string" && value.trim()) return value.trim()
+  }
+  return undefined
+}
+
+function previewText(text: string, max = 30): string {
+  const trimmed = text.trim()
+  if (trimmed.length <= max) return trimmed
+  return `${trimmed.slice(0, max)}…`
+}
+
+export function buildFailureLabel(
+  rawPayload: unknown,
+  index: number,
+  childIndex?: number,
+): string {
+  const array = Array.isArray(rawPayload) ? rawPayload : undefined
+  const item = array?.[index]
+  const subject = pickString(item, ["subject"]) ?? "(未知科目)"
+
+  if (childIndex !== undefined && item && typeof item === "object") {
+    const questions = (item as Record<string, unknown>).questions
+    const child = Array.isArray(questions) ? questions[childIndex] : undefined
+    const body = pickString(child, ["question", "question_text", "question_latex"]) ?? "(小題)"
+    return `${subject} · 第 ${index + 1} 組 / 小題 ${childIndex + 1} · ${previewText(body)}`
+  }
+
+  const groupTitle = pickString(item, ["group_title", "title"])
+  const groupContext = pickString(item, ["group_context", "context"])
+  if (groupTitle || groupContext) {
+    const body = groupTitle ?? groupContext ?? ""
+    return `${subject} · 題組 · ${previewText(body)}`
+  }
+
+  const body = pickString(item, ["question", "question_text", "question_latex"]) ?? "(單題)"
+  return `${subject} · ${previewText(body)}`
+}
+
+export function zodIssueToFailure(issue: z.ZodIssue, rawPayload: unknown): ImportFailure {
+  const path = issue.path
+  const index = typeof path[0] === "number" ? path[0] : 0
+  const childIndex =
+    path[1] === "questions" && typeof path[2] === "number" ? path[2] : undefined
+  return {
+    index,
+    childIndex,
+    label: buildFailureLabel(rawPayload, index, childIndex),
+    reason: issue.message,
+  }
+}
+
+export function zodErrorToFailures(error: z.ZodError, rawPayload: unknown): ImportFailure[] {
+  return error.issues.map((issue) => zodIssueToFailure(issue, rawPayload))
+}
+
 function stripMarkdownCodeFence(raw: string) {
   const trimmed = raw.trim()
   const fenced = trimmed.match(/^```(?:json)?\s*([\s\S]*?)\s*```$/i)

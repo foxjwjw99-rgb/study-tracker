@@ -2,35 +2,26 @@ import { ImportClient } from "./import-client"
 import { QuestionManagementClient } from "./question-management-client"
 import { VocabularyImportClient } from "./vocabulary-import-client"
 import { CopyPromptButton } from "./copy-prompt-button"
-import { QuestionGroupImportClient } from "./question-group-import-client"
-import { UnitMappingClient } from "./unit-mapping-client"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { getStudyGroupsForCurrentUser } from "@/app/actions/study-group"
 import { getPracticeQuestionBank } from "@/app/actions/practice-log"
-import prisma from "@/lib/prisma"
-import { getCurrentUserOrThrow } from "@/lib/current-user"
 
 export default async function ImportPage() {
-  const user = await getCurrentUserOrThrow()
-  const [studyGroups, questionBank, subjects, subjectUnits] = await Promise.all([
+  const [studyGroups, questionBank] = await Promise.all([
     getStudyGroupsForCurrentUser(),
     getPracticeQuestionBank(),
-    prisma.subject.findMany({ where: { user_id: user.id } }),
-    prisma.subjectUnit.findMany({ where: { subject: { user_id: user.id } }, include: { subject: true } }),
   ])
 
   return (
     <div className="max-w-4xl space-y-6">
       <div>
         <h1 className="text-3xl font-bold tracking-tight mb-2">匯入資料</h1>
-        <p className="text-muted-foreground">題目匯入現在以統一 JSON 管線為主：貼上 / 上傳 → 驗證 → 預覽 → 去重 → 寫入。題組表格匯入與英文單字匯入則保留在下方。</p>
+        <p className="text-muted-foreground">題目匯入以統一管線處理：JSON / CSV / Excel 皆可，貼上或上傳後會自動偵測格式，驗證失敗的項目會列出個別原因，不影響其他項目匯入。</p>
       </div>
 
       <Tabs defaultValue="questions" className="space-y-6">
         <TabsList className="w-full sm:w-auto">
           <TabsTrigger value="questions">題目匯入</TabsTrigger>
-          <TabsTrigger value="question-groups">題組表格匯入</TabsTrigger>
-          <TabsTrigger value="unit-mapping">批量驗證</TabsTrigger>
           <TabsTrigger value="manage">管理題目</TabsTrigger>
           <TabsTrigger value="vocabulary">英文單字</TabsTrigger>
         </TabsList>
@@ -106,61 +97,18 @@ export default async function ImportPage() {
                 <li>匯入時會優先用 <strong>external_id</strong> 做去重；沒有 external_id 才退回題目文字或題組情境比對。</li>
                 <li><strong>請直接貼原始 JSON 陣列</strong>，不要加說明文字；如果有 markdown code fence，系統會先自動去掉。</li>
               </ul>
-            </div>
-          </details>
-        </TabsContent>
-
-        <TabsContent value="question-groups" className="space-y-6">
-          <QuestionGroupImportClient studyGroups={studyGroups} />
-          <details className="group rounded-lg border">
-            <summary className="flex cursor-pointer select-none list-none items-center justify-between px-4 py-3 text-sm font-medium [&::-webkit-details-marker]:hidden">
-              格式說明
-              <svg className="h-4 w-4 shrink-0 transition-transform group-open:rotate-180" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m6 9 6 6 6-6"/></svg>
-            </summary>
-            <div className="prose max-w-none prose-sm dark:prose-invert px-4 pb-4 pt-2">
-              <h3>題組表格 / 補充格式說明</h3>
-              <p><strong>JSON 格式</strong>：若你只想匯入題組，也可在這裡使用一個題組物件陣列：</p>
-              <pre className="overflow-x-auto"><code>{`[
-  {
-    "subject": "國文",
-    "topic": "閱讀測驗",
-    "group_title": "第一題組（選填）",
-    "group_context": "閱讀下文，回答第 1–2 題...",
-    "questions": [
-      {
-        "question": "第一小題題目",
-        "options": ["選項A", "選項B", "選項C", "選項D"],
-        "answer": 0,
-        "explanation": "選填解析"
-      },
-      {
-        "question": "第二小題（填空）",
-        "question_type": "fill_in_blank",
-        "text_answer": "答案1|答案2"
-      }
-    ]
-  }
-]`}</code></pre>
-              <p><strong>表格格式（CSV / Excel）</strong>：需包含以下欄位標題：</p>
+              <h3 className="text-base font-semibold mt-4">CSV / Excel 題組表格格式</h3>
+              <p>若上傳 CSV 或 Excel 檔，系統會依欄位 <code>group_context</code> 是否存在自動判斷：</p>
+              <p><strong>單題 CSV</strong>（無 <code>group_context</code>）：</p>
+              <pre className="overflow-x-auto"><code>{`subject, topic, question, option_a, option_b, option_c, option_d, answer, explanation`}</code></pre>
+              <p><strong>題組 CSV / Excel</strong>（含 <code>group_context</code>）：</p>
               <pre className="overflow-x-auto"><code>{`subject, topic, group_title, group_context, question, option_A, option_B, option_C, option_D, answer, explanation`}</code></pre>
               <ul>
-                <li>相同 <strong>subject + topic + group_context</strong> 的列會自動歸為同一題組。</li>
-                <li><strong>answer</strong> 填 A/B/C/D 或 1/2/3/4；若無選項欄位則視為填空題。</li>
-                <li>重複的題組（相同科目 + 相同情境）將自動跳過。</li>
+                <li>題組 CSV 中相同 <strong>subject + topic + group_context</strong> 的列會自動歸為同一題組。</li>
+                <li><strong>answer</strong> 可填 A/B/C/D 或 0/1/2/3（單題 CSV）、A/B/C/D 或 1/2/3/4（題組 CSV）；若無選項欄位則視為填空題。</li>
               </ul>
             </div>
           </details>
-        </TabsContent>
-
-        <TabsContent value="unit-mapping" className="space-y-6">
-          <UnitMappingClient 
-            subjects={subjects}
-            subjectUnits={subjectUnits.map(u => ({
-              id: u.id,
-              subjectId: u.subject_id,
-              name: u.name
-            }))}
-          />
         </TabsContent>
 
         <TabsContent value="manage" className="space-y-6">
