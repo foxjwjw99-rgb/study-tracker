@@ -458,7 +458,17 @@ export function StudyLogForm({
     const submittedNotes = (formData.get("notes") as string) || ""
     const submittedPlannedDone = formData.get("planned_done") === "on"
 
-    const totalMinutes = actualFocusMinutes
+    const liveRemainingSeconds =
+      isRunning && endAtRef.current
+        ? Math.max(0, Math.round((endAtRef.current - Date.now()) / 1000))
+        : remainingSeconds
+    const liveFocusSeconds = getActualFocusSeconds({
+      elapsedFocusSeconds,
+      phase,
+      remainingSeconds: liveRemainingSeconds,
+      focusMinutes: timerSettings.focusMinutes,
+    })
+    const totalMinutes = getDisplayMinutesFromSeconds(liveFocusSeconds)
 
     if (!subject_id || !submittedTopic) {
       toast.error("先選科目並填寫主題，才能結束本次專注。")
@@ -494,7 +504,7 @@ export function StudyLogForm({
 
   function startTimer() {
     maybeRequestNotificationPermission()
-    const nextEndAt = window.performance.timeOrigin + window.performance.now() + remainingSeconds * 1000
+    const nextEndAt = Date.now() + remainingSeconds * 1000
     endAtRef.current = nextEndAt
     setIsRunning(true)
     setEndAt(nextEndAt)
@@ -1004,11 +1014,11 @@ function getActualFocusSeconds({
 }
 
 function getDisplayMinutesFromSeconds(totalSeconds: number) {
-  if (totalSeconds <= 0) {
+  if (totalSeconds < 30) {
     return 0
   }
 
-  return Math.max(1, Math.floor(totalSeconds / 60))
+  return Math.max(1, Math.round(totalSeconds / 60))
 }
 
 function clampMinutes(value: number, fallback: number) {
