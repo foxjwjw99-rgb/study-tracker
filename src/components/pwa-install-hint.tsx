@@ -31,7 +31,7 @@ export function PwaInstallHint() {
   }
 
   return (
-    <div className="fixed inset-x-4 bottom-4 z-50 rounded-2xl border border-border/80 bg-card/95 p-4 shadow-[0_20px_40px_rgba(76,95,140,0.12)] backdrop-blur">
+    <div className="fixed inset-x-4 bottom-4 z-50 rounded-2xl border border-border/80 bg-card/95 p-4 shadow-brand-xl backdrop-blur">
       <div className="flex items-start gap-3">
         <div className="rounded-2xl bg-primary/10 p-2 text-primary">
           <Smartphone className="h-5 w-5" />

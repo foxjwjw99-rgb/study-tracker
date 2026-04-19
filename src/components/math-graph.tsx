@@ -27,7 +27,7 @@ const tooltipStyle = {
   borderRadius: "14px",
   border: "1px solid color-mix(in oklab, var(--color-border) 88%, transparent)",
   background: "color-mix(in oklab, var(--color-card) 96%, white)",
-  boxShadow: "0 16px 40px rgba(76,95,140,0.12)",
+  boxShadow: "var(--shadow-brand-deep)",
   fontSize: 12,
 }
 
