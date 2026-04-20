@@ -78,7 +78,7 @@ export function MainNav({
       {NAV_SECTIONS.map((section, i) => (
         <div key={i} className="space-y-0.5">
           {section.label ? (
-            <p className="mb-1 px-3 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground/50">
+            <p className="mb-1 px-3 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">
               {section.label}
             </p>
           ) : null}
