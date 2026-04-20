@@ -145,8 +145,9 @@
     @apply bg-background text-foreground;
     min-height: 100dvh;
     background-image:
-      radial-gradient(circle at top, color-mix(in oklab, var(--primary) 9%, transparent) 0%, transparent 34%),
-      radial-gradient(circle at 100% 0%, color-mix(in oklab, var(--secondary) 18%, transparent) 0%, transparent 22%);
+      radial-gradient(ellipse 80% 50% at 20% -5%, color-mix(in oklab, var(--primary) 13%, transparent) 0%, transparent 100%),
+      radial-gradient(ellipse 55% 40% at 85% 0%, color-mix(in oklab, var(--secondary) 24%, transparent) 0%, transparent 100%),
+      radial-gradient(ellipse 40% 50% at 50% 105%, color-mix(in oklab, var(--accent) 10%, transparent) 0%, transparent 100%);
   }
 
   ::selection {
@@ -158,6 +159,7 @@
 @layer utilities {
   .surface-card {
     @apply rounded-2xl border border-border/80 bg-card/95 shadow-brand-soft backdrop-blur-sm;
+    background-image: linear-gradient(160deg, color-mix(in oklab, white 4.5%, transparent) 0%, transparent 45%);
   }
 
   .surface-subtle {
@@ -191,10 +193,21 @@
 
 /* Page fade-in */
 @keyframes page-in {
-  from { opacity: 0; }
-  to   { opacity: 1; }
+  from { opacity: 0; transform: translateY(4px); }
+  to   { opacity: 1; transform: translateY(0); }
 }
 
 main > * {
-  animation: page-in 0.22s ease both;
+  animation: page-in 0.25s ease both;
 }
+
+/* Stagger children fade-up */
+@keyframes fade-up {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.stagger-children > :nth-child(1) { animation: fade-up 0.3s ease 0ms   both; }
+.stagger-children > :nth-child(2) { animation: fade-up 0.3s ease 60ms  both; }
+.stagger-children > :nth-child(3) { animation: fade-up 0.3s ease 120ms both; }
+.stagger-children > :nth-child(4) { animation: fade-up 0.3s ease 180ms both; }

@@ -20,11 +20,13 @@ import {
   readinessLabel,
   readinessBadgeClass,
   readinessBarClass,
+  readinessScoreColorClass,
   coverageBarClass,
   momentumLabel,
   priorityLabel,
   priorityBadgeClass,
   planStepToneClass,
+  planStepAccentClass,
   statusBadgeClass,
 } from "@/lib/readiness"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -47,6 +49,7 @@ const summaryCards = [
     helper: "專注投入",
     icon: Clock3,
     accent: "text-primary",
+    iconBg: "bg-primary/12",
   },
   {
     key: "accuracy",
@@ -54,6 +57,7 @@ const summaryCards = [
     helper: "做題表現",
     icon: Target,
     accent: "text-emerald-600",
+    iconBg: "bg-emerald-500/12",
   },
   {
     key: "review",
@@ -61,6 +65,7 @@ const summaryCards = [
     helper: "今天要處理",
     icon: CalendarClock,
     accent: "text-amber-600",
+    iconBg: "bg-amber-500/12",
   },
   {
     key: "exam",
@@ -68,6 +73,7 @@ const summaryCards = [
     helper: "剩餘時間",
     icon: TrendingUp,
     accent: "text-sky-600",
+    iconBg: "bg-sky-500/12",
   },
 ] as const
 
@@ -179,7 +185,7 @@ export default async function DashboardPage() {
               </div>
             </div>
 
-            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+            <div className="stagger-children grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
               <SummaryCard
                 label={summaryCards[0].label}
                 value={`${data.todaysStudyMinutes} 分鐘`}
@@ -187,6 +193,7 @@ export default async function DashboardPage() {
                 detail={data.streakDays > 0 ? `已連續學習 ${data.streakDays} 天` : "今天也值得開始一小段"}
                 icon={summaryCards[0].icon}
                 accent={summaryCards[0].accent}
+                iconBg={summaryCards[0].iconBg}
               />
               <SummaryCard
                 label={summaryCards[1].label}
@@ -195,6 +202,7 @@ export default async function DashboardPage() {
                 detail={data.todaysAccuracy !== null ? "用結果校準練習節奏" : "做一組題目後就會出現"}
                 icon={summaryCards[1].icon}
                 accent={summaryCards[1].accent}
+                iconBg={summaryCards[1].iconBg}
               />
               <SummaryCard
                 label={summaryCards[2].label}
@@ -203,6 +211,7 @@ export default async function DashboardPage() {
                 detail={reviewHelper}
                 icon={summaryCards[2].icon}
                 accent={summaryCards[2].accent}
+                iconBg={summaryCards[2].iconBg}
               />
               <SummaryCard
                 label={summaryCards[3].label}
@@ -211,6 +220,7 @@ export default async function DashboardPage() {
                 detail={examHelper}
                 icon={summaryCards[3].icon}
                 accent={summaryCards[3].accent}
+                iconBg={summaryCards[3].iconBg}
               />
             </div>
           </CardContent>
@@ -465,6 +475,7 @@ function SummaryCard({
   detail,
   icon: Icon,
   accent,
+  iconBg,
 }: {
   label: string
   value: string
@@ -472,19 +483,20 @@ function SummaryCard({
   detail: string
   icon: ComponentType<{ className?: string }>
   accent: string
+  iconBg: string
 }) {
   return (
-    <div className="rounded-2xl border border-border/70 bg-background/75 p-4">
+    <div className="rounded-2xl border border-border/70 bg-background/75 p-4 transition-all duration-200 hover:-translate-y-0.5 hover:shadow-brand-soft">
       <div className="flex items-start justify-between gap-3">
         <div>
           <p className="text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">{helper}</p>
           <p className="mt-2 text-sm font-medium text-foreground">{label}</p>
         </div>
-        <div className={`rounded-2xl bg-muted/80 p-2 ${accent}`}>
+        <div className={`rounded-xl ${iconBg} p-2.5 ${accent}`}>
           <Icon className="h-4 w-4" />
         </div>
       </div>
-      <div className="mt-5 text-3xl font-semibold tracking-tight text-foreground">{value}</div>
+      <div className={`mt-5 text-3xl font-semibold tracking-tight ${accent}`}>{value}</div>
       <p className="mt-2 text-sm text-muted-foreground">{detail}</p>
     </div>
   )
@@ -508,13 +520,13 @@ function SubjectReadinessCard({ item }: { item: DashboardSubjectReadinessItem })
 
         <div className="space-y-2">
           <div className="flex items-end justify-between gap-3">
-            <div className="text-4xl font-semibold tracking-tight text-foreground">{item.score}</div>
+            <div className={`text-4xl font-semibold tracking-tight ${readinessScoreColorClass(item.level)}`}>{item.score}</div>
             <div className="text-right text-xs text-muted-foreground">
               <p>{momentumLabel(item.momentum)}</p>
               <p>{item.lastActivityDays !== null ? `上次碰這科：${item.lastActivityDays} 天前` : "還沒有活動紀錄"}</p>
             </div>
           </div>
-          <div className="h-2 overflow-hidden rounded-full bg-muted">
+          <div className="h-2.5 overflow-hidden rounded-full bg-muted">
             <div
               className={`h-full rounded-full transition-all ${readinessBarClass(item.level)}`}
               style={{ width: `${item.score}%` }}
@@ -578,7 +590,7 @@ function CoverageOverviewCard({ item }: { item: DashboardSubjectCoverageItem }) 
         </div>
 
         <div className="space-y-2">
-          <div className="h-2 overflow-hidden rounded-full bg-muted">
+          <div className="h-2.5 overflow-hidden rounded-full bg-muted">
             <div
               className={`h-full rounded-full transition-all ${coverageBarClass(item.coverageRate)}`}
               style={{ width: `${item.coverageRate}%` }}
@@ -684,7 +696,8 @@ function MetricChip({ label, value }: { label: string; value: string }) {
 
 function PlanStep({ item, index }: { item: DashboardPlanItem; index: number }) {
   return (
-    <Link href={item.href} className="block rounded-2xl border border-border/70 bg-background/70 p-4 transition-all duration-200 hover:-translate-y-0.5 hover:border-primary/30 hover:bg-background">
+    <Link href={item.href} className="group relative block overflow-hidden rounded-2xl border border-border/70 bg-background/70 p-4 pl-5 transition-all duration-200 hover:-translate-y-0.5 hover:border-primary/30 hover:bg-background">
+      <div className={`absolute inset-y-3 left-2 w-[3px] rounded-full ${planStepAccentClass(item.tone)}`} />
       <div className="flex items-start gap-3">
         <div className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-semibold ${planStepToneClass(item.tone)}`}>
           {index + 1}
@@ -694,7 +707,7 @@ function PlanStep({ item, index }: { item: DashboardPlanItem; index: number }) {
           <p className="text-sm leading-6 text-muted-foreground">{item.description}</p>
           <p className="text-xs text-muted-foreground">{item.reason}</p>
         </div>
-        <ArrowRight className="mt-1 h-4 w-4 shrink-0 text-muted-foreground" />
+        <ArrowRight className="mt-1 h-4 w-4 shrink-0 text-muted-foreground transition-transform duration-150 group-hover:translate-x-0.5 group-hover:text-primary" />
       </div>
     </Link>
   )
@@ -856,8 +869,8 @@ function VocabularySubjectCard({ item }: { item: DashboardSubjectReadinessItem }
               <p>共 {item.vocabularyTotalWords} 個單字</p>
             </div>
           </div>
-          <div className="h-2 overflow-hidden rounded-full bg-muted">
-            <div className="h-full rounded-full bg-sky-500 transition-all" style={{ width: `${familiarity}%` }} />
+          <div className="h-2.5 overflow-hidden rounded-full bg-muted">
+            <div className="h-full rounded-full bg-gradient-to-r from-sky-400 to-sky-600 transition-all" style={{ width: `${familiarity}%` }} />
           </div>
         </div>
 
@@ -931,7 +944,7 @@ function StreakMilestoneSection({
                 <p className="text-xs text-muted-foreground">距離下個里程碑：{nextMilestone} 天</p>
                 <div className="h-1.5 w-full overflow-hidden rounded-full bg-muted">
                   <div
-                    className="h-full rounded-full bg-amber-500 transition-all"
+                    className="h-full rounded-full bg-gradient-to-r from-amber-400 to-orange-500 transition-all"
                     style={{ width: `${streakProgress}%` }}
                   />
                 </div>
@@ -1047,8 +1060,11 @@ function ActionTile({
   description: string
 }) {
   return (
-    <Link href={href} className="block rounded-2xl border border-border/70 bg-background/70 p-4 transition-all duration-200 hover:border-primary/30 hover:bg-background">
-      <p className="text-sm font-medium text-foreground">{title}</p>
+    <Link href={href} className="group block rounded-2xl border border-border/70 bg-background/70 p-4 transition-all duration-200 hover:-translate-y-0.5 hover:border-primary/30 hover:bg-background">
+      <div className="flex items-center justify-between gap-2">
+        <p className="text-sm font-medium text-foreground">{title}</p>
+        <ArrowRight className="h-3.5 w-3.5 shrink-0 text-muted-foreground/60 transition-all duration-150 group-hover:translate-x-0.5 group-hover:text-primary" />
+      </div>
       <p className="mt-1 text-sm leading-6 text-muted-foreground">{description}</p>
     </Link>
   )

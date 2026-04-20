@@ -93,12 +93,12 @@ export function MainNav({
                 className={cn(
                   "relative flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-all duration-150",
                   isActive
-                    ? "bg-primary/10 text-primary"
+                    ? "bg-gradient-to-r from-primary/14 to-primary/5 text-primary"
                     : "text-muted-foreground hover:bg-accent/60 hover:text-foreground"
                 )}
               >
                 {isActive && (
-                  <span className="absolute left-0 top-1/2 h-5 w-0.5 -translate-y-1/2 rounded-r-full bg-primary" />
+                  <span className="absolute left-0 top-1/2 h-6 w-[3px] -translate-y-1/2 rounded-r-full bg-primary shadow-[0_0_8px_color-mix(in_oklab,var(--primary)_55%,transparent)]" />
                 )}
                 <item.icon className="h-4 w-4 shrink-0" />
                 {item.title}
