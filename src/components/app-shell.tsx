@@ -41,6 +41,12 @@ export function AppShell({ children, currentUser }: AppShellProps) {
 
   return (
     <div className="flex min-h-screen bg-transparent">
+      <a
+        href="#main"
+        className="sr-only focus:not-sr-only focus:absolute focus:left-4 focus:top-4 focus:z-50 focus:rounded-lg focus:bg-background focus:px-4 focus:py-2 focus:text-sm focus:font-medium focus:text-foreground focus:shadow-brand-mid focus:outline-none focus:ring-3 focus:ring-ring/50"
+      >
+        跳到主要內容
+      </a>
       {/* Desktop Sidebar */}
       <aside className="fixed inset-y-0 left-0 z-20 hidden w-64 flex-col border-r border-sidebar-border bg-sidebar md:flex">
         {/* Sidebar Header */}
@@ -56,7 +62,7 @@ export function AppShell({ children, currentUser }: AppShellProps) {
 
         {/* Nav */}
         <div className="flex-1 overflow-auto py-4">
-          <MainNav className="px-3" />
+          <MainNav className="px-3" aria-label="主要導覽" />
         </div>
 
         {/* Sign Out */}
@@ -87,7 +93,7 @@ export function AppShell({ children, currentUser }: AppShellProps) {
                   </div>
                 </SheetHeader>
                 <div className="space-y-4 overflow-auto px-3 py-4">
-                  <MainNav onNavigate={() => setIsMenuOpen(false)} />
+                  <MainNav onNavigate={() => setIsMenuOpen(false)} aria-label="主要導覽" />
                   <div className="border-t pt-4">
                     <SignOutButton />
                   </div>
@@ -111,7 +117,7 @@ export function AppShell({ children, currentUser }: AppShellProps) {
         </header>
 
         {/* Page content — bottom padding accounts for mobile bottom nav */}
-        <main className="flex-1 p-4 pb-[calc(4.5rem+env(safe-area-inset-bottom))] sm:p-6 sm:pb-[calc(4.5rem+env(safe-area-inset-bottom))] md:p-6 md:pb-6 lg:p-8">
+        <main id="main" className="flex-1 p-4 pb-[calc(4.5rem+env(safe-area-inset-bottom))] sm:p-6 sm:pb-[calc(4.5rem+env(safe-area-inset-bottom))] md:p-6 md:pb-6 lg:p-8">
           {children}
         </main>
       </div>
@@ -128,11 +134,18 @@ export function AppShell({ children, currentUser }: AppShellProps) {
             <Link
               key={item.href}
               href={item.href}
+              aria-current={isActive ? "page" : undefined}
               className={cn(
-                "flex flex-1 flex-col items-center gap-0.5 py-2.5 text-[10px] font-medium transition-colors",
+                "relative flex flex-1 flex-col items-center gap-0.5 py-3.5 text-xs font-medium transition-colors",
                 isActive ? "text-primary" : "text-muted-foreground"
               )}
             >
+              {isActive && (
+                <span
+                  aria-hidden="true"
+                  className="absolute inset-x-6 top-0 h-0.5 rounded-full bg-primary"
+                />
+              )}
               <item.icon
                 className={cn(
                   "h-5 w-5 transition-transform duration-150",
