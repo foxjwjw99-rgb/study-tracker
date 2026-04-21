@@ -34,21 +34,47 @@ export function readinessBadgeClass(level: DashboardSubjectReadinessItem["level"
 export function readinessBarClass(level: DashboardSubjectReadinessItem["level"]) {
   switch (level) {
     case "strong":
-      return "bg-emerald-500"
+      return "bg-gradient-to-r from-emerald-400 to-emerald-600"
     case "steady":
-      return "bg-sky-500"
+      return "bg-gradient-to-r from-sky-400 to-sky-600"
     case "warning":
-      return "bg-amber-500"
+      return "bg-gradient-to-r from-amber-400 to-amber-600"
     default:
-      return "bg-rose-500"
+      return "bg-gradient-to-r from-rose-400 to-rose-600"
+  }
+}
+
+export function readinessScoreColorClass(level: DashboardSubjectReadinessItem["level"]) {
+  switch (level) {
+    case "strong":
+      return "text-emerald-600 dark:text-emerald-400"
+    case "steady":
+      return "text-sky-600 dark:text-sky-400"
+    case "warning":
+      return "text-amber-600 dark:text-amber-400"
+    default:
+      return "text-rose-600 dark:text-rose-400"
   }
 }
 
 export function coverageBarClass(rate: number) {
-  if (rate >= 80) return "bg-emerald-500"
-  if (rate >= 60) return "bg-sky-500"
-  if (rate >= 40) return "bg-amber-500"
-  return "bg-rose-500"
+  if (rate >= 80) return "bg-gradient-to-r from-emerald-400 to-emerald-600"
+  if (rate >= 60) return "bg-gradient-to-r from-sky-400 to-sky-600"
+  if (rate >= 40) return "bg-gradient-to-r from-amber-400 to-amber-600"
+  return "bg-gradient-to-r from-rose-400 to-rose-600"
+}
+
+export function planStepAccentClass(tone: DashboardPlanItem["tone"]) {
+  switch (tone) {
+    case "danger":
+      return "bg-rose-500"
+    case "warning":
+      return "bg-amber-500"
+    case "success":
+      return "bg-emerald-500"
+    default:
+      return "bg-primary"
+  }
 }
 
 export function momentumLabel(momentum: DashboardSubjectReadinessItem["momentum"]) {

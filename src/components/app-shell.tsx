@@ -2,7 +2,7 @@
 
 import Link from "next/link"
 import { useState } from "react"
-import { Menu } from "lucide-react"
+import { GraduationCap, Menu } from "lucide-react"
 import { usePathname } from "next/navigation"
 
 import { SignOutButton } from "@/components/auth/sign-out-button"
@@ -51,12 +51,12 @@ export function AppShell({ children, currentUser }: AppShellProps) {
       <aside className="fixed inset-y-0 left-0 z-20 hidden w-64 flex-col border-r border-sidebar-border bg-sidebar md:flex">
         {/* Sidebar Header */}
         <div className="flex h-18 items-center gap-3 border-b border-sidebar-border px-5 py-4">
-          <UserAvatar name={currentUser.name} />
+          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-primary to-primary/70 shadow-[0_4px_10px_color-mix(in_oklab,var(--primary)_35%,transparent)]">
+            <GraduationCap className="h-4 w-4 text-primary-foreground" />
+          </div>
           <div className="min-w-0">
-            <span className="block truncate text-sm font-semibold leading-tight">
-              {currentUser.name}
-            </span>
-            <span className="block text-xs text-muted-foreground">Study Tracker</span>
+            <span className="block truncate text-sm font-semibold leading-tight">學習追蹤器</span>
+            <span className="block truncate text-xs text-muted-foreground">{currentUser.name}</span>
           </div>
         </div>
 
@@ -85,10 +85,12 @@ export function AppShell({ children, currentUser }: AppShellProps) {
               <SheetContent side="left" className="w-[80vw] max-w-xs p-0">
                 <SheetHeader className="border-b px-5 py-4">
                   <div className="flex items-center gap-3">
-                    <UserAvatar name={currentUser.name} />
+                    <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-primary to-primary/70 shadow-[0_4px_10px_color-mix(in_oklab,var(--primary)_35%,transparent)]">
+                      <GraduationCap className="h-4 w-4 text-primary-foreground" />
+                    </div>
                     <div className="min-w-0">
-                      <SheetTitle className="truncate text-sm">{currentUser.name}</SheetTitle>
-                      <SheetDescription className="text-xs">Study Tracker</SheetDescription>
+                      <SheetTitle className="truncate text-sm">學習追蹤器</SheetTitle>
+                      <SheetDescription className="truncate text-xs">{currentUser.name}</SheetDescription>
                     </div>
                   </div>
                 </SheetHeader>
