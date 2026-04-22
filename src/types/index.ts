@@ -14,7 +14,15 @@ export type SubjectDeletionImpact = {
   wrongQuestionsCount: number
   reviewTasksCount: number
   questionsCount: number
-  vocabularyWordsCount: number
+  totalCount: number
+}
+
+export type VocabularyListDeletionImpact = {
+  listId: string
+  listName: string
+  wordsCount: number
+  reviewLogsCount: number
+  reviewTasksCount: number
   totalCount: number
 }
 
@@ -48,6 +56,12 @@ export type PracticeLogListItem = Prisma.PracticeLogGetPayload<{
 export type ReviewTaskItem = Prisma.ReviewTaskGetPayload<{
   include: {
     subject: {
+      select: {
+        id: true
+        name: true
+      }
+    }
+    vocabulary_list: {
       select: {
         id: true
         name: true
@@ -129,10 +143,17 @@ export type DashboardSubjectReadinessItem = {
   lastActivityDays: number | null
   weakTopic: string | null
   suggestedAction: string
-  vocabularyDue: number
-  vocabularyFamiliarRate: number | null
-  vocabularyTotalWords: number
   factors: ReadinessFactorBreakdown
+}
+
+export type DashboardVocabularyListItem = {
+  listId: string
+  listName: string
+  totalWords: number
+  dueWords: number
+  familiarWords: number
+  familiarRate: number | null
+  lastActivityDays: number | null
 }
 
 export type DashboardWeakAreaItem = {
@@ -172,7 +193,7 @@ export type DashboardVocabularyOverview = {
   dueWords: number
   familiarRate: number | null
   reviewedThisWeek: number
-  activeSubjects: number
+  activeLists: number
 }
 
 export type DashboardSubjectCoverageItem = {
@@ -227,6 +248,7 @@ export type DashboardData = {
   weakTopics: WeakTopicItem[]
   nextReviewFocus: DashboardReviewFocusItem[]
   subjectReadiness: DashboardSubjectReadinessItem[]
+  vocabularyListStats: DashboardVocabularyListItem[]
   weakestAreas: DashboardWeakAreaItem[]
   subjectCoverage: DashboardSubjectCoverageItem[]
   subjectTopicSections: DashboardSubjectTopicSectionItem[]
@@ -283,7 +305,7 @@ export type VocabularyDifficultyItem = {
   id: string
   word: string
   meaning: string
-  subjectName: string
+  listName: string
   status: "NEW" | "LEARNING" | "FAMILIAR"
   lapseCount: number
   easeFactor: number
@@ -293,9 +315,9 @@ export type VocabularyDifficultyItem = {
   intervalDays: number
 }
 
-export type VocabularySubjectProgressItem = {
-  subjectId: string
-  subjectName: string
+export type VocabularyListProgressItem = {
+  listId: string
+  listName: string
   totalWords: number
   dueWords: number
   familiarWords: number
@@ -311,7 +333,7 @@ export type AnalyticsData = {
   vocabularyStatusDistribution: VocabularyStatusDistributionItem[]
   vocabularyTrend: VocabularyDailyTrendPoint[]
   vocabularyDifficultWords: VocabularyDifficultyItem[]
-  vocabularySubjectProgress: VocabularySubjectProgressItem[]
+  vocabularyListProgress: VocabularyListProgressItem[]
 }
 
 export type ActionResult = {
@@ -377,7 +399,7 @@ export type VocabularyConfidenceLevel = 1 | 2 | 3 | 4 | 5
 
 export type VocabularyWordItem = Prisma.VocabularyWordGetPayload<{
   include: {
-    subject: {
+    list: {
       select: {
         id: true
         name: true
@@ -387,7 +409,8 @@ export type VocabularyWordItem = Prisma.VocabularyWordGetPayload<{
 }>
 
 export type VocabularyImportItem = {
-  subject: string
+  list_name?: string
+  subject?: string
   word: string
   part_of_speech?: string
   meaning: string
@@ -395,8 +418,14 @@ export type VocabularyImportItem = {
 }
 
 export type VocabularyBankItem = {
-  subject_id: string
-  subject_name: string
+  list_id: string
+  list_name: string
+  word_count: number
+}
+
+export type VocabularyListSummary = {
+  id: string
+  name: string
   word_count: number
 }
 
@@ -408,8 +437,8 @@ export type VocabularyQueueItem = {
   example_sentence: string
   example_sentence_translation: string | null
   status: VocabularyStatus
-  subject_id: string
-  subject_name: string
+  list_id: string
+  list_name: string
   next_review_date: Date | null
   last_reviewed_at: Date | null
   ease_factor: number
@@ -438,7 +467,8 @@ export type VocabularySessionResult = ActionResult & {
 export type VocabularyReviewLogItem = {
   id: string
   user_id: string
-  subject_id: string
+  subject_id: string | null
+  list_id: string | null
   vocabulary_word_id: string
   review_task_id: string | null
   rating: string
@@ -517,6 +547,11 @@ export type QuestionType = "multiple_choice" | "fill_in_blank"
 export type QuestionImportTarget = {
   visibility: QuestionVisibility
   shared_study_group_id?: string
+}
+
+export type VocabularyImportTarget = QuestionImportTarget & {
+  /** If set, overrides per-item list_name; every imported word goes into this list. */
+  list_name?: string
 }
 
 export type PracticeQuestionBankSummary = {

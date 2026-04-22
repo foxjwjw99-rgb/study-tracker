@@ -45,6 +45,12 @@ export async function getReviewTasks(): Promise<ReviewTaskItem[]> {
           name: true,
         },
       },
+      vocabulary_list: {
+        select: {
+          id: true,
+          name: true,
+        },
+      },
       vocabulary_word: {
         select: {
           id: true,
@@ -210,7 +216,8 @@ export async function completeReviewTask(id: string, resultScore?: number) {
     if (
       task.source_type === REVIEW_TASK_SOURCE_TYPES.wrongQuestion &&
       task.wrong_question_id &&
-      task.wrong_question
+      task.wrong_question &&
+      task.subject_id
     ) {
       await tx.wrongQuestionReviewLog.create({
         data: {
@@ -314,7 +321,7 @@ export async function reviewVocabularyTask(
     include: {
       vocabulary_word: {
         include: {
-          subject: {
+          list: {
             select: {
               id: true,
               name: true,
@@ -342,7 +349,7 @@ export async function reviewVocabularyTask(
       userId: user.id,
       word: {
         ...vocabularyWord,
-        subject: vocabularyWord.subject,
+        list: vocabularyWord.list,
         status: vocabularyWord.status as VocabularyStatus,
       },
       rating: input.rating,

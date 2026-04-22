@@ -130,7 +130,6 @@ export function SubjectsList({ subjects }: SubjectsListProps) {
               <ImpactRow label="錯題" value={impact.wrongQuestionsCount} />
               <ImpactRow label="複習任務" value={impact.reviewTasksCount} />
               <ImpactRow label="題庫題目" value={impact.questionsCount} />
-              <ImpactRow label="單字" value={impact.vocabularyWordsCount} />
               <div className="border-t border-border/70 pt-3 font-medium text-foreground">
                 總共會刪除 {impact.totalCount} 筆相關資料
               </div>

@@ -201,9 +201,11 @@ function ReviewTaskCard({
           <div className="font-semibold">
             {task.source_type === "vocabulary" && task.vocabulary_word
               ? task.vocabulary_word.word
-              : `${task.subject.name} - ${task.topic}`}
+              : `${task.subject?.name ?? "未分類"} - ${task.topic}`}
           </div>
-          {task.source_type === "vocabulary" ? <Badge variant="outline">英文單字</Badge> : null}
+          {task.source_type === "vocabulary" ? (
+            <Badge variant="outline">{task.vocabulary_list?.name ?? "英文單字"}</Badge>
+          ) : null}
           {isOverdue ? (
             <Badge variant="destructive">逾期 {overdueDays} 天</Badge>
           ) : (

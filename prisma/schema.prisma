@@ -46,25 +46,26 @@ model User {
   image         String?
   exam_date     DateTime?
 
-  accounts                    Account[]
-  sessions                    Session[]
-  subjects                    Subject[]
-  study_logs                  StudyLog[]
-  practice_logs               PracticeLog[]
-  wrong_qs                    WrongQuestion[]
-  wrong_question_review_logs  WrongQuestionReviewLog[]
-  review_tasks                ReviewTask[]
-  questions                   Question[]
-  vocabulary_words            VocabularyWord[]
-  vocabulary_review_logs      VocabularyReviewLog[]
-  reward_draws                RewardDraw[]
-  owned_study_groups          StudyGroup[]             @relation("StudyGroupOwner")
-  study_group_members         StudyGroupMember[]
-  question_groups             QuestionGroup[]
-  exam_syllabus_units         ExamSyllabusUnit[]
-  mock_exam_records      MockExamRecord[]
-  target_programs        TargetProgram[]
-  prediction_snapshots   PredictionSnapshot[]
+  accounts                   Account[]
+  sessions                   Session[]
+  subjects                   Subject[]
+  study_logs                 StudyLog[]
+  practice_logs              PracticeLog[]
+  wrong_qs                   WrongQuestion[]
+  wrong_question_review_logs WrongQuestionReviewLog[]
+  review_tasks               ReviewTask[]
+  questions                  Question[]
+  vocabulary_words           VocabularyWord[]
+  vocabulary_lists           VocabularyList[]
+  vocabulary_review_logs     VocabularyReviewLog[]
+  reward_draws               RewardDraw[]
+  owned_study_groups         StudyGroup[]             @relation("StudyGroupOwner")
+  study_group_members        StudyGroupMember[]
+  question_groups            QuestionGroup[]
+  exam_syllabus_units        ExamSyllabusUnit[]
+  mock_exam_records          MockExamRecord[]
+  target_programs            TargetProgram[]
+  prediction_snapshots       PredictionSnapshot[]
 
   created_at DateTime @default(now())
   updated_at DateTime @updatedAt
@@ -78,19 +79,18 @@ model Subject {
   target_score Int?
   exam_weight  Float? // 佔總分比重 (0.0–1.0)，e.g. 0.4 = 40%
 
-  exam_units             SubjectUnit[]
-  study_logs             StudyLog[]
-  practice_logs          PracticeLog[]
-  wrong_qs               WrongQuestion[]
-  wrong_question_review_logs  WrongQuestionReviewLog[]
-  review_tasks           ReviewTask[]
-  questions              Question[]
-  question_groups        QuestionGroup[]
-  vocabulary_words       VocabularyWord[]
-  vocabulary_review_logs VocabularyReviewLog[]
-  exam_syllabus_units    ExamSyllabusUnit[]
-  mock_exam_records      MockExamRecord[]
-  subjectUnitAlias       SubjectUnitAlias[]
+  exam_units                 SubjectUnit[]
+  study_logs                 StudyLog[]
+  practice_logs              PracticeLog[]
+  wrong_qs                   WrongQuestion[]
+  wrong_question_review_logs WrongQuestionReviewLog[]
+  review_tasks               ReviewTask[]
+  questions                  Question[]
+  question_groups            QuestionGroup[]
+  vocabulary_review_logs     VocabularyReviewLog[]
+  exam_syllabus_units        ExamSyllabusUnit[]
+  mock_exam_records          MockExamRecord[]
+  subjectUnitAlias           SubjectUnitAlias[]
 
   created_at DateTime @default(now())
   updated_at DateTime @updatedAt
@@ -258,15 +258,15 @@ model PracticeLog {
 }
 
 model WrongQuestion {
-  id                  String               @id @default(cuid())
+  id                  String              @id @default(cuid())
   user_id             String
-  user                User                 @relation(fields: [user_id], references: [id])
+  user                User                @relation(fields: [user_id], references: [id])
   subject_id          String
-  subject             Subject              @relation(fields: [subject_id], references: [id])
+  subject             Subject             @relation(fields: [subject_id], references: [id])
   question_id         String?
-  question            Question?            @relation(fields: [question_id], references: [id], onDelete: SetNull)
+  question            Question?           @relation(fields: [question_id], references: [id], onDelete: SetNull)
   unit_id             String?
-  unit                SubjectUnit?         @relation(fields: [unit_id], references: [id], onDelete: SetNull)
+  unit                SubjectUnit?        @relation(fields: [unit_id], references: [id], onDelete: SetNull)
   topic               String
   question_text       String?
   correct_answer_text String?
@@ -277,15 +277,15 @@ model WrongQuestion {
   first_wrong_date    DateTime
   last_wrong_date     DateTime?
   last_reviewed_at    DateTime?
-  status              WrongQuestionStatus  @default(ACTIVE)
+  status              WrongQuestionStatus @default(ACTIVE)
   next_review_date    DateTime?
-  wrong_count         Int                  @default(1)
-  review_count        Int                  @default(0)
-  correct_streak      Int                  @default(0)
+  wrong_count         Int                 @default(1)
+  review_count        Int                 @default(0)
+  correct_streak      Int                 @default(0)
   retry_result        String?
   notes               String?
-  is_manual_added     Boolean              @default(false)
-  is_careless         Boolean              @default(false)
+  is_manual_added     Boolean             @default(false)
+  is_careless         Boolean             @default(false)
 
   review_tasks ReviewTask[]
   review_logs  WrongQuestionReviewLog[]
@@ -330,8 +330,10 @@ model ReviewTask {
   id                 String          @id @default(cuid())
   user_id            String
   user               User            @relation(fields: [user_id], references: [id])
-  subject_id         String
-  subject            Subject         @relation(fields: [subject_id], references: [id])
+  subject_id         String?
+  subject            Subject?        @relation(fields: [subject_id], references: [id])
+  vocabulary_list_id String?
+  vocabulary_list    VocabularyList? @relation(fields: [vocabulary_list_id], references: [id], onDelete: SetNull)
   vocabulary_word_id String?
   vocabulary_word    VocabularyWord? @relation(fields: [vocabulary_word_id], references: [id])
   wrong_question_id  String?
@@ -353,22 +355,23 @@ model ReviewTask {
   @@index([user_id, review_date, completed])
   @@index([user_id, subject_id])
   @@index([subject_id, unit_id])
+  @@index([user_id, vocabulary_list_id])
 }
 
 model QuestionGroup {
-  id          String       @id @default(cuid())
-  user_id     String
-  user        User         @relation(fields: [user_id], references: [id], onDelete: Cascade)
-  subject_id  String
-  subject     Subject      @relation(fields: [subject_id], references: [id], onDelete: Cascade)
-  topic       String
-  unit_id     String?
-  unit        SubjectUnit? @relation(fields: [unit_id], references: [id], onDelete: SetNull)
-  external_id String?
-  title       String?
-  context     String // 共同題幹 / 情境段落
+  id                 String       @id @default(cuid())
+  user_id            String
+  user               User         @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  subject_id         String
+  subject            Subject      @relation(fields: [subject_id], references: [id], onDelete: Cascade)
+  topic              String
+  unit_id            String?
+  unit               SubjectUnit? @relation(fields: [unit_id], references: [id], onDelete: SetNull)
+  external_id        String?
+  title              String?
+  context            String // 共同題幹 / 情境段落
   context_structured String? // JSON: {text:string,latex:string,image_url:string}
-  table_data  String? // JSON: { headers: string[], rows: string[][] }
+  table_data         String? // JSON: { headers: string[], rows: string[][] }
 
   // AI 單元自動對應追蹤
   ai_unit_mapping_status AiUnitMappingStatus @default(PENDING)
@@ -380,39 +383,39 @@ model QuestionGroup {
   created_at DateTime @default(now())
   updated_at DateTime @updatedAt
 
+  @@unique([user_id, subject_id, external_id])
   @@index([user_id, subject_id])
   @@index([subject_id, unit_id])
-  @@unique([user_id, subject_id, external_id])
 }
 
 model Question {
-  id                    String         @id @default(cuid())
-  user_id               String
-  user                  User           @relation(fields: [user_id], references: [id])
-  subject_id            String
-  subject               Subject        @relation(fields: [subject_id], references: [id])
-  topic                 String
-  unit_id               String
-  unit                  SubjectUnit    @relation(fields: [unit_id], references: [id], onDelete: Restrict)
-  external_id           String?
-  question              String
-  question_structured   String? // JSON: {text:string,latex:string,image_url:string}
-  question_type         String         @default("multiple_choice") // "multiple_choice" | "fill_in_blank"
-  options               String // Stored as JSON string e.g. '["A", "B", "C", "D"]'; empty "[]" for FIB
-  options_structured    String? // JSON: [{text:string,latex:string,image_url:string},...]
-  answer                Int // Index of correct option (MC); 0 for FIB
-  text_answer           String? // Pipe-separated accepted answers for FIB, e.g. "光合作用|photosynthesis"
-  explanation           String?
+  id                     String         @id @default(cuid())
+  user_id                String
+  user                   User           @relation(fields: [user_id], references: [id])
+  subject_id             String
+  subject                Subject        @relation(fields: [subject_id], references: [id])
+  topic                  String
+  unit_id                String
+  unit                   SubjectUnit    @relation(fields: [unit_id], references: [id], onDelete: Restrict)
+  external_id            String?
+  question               String
+  question_structured    String? // JSON: {text:string,latex:string,image_url:string}
+  question_type          String         @default("multiple_choice") // "multiple_choice" | "fill_in_blank"
+  options                String // Stored as JSON string e.g. '["A", "B", "C", "D"]'; empty "[]" for FIB
+  options_structured     String? // JSON: [{text:string,latex:string,image_url:string},...]
+  answer                 Int // Index of correct option (MC); 0 for FIB
+  text_answer            String? // Pipe-separated accepted answers for FIB, e.g. "光合作用|photosynthesis"
+  explanation            String?
   explanation_structured String? // JSON: {text:string,latex:string,image_url:string}
-  ai_explanation        String? // AI 生成的解析（與人工 explanation 併存）
-  image_url             String?
-  table_data            String? // JSON: { headers: string[], rows: string[][] }
-  visibility            String         @default("private") // private / study_group
-  shared_study_group_id String?
-  shared_study_group    StudyGroup?    @relation(fields: [shared_study_group_id], references: [id], onDelete: SetNull)
-  group_id              String?
-  group_order           Int?
-  group                 QuestionGroup? @relation(fields: [group_id], references: [id], onDelete: SetNull)
+  ai_explanation         String? // AI 生成的解析（與人工 explanation 併存）
+  image_url              String?
+  table_data             String? // JSON: { headers: string[], rows: string[][] }
+  visibility             String         @default("private") // private / study_group
+  shared_study_group_id  String?
+  shared_study_group     StudyGroup?    @relation(fields: [shared_study_group_id], references: [id], onDelete: SetNull)
+  group_id               String?
+  group_order            Int?
+  group                  QuestionGroup? @relation(fields: [group_id], references: [id], onDelete: SetNull)
 
   wrong_questions WrongQuestion[]
 
@@ -423,12 +426,30 @@ model Question {
   @@index([subject_id, unit_id])
 }
 
+model VocabularyList {
+  id          String  @id @default(cuid())
+  user_id     String
+  user        User    @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  name        String
+  description String?
+
+  words        VocabularyWord[]
+  review_logs  VocabularyReviewLog[]
+  review_tasks ReviewTask[]
+
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  @@unique([user_id, name])
+  @@index([user_id])
+}
+
 model VocabularyWord {
   id                           String               @id @default(cuid())
   user_id                      String
   user                         User                 @relation(fields: [user_id], references: [id])
-  subject_id                   String
-  subject                      Subject              @relation(fields: [subject_id], references: [id])
+  list_id                      String
+  list                         VocabularyList       @relation(fields: [list_id], references: [id], onDelete: Cascade)
   word                         String
   part_of_speech               String? // n. / v. / adj. / adv. / prep. / conj. / pron. / interj. / phrase
   meaning                      String
@@ -450,19 +471,22 @@ model VocabularyWord {
   created_at DateTime @default(now())
   updated_at DateTime @updatedAt
 
-  @@unique([user_id, subject_id, word])
+  @@unique([user_id, list_id, word])
   @@index([user_id, next_review_date])
   @@index([user_id, status])
+  @@index([user_id, list_id])
 }
 
 model VocabularyReviewLog {
-  id                 String         @id @default(cuid())
+  id                 String          @id @default(cuid())
   user_id            String
-  user               User           @relation(fields: [user_id], references: [id])
-  subject_id         String
-  subject            Subject        @relation(fields: [subject_id], references: [id])
+  user               User            @relation(fields: [user_id], references: [id])
+  subject_id         String?
+  subject            Subject?        @relation(fields: [subject_id], references: [id])
+  list_id            String?
+  list               VocabularyList? @relation(fields: [list_id], references: [id], onDelete: SetNull)
   vocabulary_word_id String
-  vocabulary_word    VocabularyWord @relation(fields: [vocabulary_word_id], references: [id])
+  vocabulary_word    VocabularyWord  @relation(fields: [vocabulary_word_id], references: [id])
   review_task_id     String?
   rating             String
   confidence         Int
@@ -476,6 +500,7 @@ model VocabularyReviewLog {
   created_at DateTime @default(now())
 
   @@index([user_id, vocabulary_word_id, created_at])
+  @@index([user_id, list_id, created_at])
 }
 
 model RewardDraw {

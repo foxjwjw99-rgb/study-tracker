@@ -121,14 +121,12 @@ export async function getSubjectDeletionImpact(id: string): Promise<SubjectDelet
     wrongQuestionsCount,
     reviewTasksCount,
     questionsCount,
-    vocabularyWordsCount,
   ] = await prisma.$transaction([
     prisma.studyLog.count({ where: { subject_id: ownedSubject.id } }),
     prisma.practiceLog.count({ where: { subject_id: ownedSubject.id } }),
     prisma.wrongQuestion.count({ where: { subject_id: ownedSubject.id } }),
     prisma.reviewTask.count({ where: { subject_id: ownedSubject.id } }),
     prisma.question.count({ where: { subject_id: ownedSubject.id } }),
-    prisma.vocabularyWord.count({ where: { subject_id: ownedSubject.id } }),
   ])
 
   return {
@@ -139,14 +137,12 @@ export async function getSubjectDeletionImpact(id: string): Promise<SubjectDelet
     wrongQuestionsCount,
     reviewTasksCount,
     questionsCount,
-    vocabularyWordsCount,
     totalCount:
       studyLogsCount +
       practiceLogsCount +
       wrongQuestionsCount +
       reviewTasksCount +
-      questionsCount +
-      vocabularyWordsCount,
+      questionsCount,
   }
 }
 
@@ -273,7 +269,6 @@ export async function deleteSubjectCascade(id: string): Promise<ActionResult> {
     prisma.practiceLog.deleteMany({ where: { subject_id: impact.subjectId, user_id: user.id } }),
     prisma.studyLog.deleteMany({ where: { subject_id: impact.subjectId, user_id: user.id } }),
     prisma.question.deleteMany({ where: { subject_id: impact.subjectId, user_id: user.id } }),
-    prisma.vocabularyWord.deleteMany({ where: { subject_id: impact.subjectId, user_id: user.id } }),
     prisma.subject.delete({ where: { id: impact.subjectId } }),
   ])
 

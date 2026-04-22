@@ -74,7 +74,7 @@ export async function applyVocabularyReview({
       next_review_date: schedule.nextReviewDate,
     },
     include: {
-      subject: {
+      list: {
         select: {
           id: true,
           name: true,
@@ -86,7 +86,7 @@ export async function applyVocabularyReview({
   await tx.vocabularyReviewLog.create({
     data: {
       user_id: userId,
-      subject_id: word.subject_id,
+      list_id: word.list_id,
       vocabulary_word_id: word.id,
       review_task_id: reviewTaskId,
       rating,
@@ -102,7 +102,7 @@ export async function applyVocabularyReview({
 
   const reviewTaskData = {
     user_id: userId,
-    subject_id: word.subject_id,
+    vocabulary_list_id: word.list_id,
     vocabulary_word_id: word.id,
     topic: formatVocabularyTaskTopic(word.word),
     source_type: REVIEW_TASK_SOURCE_TYPES.vocabulary,

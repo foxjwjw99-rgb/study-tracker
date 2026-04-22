@@ -9,7 +9,7 @@ import type {
   AnalyticsData,
   VocabularyDifficultyItem,
   VocabularyStatusDistributionItem,
-  VocabularySubjectProgressItem,
+  VocabularyListProgressItem,
 } from "@/types"
 
 export function VocabularyInsights({
@@ -81,7 +81,7 @@ export function VocabularyInsights({
                     <div className="min-w-0">
                       <div className="font-semibold leading-tight">{word.word}</div>
                       <div className="mt-1 text-sm text-muted-foreground break-words">{word.meaning}</div>
-                      <div className="mt-1 text-xs text-muted-foreground">{word.subjectName}</div>
+                      <div className="mt-1 text-xs text-muted-foreground">{word.listName}</div>
                     </div>
                   </div>
                 ))}
@@ -99,19 +99,19 @@ export function VocabularyInsights({
 
         <Card>
           <CardHeader>
-            <CardTitle>科目別單字進度</CardTitle>
-            <CardDescription>看每個英文分類目前累積多少字、待複習多少，以及熟悉率。</CardDescription>
+            <CardTitle>清單別單字進度</CardTitle>
+            <CardDescription>看每份單字清單目前累積多少字、待複習多少，以及熟悉率。</CardDescription>
           </CardHeader>
           <CardContent>
-            {data.vocabularySubjectProgress.length === 0 ? (
-              <div className="py-4 text-sm text-muted-foreground">目前還沒有科目別單字資料。</div>
+            {data.vocabularyListProgress.length === 0 ? (
+              <div className="py-4 text-sm text-muted-foreground">目前還沒有清單別單字資料。</div>
             ) : (
               <div className="space-y-3">
-                {data.vocabularySubjectProgress.map((item: VocabularySubjectProgressItem) => (
-                  <div key={item.subjectId} className="rounded-xl border p-4">
+                {data.vocabularyListProgress.map((item: VocabularyListProgressItem) => (
+                  <div key={item.listId} className="rounded-xl border p-4">
                     <div className="flex items-center justify-between gap-3">
                       <div>
-                        <div className="font-semibold">{item.subjectName}</div>
+                        <div className="font-semibold">{item.listName}</div>
                         <div className="mt-1 text-xs text-muted-foreground">
                           總數 {item.totalWords} ・ 待複習 {item.dueWords} ・ 本週 review {item.reviewedThisWeek}
                         </div>
