@@ -8,6 +8,7 @@ import { toast } from "sonner"
 import { importVocabularyWords } from "@/app/actions/vocabulary"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import {
   Select,
@@ -17,9 +18,12 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { vocabularyImportSchema, ImportedVocabularyWord } from "./vocabulary-schema"
+import { vocabularyImportSchema, ImportedVocabularyWord, resolveListName } from "./vocabulary-schema"
 import type { ImportResult } from "@/app/actions/import"
-import type { QuestionVisibility, StudyGroupSummary } from "@/types"
+import type { QuestionVisibility, StudyGroupSummary, VocabularyListSummary } from "@/types"
+
+const NEW_LIST_OPTION = "__new__"
+const PER_ITEM_OPTION = "__per_item__"
 
 function formatIssues(error: z.ZodError) {
   return error.issues
@@ -60,9 +64,10 @@ function parseVocabularyInput(rawText: string) {
 
 type VocabularyImportClientProps = {
   studyGroups: StudyGroupSummary[]
+  vocabularyLists: VocabularyListSummary[]
 }
 
-export function VocabularyImportClient({ studyGroups }: VocabularyImportClientProps) {
+export function VocabularyImportClient({ studyGroups, vocabularyLists }: VocabularyImportClientProps) {
   const [inputText, setInputText] = useState("")
   const [previewData, setPreviewData] = useState<ImportedVocabularyWord[] | null>(null)
   const [parsingError, setParsingError] = useState<string | null>(null)
@@ -70,6 +75,8 @@ export function VocabularyImportClient({ studyGroups }: VocabularyImportClientPr
   const [result, setResult] = useState<ImportResult | null>(null)
   const [visibility, setVisibility] = useState<QuestionVisibility>("private")
   const [sharedStudyGroupId, setSharedStudyGroupId] = useState<string>(studyGroups[0]?.id ?? "")
+  const [targetListOption, setTargetListOption] = useState<string>(PER_ITEM_OPTION)
+  const [newListName, setNewListName] = useState<string>("")
 
   const canShareToGroup = studyGroups.length > 0
   const selectedGroup = useMemo(
@@ -77,15 +84,24 @@ export function VocabularyImportClient({ studyGroups }: VocabularyImportClientPr
     [sharedStudyGroupId, studyGroups]
   )
 
+  const resolvedTargetListName = useMemo(() => {
+    if (targetListOption === PER_ITEM_OPTION) return null
+    if (targetListOption === NEW_LIST_OPTION) return newListName.trim() || null
+    const selected = vocabularyLists.find((list) => list.id === targetListOption)
+    return selected ? selected.name : null
+  }, [targetListOption, newListName, vocabularyLists])
+
   const previewSummary = useMemo(() => {
     if (!previewData) return null
 
-    const subjects = new Set(previewData.map((item) => item.subject.trim()))
+    const listNames = new Set<string>()
     const seenKeys = new Set<string>()
     let duplicateCount = 0
 
     for (const item of previewData) {
-      const key = `${item.subject.trim()}::${item.word.trim().toLowerCase()}`
+      const listName = (resolvedTargetListName ?? resolveListName(item)).trim()
+      listNames.add(listName)
+      const key = `${listName}::${item.word.trim().toLowerCase()}`
       if (seenKeys.has(key)) {
         duplicateCount += 1
       } else {
@@ -95,10 +111,10 @@ export function VocabularyImportClient({ studyGroups }: VocabularyImportClientPr
 
     return {
       total: previewData.length,
-      subjectCount: subjects.size,
+      listCount: listNames.size,
       duplicateCount,
     }
-  }, [previewData])
+  }, [previewData, resolvedTargetListName])
 
   const resetPreviewState = () => {
     setPreviewData(null)
@@ -145,12 +161,24 @@ export function VocabularyImportClient({ studyGroups }: VocabularyImportClientPr
       toast.error("請先選擇要分享的讀書房。")
       return
     }
+    if (targetListOption === NEW_LIST_OPTION && !newListName.trim()) {
+      toast.error("請輸入新清單名稱。")
+      return
+    }
+    if (targetListOption === PER_ITEM_OPTION) {
+      const missing = previewData.find((item) => !resolveListName(item))
+      if (missing) {
+        toast.error("JSON 中有單字未設定 list_name（或 subject），請先指定目標清單。")
+        return
+      }
+    }
 
     setIsImporting(true)
     try {
       const response = await importVocabularyWords(previewData, {
         visibility,
         shared_study_group_id: visibility === "study_group" ? sharedStudyGroupId : undefined,
+        list_name: resolvedTargetListName ?? undefined,
       })
       setResult(response)
       if (response.success) {
@@ -237,6 +265,54 @@ export function VocabularyImportClient({ studyGroups }: VocabularyImportClientPr
             </div>
           ) : null}
 
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div className="space-y-2">
+              <Label>目標清單</Label>
+              <Select
+                value={targetListOption}
+                onValueChange={(value) => setTargetListOption(value ?? PER_ITEM_OPTION)}
+              >
+                <SelectTrigger>
+                  <SelectValue>
+                    {targetListOption === PER_ITEM_OPTION
+                      ? "依 JSON 每筆的 list_name 分配"
+                      : targetListOption === NEW_LIST_OPTION
+                        ? "新建清單…"
+                        : vocabularyLists.find((list) => list.id === targetListOption)?.name ?? "選擇清單"}
+                  </SelectValue>
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value={PER_ITEM_OPTION}>依 JSON 每筆的 list_name 分配</SelectItem>
+                  {vocabularyLists.map((list) => (
+                    <SelectItem key={list.id} value={list.id}>
+                      {list.name}（{list.word_count} 字）
+                    </SelectItem>
+                  ))}
+                  <SelectItem value={NEW_LIST_OPTION}>＋ 新建清單…</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            {targetListOption === NEW_LIST_OPTION ? (
+              <div className="space-y-2">
+                <Label>新清單名稱</Label>
+                <Input
+                  value={newListName}
+                  onChange={(event) => setNewListName(event.target.value)}
+                  placeholder="例如：托福 3000"
+                />
+              </div>
+            ) : (
+              <div className="space-y-2">
+                <Label>說明</Label>
+                <div className="rounded-lg border border-dashed bg-muted/30 px-3 py-2 text-sm text-muted-foreground">
+                  {targetListOption === PER_ITEM_OPTION
+                    ? "每筆單字依自己的 list_name（或舊欄位 subject）匯入到對應清單，清單不存在會自動建立。"
+                    : "所有匯入的單字都會歸到這個清單，忽略 JSON 內的 list_name。"}
+                </div>
+              </div>
+            )}
+          </div>
+
           <div className="space-y-2">
             <div className="flex items-center gap-2 text-sm font-medium">
               <ClipboardPaste className="h-4 w-4" />
@@ -245,7 +321,7 @@ export function VocabularyImportClient({ studyGroups }: VocabularyImportClientPr
             <textarea
               value={inputText}
               onChange={(event) => setInputText(event.target.value)}
-              placeholder={`[\n  {\n    "subject": "英文",\n    "word": "abandon",\n    "part_of_speech": "v.",\n    "meaning": "放棄；拋棄",\n    "example_sentence": "He decided to abandon the plan.",\n    "example_sentence_translation": "他決定放棄這個計畫。"\n  }\n]`}
+              placeholder={`[\n  {\n    "list_name": "托福 3000",\n    "word": "abandon",\n    "part_of_speech": "v.",\n    "meaning": "放棄；拋棄",\n    "example_sentence": "He decided to abandon the plan.",\n    "example_sentence_translation": "他決定放棄這個計畫。"\n  }\n]`}
               className="min-h-[220px] w-full rounded-md border bg-transparent px-3 py-2 text-sm shadow-xs outline-none transition placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50"
               spellCheck={false}
             />
@@ -299,8 +375,8 @@ export function VocabularyImportClient({ studyGroups }: VocabularyImportClientPr
                 <div className="mt-1 text-2xl font-semibold">{previewSummary.total}</div>
               </div>
               <div className="rounded-lg border p-3">
-                <div className="text-sm text-muted-foreground">涉及科目</div>
-                <div className="mt-1 text-2xl font-semibold">{previewSummary.subjectCount}</div>
+                <div className="text-sm text-muted-foreground">涉及清單</div>
+                <div className="mt-1 text-2xl font-semibold">{previewSummary.listCount}</div>
               </div>
               <div className="rounded-lg border p-3">
                 <div className="text-sm text-muted-foreground">匯入包內重複</div>
@@ -309,14 +385,14 @@ export function VocabularyImportClient({ studyGroups }: VocabularyImportClientPr
             </div>
 
             <div className="rounded-md bg-muted/50 p-3 text-sm text-muted-foreground">
-              同一份資料中若出現「相同科目 + 相同單字」，匯入時後面的重複單字會被跳過；資料庫裡已存在的重複單字也會自動略過。
+              同一份資料中若出現「相同清單 + 相同單字」，匯入時後面的重複單字會被跳過；清單裡已存在的重複單字也會自動略過。
             </div>
 
             <div className="max-h-[420px] overflow-auto rounded-md border">
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>科目</TableHead>
+                    <TableHead>清單</TableHead>
                     <TableHead>英文</TableHead>
                     <TableHead>詞性</TableHead>
                     <TableHead>中文</TableHead>
@@ -326,8 +402,8 @@ export function VocabularyImportClient({ studyGroups }: VocabularyImportClientPr
                 </TableHeader>
                 <TableBody>
                   {previewData.slice(0, 10).map((item, index) => (
-                    <TableRow key={`${item.subject}-${item.word}-${index}`}>
-                      <TableCell>{item.subject}</TableCell>
+                    <TableRow key={`${resolveListName(item)}-${item.word}-${index}`}>
+                      <TableCell>{resolvedTargetListName ?? resolveListName(item) ?? "—"}</TableCell>
                       <TableCell>{item.word}</TableCell>
                       <TableCell className="text-muted-foreground">
                         {item.part_of_speech ?? "—"}

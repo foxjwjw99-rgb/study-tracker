@@ -20,7 +20,7 @@ import type {
   VocabularyDifficultyItem,
   VocabularyOverview,
   VocabularyStatusDistributionItem,
-  VocabularySubjectProgressItem,
+  VocabularyListProgressItem,
 } from "@/types"
 
 export async function getAnalyticsData(): Promise<AnalyticsData> {
@@ -82,7 +82,7 @@ export async function getAnalyticsData(): Promise<AnalyticsData> {
         average_response_ms: true,
         average_confidence: true,
         next_review_date: true,
-        subject: {
+        list: {
           select: {
             id: true,
             name: true,
@@ -99,7 +99,7 @@ export async function getAnalyticsData(): Promise<AnalyticsData> {
         id: true,
         created_at: true,
         vocabulary_word_id: true,
-        subject_id: true,
+        list_id: true,
       },
       orderBy: { created_at: "asc" },
     }),
@@ -273,7 +273,7 @@ export async function getAnalyticsData(): Promise<AnalyticsData> {
       id: word.id,
       word: word.word,
       meaning: word.meaning,
-      subjectName: word.subject.name,
+      listName: word.list.name,
       status: word.status as "NEW" | "LEARNING" | "FAMILIAR",
       lapseCount: word.lapse_count,
       easeFactor: Number(word.ease_factor.toFixed(2)),
@@ -283,16 +283,17 @@ export async function getAnalyticsData(): Promise<AnalyticsData> {
       intervalDays: Number(word.interval_days.toFixed(1)),
     }))
 
-  const reviewedThisWeekBySubject = new Map<string, number>()
+  const reviewedThisWeekByList = new Map<string, number>()
   for (const log of vocabularyReviewLogs7Days) {
-    reviewedThisWeekBySubject.set(log.subject_id, (reviewedThisWeekBySubject.get(log.subject_id) || 0) + 1)
+    if (!log.list_id) continue
+    reviewedThisWeekByList.set(log.list_id, (reviewedThisWeekByList.get(log.list_id) || 0) + 1)
   }
 
-  const subjectProgressMap = new Map<
+  const listProgressMap = new Map<
     string,
     {
-      subjectId: string
-      subjectName: string
+      listId: string
+      listName: string
       totalWords: number
       dueWords: number
       familiarWords: number
@@ -301,28 +302,28 @@ export async function getAnalyticsData(): Promise<AnalyticsData> {
   >()
 
   for (const word of vocabularyWords) {
-    const current = subjectProgressMap.get(word.subject.id) || {
-      subjectId: word.subject.id,
-      subjectName: word.subject.name,
+    const current = listProgressMap.get(word.list.id) || {
+      listId: word.list.id,
+      listName: word.list.name,
       totalWords: 0,
       dueWords: 0,
       familiarWords: 0,
-      reviewedThisWeek: reviewedThisWeekBySubject.get(word.subject.id) || 0,
+      reviewedThisWeek: reviewedThisWeekByList.get(word.list.id) || 0,
     }
 
     current.totalWords += 1
     if (word.status === "FAMILIAR") current.familiarWords += 1
     if (word.next_review_date && word.next_review_date <= todayEnd) current.dueWords += 1
 
-    subjectProgressMap.set(word.subject.id, current)
+    listProgressMap.set(word.list.id, current)
   }
 
-  const vocabularySubjectProgress: VocabularySubjectProgressItem[] = [...subjectProgressMap.values()]
+  const vocabularyListProgress: VocabularyListProgressItem[] = [...listProgressMap.values()]
     .map((item) => ({
       ...item,
       familiarRate: item.totalWords > 0 ? Math.round((item.familiarWords / item.totalWords) * 100) : 0,
     }))
-    .sort((a, b) => b.totalWords - a.totalWords || a.subjectName.localeCompare(b.subjectName, "zh-Hant"))
+    .sort((a, b) => b.totalWords - a.totalWords || a.listName.localeCompare(b.listName, "zh-Hant"))
 
   return {
     subjectStats,
@@ -332,6 +333,6 @@ export async function getAnalyticsData(): Promise<AnalyticsData> {
     vocabularyStatusDistribution,
     vocabularyTrend,
     vocabularyDifficultWords,
-    vocabularySubjectProgress,
+    vocabularyListProgress,
   }
 }

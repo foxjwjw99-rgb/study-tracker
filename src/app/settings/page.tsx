@@ -1,4 +1,5 @@
 import { getSubjects } from "@/app/actions/subject"
+import { listVocabularyLists } from "@/app/actions/vocabulary-list"
 import { SubjectForm } from "./subject-form"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { ExamDateForm } from "./exam-date-form"
@@ -7,6 +8,7 @@ import { UserManagement } from "./user-management"
 import { StudyGroupManagement } from "./study-group-management"
 import { ExamSyllabusManager } from "./exam-syllabus-manager"
 import { MockExamManager } from "./mock-exam-manager"
+import { VocabularyListsManager } from "./vocabulary-lists"
 import { getStudyGroupsForCurrentUser } from "@/app/actions/study-group"
 import { getMockExamRecords } from "@/app/actions/exam-forecast"
 import { resolveCurrentUserContext, toCurrentUserSummary } from "@/lib/current-user"
@@ -16,6 +18,7 @@ export default async function SettingsPage() {
   const { user } = await resolveCurrentUserContext()
   const currentUser = toCurrentUserSummary(user)
   const subjects = await getSubjects()
+  const vocabularyLists = await listVocabularyLists()
   const studyGroups = await getStudyGroupsForCurrentUser()
 
   const subjectsWithUnits = await prisma.subject.findMany({
@@ -87,6 +90,18 @@ export default async function SettingsPage() {
         </CardHeader>
         <CardContent>
           <ExamSyllabusManager subjects={subjectsWithUnits} />
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>單字清單</CardTitle>
+          <CardDescription>
+            管理英文單字的清單。清單獨立於科目，匯入不同來源（如托福、雅思、學測）不會影響主要科目列表。
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <VocabularyListsManager lists={vocabularyLists} />
         </CardContent>
       </Card>
 

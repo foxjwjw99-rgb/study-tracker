@@ -5,11 +5,13 @@ import { CopyPromptButton } from "./copy-prompt-button"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { getStudyGroupsForCurrentUser } from "@/app/actions/study-group"
 import { getPracticeQuestionBank } from "@/app/actions/practice-log"
+import { listVocabularyLists } from "@/app/actions/vocabulary-list"
 
 export default async function ImportPage() {
-  const [studyGroups, questionBank] = await Promise.all([
+  const [studyGroups, questionBank, vocabularyLists] = await Promise.all([
     getStudyGroupsForCurrentUser(),
     getPracticeQuestionBank(),
+    listVocabularyLists(),
   ])
 
   return (
@@ -116,7 +118,7 @@ export default async function ImportPage() {
         </TabsContent>
 
         <TabsContent value="vocabulary" className="space-y-6">
-          <VocabularyImportClient studyGroups={studyGroups} />
+          <VocabularyImportClient studyGroups={studyGroups} vocabularyLists={vocabularyLists} />
           <details className="group rounded-lg border">
             <summary className="flex cursor-pointer select-none list-none items-center justify-between px-4 py-3 text-sm font-medium [&::-webkit-details-marker]:hidden">
               格式說明

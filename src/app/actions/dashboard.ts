@@ -24,6 +24,7 @@ import type {
   DashboardSubjectTopicSectionItem,
   DashboardTopicDetailItem,
   DashboardTrendPoint,
+  DashboardVocabularyListItem,
   DashboardVocabularyOverview,
   DashboardWeakAreaItem,
   ReadinessFactorBreakdown,
@@ -81,6 +82,7 @@ export async function getDashboardData(): Promise<DashboardData> {
     weakTopics,
     nextReviewFocusRaw,
     studyDates,
+    vocabularyLists,
     vocabularyWords,
     vocabularyReviewedThisWeek,
     practiceLogExists,
@@ -94,7 +96,7 @@ export async function getDashboardData(): Promise<DashboardData> {
     wrongOpenRaw,
     studyAllRaw,
     practiceAllRaw,
-    vocabularyReviewLastRaw,
+    vocabularyReviewLastByListRaw,
   ] = await Promise.all([
     prisma.subject.findMany({ where: { user_id: user.id }, orderBy: { created_at: "asc" } }),
     prisma.studyLog.aggregate({
@@ -130,29 +132,39 @@ export async function getDashboardData(): Promise<DashboardData> {
       take: 5,
     }),
     prisma.reviewTask.findMany({
-      where: { user_id: user.id, completed: false, review_date: { lte: endOfToday } },
+      where: {
+        user_id: user.id,
+        completed: false,
+        review_date: { lte: endOfToday },
+        subject_id: { not: null },
+      },
       include: { subject: { select: { id: true, name: true } }, unit: { select: { id: true, name: true } } },
       orderBy: [{ review_date: "asc" }, { review_stage: "asc" }],
       take: 3,
     }),
     prisma.studyLog.findMany({ where: { user_id: user.id }, select: { study_date: true }, orderBy: { study_date: "desc" }, take: 365 }),
+    prisma.vocabularyList.findMany({
+      where: { user_id: user.id },
+      select: { id: true, name: true },
+      orderBy: { name: "asc" },
+    }),
     prisma.vocabularyWord.findMany({
       where: { user_id: user.id },
-      select: { subject_id: true, status: true, next_review_date: true, ease_factor: true, lapse_count: true },
+      select: { list_id: true, status: true, next_review_date: true, ease_factor: true, lapse_count: true },
     }),
     prisma.vocabularyReviewLog.count({ where: { user_id: user.id, created_at: { gte: startOf7DaysAgo, lte: endOfToday } } }),
     prisma.practiceLog.findFirst({ where: { user_id: user.id }, select: { id: true } }),
     prisma.question.findMany({ where: { user_id: user.id }, select: { subject_id: true, topic: true, unit_id: true, unit: { select: { name: true } } } }),
     prisma.studyLog.findMany({ where: { user_id: user.id }, select: { subject_id: true, topic: true, unit_id: true, unit: { select: { name: true } } } }),
     prisma.practiceLog.findMany({ where: { user_id: user.id }, select: { subject_id: true, topic: true, unit_id: true, unit: { select: { name: true } } } }),
-    prisma.reviewTask.findMany({ where: { user_id: user.id }, select: { subject_id: true, topic: true, unit_id: true, unit: { select: { name: true } } } }),
+    prisma.reviewTask.findMany({ where: { user_id: user.id, subject_id: { not: null } }, select: { subject_id: true, topic: true, unit_id: true, unit: { select: { name: true } } } }),
     prisma.wrongQuestion.findMany({ where: { user_id: user.id }, select: { subject_id: true, topic: true, unit_id: true, unit: { select: { name: true } } } }),
     prisma.practiceLog.findMany({
       where: { user_id: user.id, practice_date: { gte: startOf14DaysAgo, lte: endOfToday } },
       select: { subject_id: true, topic: true, unit_id: true, unit: { select: { name: true } }, total_questions: true, correct_questions: true },
     }),
     prisma.reviewTask.findMany({
-      where: { user_id: user.id, completed: false, review_date: { lte: endOfToday } },
+      where: { user_id: user.id, completed: false, review_date: { lte: endOfToday }, subject_id: { not: null } },
       select: { subject_id: true, topic: true, unit_id: true, unit: { select: { name: true } } },
     }),
     prisma.wrongQuestion.findMany({
@@ -161,7 +173,7 @@ export async function getDashboardData(): Promise<DashboardData> {
     }),
     prisma.studyLog.findMany({ where: { user_id: user.id }, select: { subject_id: true, study_date: true } }),
     prisma.practiceLog.findMany({ where: { user_id: user.id }, select: { subject_id: true, practice_date: true } }),
-    prisma.vocabularyReviewLog.findMany({ where: { user_id: user.id }, select: { subject_id: true, created_at: true } }),
+    prisma.vocabularyReviewLog.findMany({ where: { user_id: user.id }, select: { list_id: true, created_at: true } }),
   ])
 
   const todaysStudyMinutes = todaysStudy._sum.duration_minutes || 0
@@ -189,25 +201,25 @@ export async function getDashboardData(): Promise<DashboardData> {
     minutes,
   }))
 
-  const nextReviewFocus: DashboardReviewFocusItem[] = nextReviewFocusRaw.map((r) => ({
-    id: r.id,
-    topic: resolveAreaLabel(r.unit_id, r.unit?.name ?? null, r.topic),
-    unitId: r.unit_id,
-    unitName: r.unit?.name ?? null,
-    reviewDate: r.review_date,
-    reviewStage: r.review_stage,
-    subject: r.subject,
-  }))
+  const nextReviewFocus: DashboardReviewFocusItem[] = nextReviewFocusRaw
+    .filter((r): r is typeof r & { subject: { id: string; name: string } } => r.subject !== null)
+    .map((r) => ({
+      id: r.id,
+      topic: resolveAreaLabel(r.unit_id, r.unit?.name ?? null, r.topic),
+      unitId: r.unit_id,
+      unitName: r.unit?.name ?? null,
+      reviewDate: r.review_date,
+      reviewStage: r.review_stage,
+      subject: r.subject,
+    }))
 
-  const vocabularyStatsBySubject = new Map<string, { total: number; familiar: number; due: number; sumEaseFactor: number; sumLapseCount: number }>()
+  const vocabularyStatsByList = new Map<string, { total: number; familiar: number; due: number }>()
   for (const word of vocabularyWords) {
-    const current = vocabularyStatsBySubject.get(word.subject_id) || { total: 0, familiar: 0, due: 0, sumEaseFactor: 0, sumLapseCount: 0 }
+    const current = vocabularyStatsByList.get(word.list_id) || { total: 0, familiar: 0, due: 0 }
     current.total += 1
     if (word.status === "FAMILIAR") current.familiar += 1
     if (word.next_review_date && word.next_review_date <= endOfToday) current.due += 1
-    current.sumEaseFactor += word.ease_factor ?? 2.5
-    current.sumLapseCount += word.lapse_count ?? 0
-    vocabularyStatsBySubject.set(word.subject_id, current)
+    vocabularyStatsByList.set(word.list_id, current)
   }
 
   const vocabularyOverview: DashboardVocabularyOverview = {
@@ -215,13 +227,30 @@ export async function getDashboardData(): Promise<DashboardData> {
     dueWords: vocabularyWords.filter((word) => word.next_review_date && word.next_review_date <= endOfToday).length,
     familiarRate: vocabularyWords.length > 0 ? Math.round((vocabularyWords.filter((word) => word.status === "FAMILIAR").length / vocabularyWords.length) * 100) : null,
     reviewedThisWeek: vocabularyReviewedThisWeek,
-    activeSubjects: Array.from(vocabularyStatsBySubject.values()).filter((item) => item.total > 0).length,
+    activeLists: Array.from(vocabularyStatsByList.values()).filter((item) => item.total > 0).length,
   }
+
+  const lastActivityByList = new Map<string, Date>()
+  mergeLastActivity(lastActivityByList, vocabularyReviewLastByListRaw, (item) => item.list_id ?? "", (item) => item.created_at)
+
+  const vocabularyListStats: DashboardVocabularyListItem[] = vocabularyLists.map((list) => {
+    const stats = vocabularyStatsByList.get(list.id) || { total: 0, familiar: 0, due: 0 }
+    const lastActivity = lastActivityByList.get(list.id)
+    const lastActivityDays = lastActivity ? differenceInCalendarDays(endOfToday, getStartOfDayInTaipeiUTC(lastActivity)) : null
+    return {
+      listId: list.id,
+      listName: list.name,
+      totalWords: stats.total,
+      dueWords: stats.due,
+      familiarWords: stats.familiar,
+      familiarRate: stats.total > 0 ? Math.round((stats.familiar / stats.total) * 100) : null,
+      lastActivityDays,
+    }
+  }).sort((a, b) => b.dueWords - a.dueWords || b.totalWords - a.totalWords || a.listName.localeCompare(b.listName, "zh-Hant"))
 
   const lastActivityBySubject = new Map<string, Date>()
   mergeLastActivity(lastActivityBySubject, studyAllRaw, (item) => item.subject_id, (item) => item.study_date)
   mergeLastActivity(lastActivityBySubject, practiceAllRaw, (item) => item.subject_id, (item) => item.practice_date)
-  mergeLastActivity(lastActivityBySubject, vocabularyReviewLastRaw, (item) => item.subject_id, (item) => item.created_at)
 
   const areaAnalysis = buildAreaAnalysis({
     subjects,
@@ -252,17 +281,11 @@ export async function getDashboardData(): Promise<DashboardData> {
     const totalAreas = subjectAreas.length
     const coverageScore = totalAreas > 0 ? Math.round((coveredAreas / totalAreas) * 100) : 0
 
-    const vocabularyStats = vocabularyStatsBySubject.get(subject.id) || { total: 0, familiar: 0, due: 0, sumEaseFactor: 0, sumLapseCount: 0 }
-    const vocabularyFamiliarRate = vocabularyStats.total > 0 ? Math.round((vocabularyStats.familiar / vocabularyStats.total) * 100) : null
     const lastActivity = lastActivityBySubject.get(subject.id)
     const lastActivityDays = lastActivity ? differenceInCalendarDays(endOfToday, getStartOfDayInTaipeiUTC(lastActivity)) : null
     const recencyScore = getRecencyScore(lastActivityDays)
-    const avgEaseFactor = vocabularyStats.total > 0 ? vocabularyStats.sumEaseFactor / vocabularyStats.total : null
-    const avgLapseCount = vocabularyStats.total > 0 ? vocabularyStats.sumLapseCount / vocabularyStats.total : null
-    const easeScore = avgEaseFactor !== null ? clampScore(Math.round(((avgEaseFactor - 1.3) / 2.1) * 100)) : 65
-    const lapseScore = avgLapseCount !== null ? clampScore(100 - Math.round(avgLapseCount * 15)) : 100
     const memoryScore = clampScore(
-      Math.round((subjectAreas.length > 0 ? average(subjectAreas.map((item) => item.memoryScore)) : recencyScore) * 0.75 + recencyScore * 0.15 + easeScore * 0.05 + lapseScore * 0.05 - vocabularyStats.due * 4)
+      Math.round((subjectAreas.length > 0 ? average(subjectAreas.map((item) => item.memoryScore)) : recencyScore) * 0.8 + recencyScore * 0.2)
     )
     const studyScore = scaleToScore(effectiveMinutes7dBySubject.get(subject.id) || 0, SUBJECT_WEEKLY_TARGET_MINUTES)
     const accuracyScore = practiceAccuracy14d ?? (studyMinutes7d > 0 ? 45 : dueReviews > 0 || unresolvedWrongCount > 0 ? 35 : 20)
@@ -289,10 +312,7 @@ export async function getDashboardData(): Promise<DashboardData> {
       unresolvedWrongCount,
       lastActivityDays,
       weakTopic,
-      suggestedAction: getSuggestedAction({ subjectName: subject.name, studyMinutes7d, practiceAccuracy14d, dueReviews, unresolvedWrongCount, vocabularyDue: vocabularyStats.due, weakTopic, hasPracticeData: practiceQuestions14d > 0 }),
-      vocabularyDue: vocabularyStats.due,
-      vocabularyFamiliarRate,
-      vocabularyTotalWords: vocabularyStats.total,
+      suggestedAction: getSuggestedAction({ subjectName: subject.name, studyMinutes7d, practiceAccuracy14d, dueReviews, unresolvedWrongCount, weakTopic, hasPracticeData: practiceQuestions14d > 0 }),
       factors,
     }
   }).sort((a, b) => a.score - b.score || a.subjectName.localeCompare(b.subjectName, "zh-Hant"))
@@ -376,6 +396,7 @@ export async function getDashboardData(): Promise<DashboardData> {
     weakTopics,
     nextReviewFocus,
     subjectReadiness,
+    vocabularyListStats,
     weakestAreas: areaAnalysis.weakestAreas,
     subjectCoverage,
     subjectTopicSections,
@@ -511,7 +532,7 @@ function buildTodayPlan({ pendingReviews, todaysStudyMinutes, weakestAreas, next
   const weakestArea = weakestAreas[0]
   if (weakestArea) candidates.push({ id: `weak-${weakestArea.key}`, title: `補強 ${weakestArea.subjectName}・${weakestArea.topic}`, description: weakestArea.practiceAccuracy !== null ? `${weakestArea.subjectName}・${weakestArea.topic} 最近正確率 ${weakestArea.practiceAccuracy}%，先補這塊最有感。` : `${weakestArea.subjectName}・${weakestArea.topic} 還沒真正覆蓋，先碰這塊避免考前留下空白。`, reason: weakestArea.note, href: "/practice", tone: weakestArea.priority === "high" ? "warning" : "focus" })
   const lowestReadiness = subjectReadiness[0]
-  if (lowestReadiness) candidates.push({ id: `readiness-${lowestReadiness.subjectId}`, title: `拉回 ${lowestReadiness.subjectName} 的準備度`, description: lowestReadiness.suggestedAction, reason: `目前準備度 ${lowestReadiness.score} 分。`, href: lowestReadiness.dueReviews > 0 || lowestReadiness.vocabularyDue > 0 ? "/review" : "/practice", tone: lowestReadiness.score < 50 ? "danger" : "focus" })
+  if (lowestReadiness) candidates.push({ id: `readiness-${lowestReadiness.subjectId}`, title: `拉回 ${lowestReadiness.subjectName} 的準備度`, description: lowestReadiness.suggestedAction, reason: `目前準備度 ${lowestReadiness.score} 分。`, href: lowestReadiness.dueReviews > 0 ? "/review" : "/practice", tone: lowestReadiness.score < 50 ? "danger" : "focus" })
   if (todaysStudyMinutes === 0) candidates.push({ id: "start-study-session", title: "先開今天第一段專注讀書", description: "先把 30–60 分鐘讀書打開，後面的做題和複習才會跟上。", reason: "今天還沒有學習紀錄。", href: "/study-log", tone: "focus" })
   if (candidates.length === 0) candidates.push({ id: "keep-momentum", title: "維持今天的手感", description: "複習已經不擠了，接下來做一組題目確認自己的穩定度。", reason: "今天節奏算健康。", href: "/practice", tone: "success" })
   return dedupePlanItems(candidates).slice(0, 3)
@@ -537,9 +558,8 @@ function dedupePlanItems(items: DashboardPlanItem[]) {
   })
 }
 
-function getSuggestedAction({ subjectName, studyMinutes7d, practiceAccuracy14d, dueReviews, unresolvedWrongCount, vocabularyDue, weakTopic, hasPracticeData }: { subjectName: string; studyMinutes7d: number; practiceAccuracy14d: number | null; dueReviews: number; unresolvedWrongCount: number; vocabularyDue: number; weakTopic: string | null; hasPracticeData: boolean }) {
+function getSuggestedAction({ subjectName, studyMinutes7d, practiceAccuracy14d, dueReviews, unresolvedWrongCount, weakTopic, hasPracticeData }: { subjectName: string; studyMinutes7d: number; practiceAccuracy14d: number | null; dueReviews: number; unresolvedWrongCount: number; weakTopic: string | null; hasPracticeData: boolean }) {
   if (dueReviews > 0) return `先清掉 ${dueReviews} 個到期複習，別讓 ${subjectName} 的記憶債繼續堆。`
-  if (vocabularyDue > 0) return `先複習 ${vocabularyDue} 個到期單字，把記憶穩定度拉回來。`
   if (practiceAccuracy14d !== null && practiceAccuracy14d < 60) return weakTopic ? `先回頭補 ${weakTopic}，做少量題目確認觀念，不要直接硬刷。` : "先整理錯題與觀念，再做一組小測。"
   if (unresolvedWrongCount >= 4 && weakTopic) return `錯題壓力偏高，先處理 ${weakTopic} 的未掌握題目。`
   if (!hasPracticeData) return `先做一組 ${subjectName} 題目，讓系統開始判斷你的表現。`
@@ -590,6 +610,8 @@ function getPenaltyReason({ practiceAccuracy14d, dueReviews, wrongCount, hasActi
   return null
 }
 function average(values: number[]) { return values.length > 0 ? Math.round(values.reduce((sum, value) => sum + value, 0) / values.length) : 0 }
-function mapAreaSeeds(items: Array<{ subject_id: string; topic: string; unit_id: string | null; unit?: { name: string } | null }>): AreaSeed[] {
-  return items.map((item) => ({ subject_id: item.subject_id, topic: item.topic, unit_id: item.unit_id ?? null, unit_name: item.unit?.name ?? null }))
+function mapAreaSeeds(items: Array<{ subject_id: string | null; topic: string; unit_id: string | null; unit?: { name: string } | null }>): AreaSeed[] {
+  return items
+    .filter((item): item is typeof item & { subject_id: string } => item.subject_id !== null)
+    .map((item) => ({ subject_id: item.subject_id, topic: item.topic, unit_id: item.unit_id ?? null, unit_name: item.unit?.name ?? null }))
 }

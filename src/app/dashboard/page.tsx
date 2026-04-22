@@ -38,6 +38,7 @@ import type {
   DashboardSubjectReadinessItem,
   DashboardSubjectTopicSectionItem,
   DashboardTopicDetailItem,
+  DashboardVocabularyListItem,
   DashboardVocabularyOverview,
   DashboardWeakAreaItem,
 } from "@/types"
@@ -252,7 +253,7 @@ export default async function DashboardPage() {
 
       <VocabularyProgressSection
         overview={data.vocabularyOverview}
-        subjectReadiness={data.subjectReadiness}
+        listStats={data.vocabularyListStats}
       />
 
       <StreakMilestoneSection streakDays={data.streakDays} trendData={data.trendData} />
@@ -503,7 +504,7 @@ function SummaryCard({
 }
 
 function SubjectReadinessCard({ item }: { item: DashboardSubjectReadinessItem }) {
-  const ctaHref = item.dueReviews > 0 || item.vocabularyDue > 0 ? "/review" : "/practice"
+  const ctaHref = item.dueReviews > 0 ? "/review" : "/practice"
 
   return (
     <Card className="overflow-hidden">
@@ -557,11 +558,6 @@ function SubjectReadinessCard({ item }: { item: DashboardSubjectReadinessItem })
           </div>
           {item.factors.penaltyReason ? (
             <p className="mt-3 text-xs text-amber-700 dark:text-amber-400">低分主因：{item.factors.penaltyReason}</p>
-          ) : null}
-          {item.vocabularyFamiliarRate !== null ? (
-            <p className="mt-2 text-xs text-muted-foreground">
-              單字熟悉度 {item.vocabularyFamiliarRate}% · 到期單字 {item.vocabularyDue} 個
-            </p>
           ) : null}
         </div>
 
@@ -760,13 +756,11 @@ function OnboardingChecklistSection({ steps }: { steps: DashboardOnboardingStep[
 
 function VocabularyProgressSection({
   overview,
-  subjectReadiness,
+  listStats,
 }: {
   overview: DashboardVocabularyOverview
-  subjectReadiness: DashboardSubjectReadinessItem[]
+  listStats: DashboardVocabularyListItem[]
 }) {
-  const vocabularySubjects = subjectReadiness.filter((item) => item.vocabularyTotalWords > 0)
-
   return (
     <section className="space-y-4">
       <div className="space-y-1">
@@ -801,8 +795,8 @@ function VocabularyProgressSection({
                   <MetricChip label="今日待複習" value={`${overview.dueWords} 個`} />
                   <MetricChip label="本週已複習" value={`${overview.reviewedThisWeek} 次`} />
                   <MetricChip
-                    label="覆蓋科目"
-                    value={`${overview.activeSubjects} 科`}
+                    label="單字清單"
+                    value={`${overview.activeLists} 份`}
                   />
                 </div>
               </div>
@@ -822,11 +816,13 @@ function VocabularyProgressSection({
             </CardContent>
           </Card>
 
-          <div className="grid gap-4 lg:grid-cols-2 xl:grid-cols-3">
-            {vocabularySubjects.map((item) => (
-              <VocabularySubjectCard key={item.subjectId} item={item} />
-            ))}
-          </div>
+          {listStats.length > 0 ? (
+            <div className="grid gap-4 lg:grid-cols-2 xl:grid-cols-3">
+              {listStats.map((item) => (
+                <VocabularyListCard key={item.listId} item={item} />
+              ))}
+            </div>
+          ) : null}
         </>
       ) : (
         <Card>
@@ -844,56 +840,55 @@ function VocabularyProgressSection({
   )
 }
 
-function VocabularySubjectCard({ item }: { item: DashboardSubjectReadinessItem }) {
-  const familiarity = item.vocabularyFamiliarRate ?? 0
-  const ctaHref = item.vocabularyDue > 0 ? "/review" : `/vocabulary?subject=${item.subjectId}`
+function VocabularyListCard({ item }: { item: DashboardVocabularyListItem }) {
+  const ctaHref = item.dueWords > 0 ? "/review" : `/vocabulary?list=${item.listId}`
 
   return (
     <Card>
       <CardContent className="space-y-4 px-5 py-5">
         <div className="flex items-start justify-between gap-3">
           <div>
-            <p className="text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">Vocabulary</p>
-            <h3 className="mt-2 text-xl font-semibold tracking-tight text-foreground">{item.subjectName}</h3>
+            <p className="text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">Vocabulary list</p>
+            <h3 className="mt-2 text-xl font-semibold tracking-tight text-foreground">{item.listName}</h3>
           </div>
-          <span className={`rounded-full px-3 py-1 text-xs font-medium ${item.vocabularyDue > 0 ? "bg-amber-500/12 text-amber-700" : "bg-emerald-500/12 text-emerald-700"}`}>
-            {item.vocabularyDue > 0 ? `待清 ${item.vocabularyDue}` : "節奏穩定"}
+          <span className={`rounded-full px-3 py-1 text-xs font-medium ${item.dueWords > 0 ? "bg-amber-500/12 text-amber-700" : "bg-emerald-500/12 text-emerald-700"}`}>
+            {item.dueWords > 0 ? `待清 ${item.dueWords}` : "節奏穩定"}
           </span>
         </div>
 
         <div className="space-y-2">
           <div className="flex items-end justify-between gap-3">
-            <div className="text-4xl font-semibold tracking-tight text-foreground">{familiarity}%</div>
+            <div className="text-4xl font-semibold tracking-tight text-foreground">{item.familiarRate}%</div>
             <div className="text-right text-xs text-muted-foreground">
-              <p>單字熟悉度</p>
-              <p>共 {item.vocabularyTotalWords} 個單字</p>
+              <p>熟悉率</p>
+              <p>共 {item.totalWords} 個單字</p>
             </div>
           </div>
           <div className="h-2.5 overflow-hidden rounded-full bg-muted">
-            <div className="h-full rounded-full bg-gradient-to-r from-sky-400 to-sky-600 transition-all" style={{ width: `${familiarity}%` }} />
+            <div className="h-full rounded-full bg-gradient-to-r from-sky-400 to-sky-600 transition-all" style={{ width: `${item.familiarRate}%` }} />
           </div>
         </div>
 
         <div className="grid gap-2 sm:grid-cols-2">
-          <MetricChip label="到期單字" value={`${item.vocabularyDue} 個`} />
-          <MetricChip label="科目準備度" value={`${item.score} 分`} />
+          <MetricChip label="到期單字" value={`${item.dueWords} 個`} />
+          <MetricChip label="已熟悉" value={`${item.familiarWords} 個`} />
         </div>
 
         <div className="rounded-2xl border border-border/70 bg-background/70 p-4 text-sm">
           <p className="font-medium text-foreground">
-            {item.vocabularyDue > 0
-              ? `這科先把 ${item.vocabularyDue} 個到期單字清掉。`
-              : "這科單字目前沒有積壓。"}
+            {item.dueWords > 0
+              ? `這份清單先把 ${item.dueWords} 個到期單字清掉。`
+              : "這份清單目前沒有積壓。"}
           </p>
           <p className="mt-2 leading-6 text-muted-foreground">
-            {item.vocabularyDue > 0
-              ? "單字延遲通常會拖慢閱讀速度與做題手感，先處理掉最划算。"
-              : "可以維持背誦節奏，或把時間挪去補這科的題目表現。"}
+            {item.lastActivityDays !== null
+              ? `上次碰這份清單：${item.lastActivityDays} 天前。`
+              : "還沒開始複習這份清單，排進今天的節奏最划算。"}
           </p>
         </div>
 
         <Link href={ctaHref} className="inline-flex h-9 w-full items-center justify-center gap-1.5 rounded-xl border border-border/90 bg-background/80 px-4 text-sm font-medium transition-all duration-200 hover:border-primary/30 hover:bg-muted hover:text-foreground">
-          {item.vocabularyDue > 0 ? "去清單字複習" : "去背單字"}
+          {item.dueWords > 0 ? "去清單字複習" : "去背這份清單"}
           <ArrowRight className="h-4 w-4" />
         </Link>
       </CardContent>

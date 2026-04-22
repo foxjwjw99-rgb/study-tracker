@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache"
 import { getEndOfTodayUTC } from "@/lib/date-utils"
 
-import { vocabularyImportSchema } from "@/app/import/vocabulary-schema"
+import { vocabularyImportSchema, resolveListName } from "@/app/import/vocabulary-schema"
 import { getCurrentUserOrThrow } from "@/lib/current-user"
 import prisma from "@/lib/prisma"
 import { VocabularyWordStatus } from "@prisma/client"
@@ -22,10 +22,10 @@ import type {
   VocabularyStatus,
   VocabularyStatusFilter,
   VocabularyWordItem,
-  QuestionImportTarget,
+  VocabularyImportTarget,
 } from "@/types"
 
-const DEFAULT_IMPORT_TARGET: QuestionImportTarget = {
+const DEFAULT_IMPORT_TARGET: VocabularyImportTarget = {
   visibility: "private",
 }
 
@@ -48,7 +48,7 @@ function buildVocabularyImportResult(
 
 export async function importVocabularyWords(
   data: unknown,
-  importTarget: QuestionImportTarget = DEFAULT_IMPORT_TARGET
+  importTarget: VocabularyImportTarget = DEFAULT_IMPORT_TARGET
 ): Promise<ImportResult> {
   const user = await getCurrentUserOrThrow()
   const parsed = vocabularyImportSchema.safeParse(data)
@@ -69,82 +69,78 @@ export async function importVocabularyWords(
   }
 
   const items = parsed.data
+  const overrideListName = importTarget.list_name?.trim() || null
+
   let validCount = 0
   let duplicateCount = 0
   let errorCount = 0
 
   try {
     for (const recipientUserId of normalizedTarget.recipientUserIds) {
-      const dbSubjects = await prisma.subject.findMany({
-        where: { user_id: recipientUserId },
-        select: {
-          id: true,
-          name: true,
-        },
+      // Collect every distinct list name needed for this recipient.
+      const neededListNames = new Set<string>()
+      for (const item of items) {
+        const name = overrideListName || resolveListName(item)
+        if (name) neededListNames.add(name)
+      }
+
+      const dbLists = await prisma.vocabularyList.findMany({
+        where: { user_id: recipientUserId, name: { in: Array.from(neededListNames) } },
+        select: { id: true, name: true },
       })
-      const subjectMap = new Map<string, string>(
-        dbSubjects.map((subject) => [subject.name.trim(), subject.id])
-      )
+      const listMap = new Map<string, string>(dbLists.map((l) => [l.name, l.id]))
+      const missing = Array.from(neededListNames).filter((n) => !listMap.has(n))
 
-      const uniqueImportSubjects = Array.from(new Set(items.map((item) => item.subject.trim())))
-      const missingSubjects = uniqueImportSubjects.filter((sub) => !subjectMap.has(sub))
-
-      if (missingSubjects.length > 0) {
-        try {
-          await prisma.subject.createMany({
-            data: missingSubjects.map((name) => ({
-              user_id: recipientUserId,
-              name,
-            })),
-          })
-          const newSubjects = await prisma.subject.findMany({
-            where: {
-              user_id: recipientUserId,
-              name: { in: missingSubjects },
-            },
-          })
-          for (const sub of newSubjects) {
-            subjectMap.set(sub.name.trim(), sub.id)
-          }
-        } catch (e) {
-          console.error("Error creating subjects", e)
-          return buildVocabularyImportResult({
-            success: false,
-            message: "建立科目失敗。",
-            errorCount: items.length,
-          })
-        }
+      if (missing.length > 0) {
+        await prisma.vocabularyList.createMany({
+          data: missing.map((name) => ({ user_id: recipientUserId, name })),
+          skipDuplicates: true,
+        })
+        const refreshed = await prisma.vocabularyList.findMany({
+          where: { user_id: recipientUserId, name: { in: missing } },
+          select: { id: true, name: true },
+        })
+        for (const l of refreshed) listMap.set(l.name, l.id)
       }
 
       const dbWords = await prisma.vocabularyWord.findMany({
         where: { user_id: recipientUserId },
-        select: { subject_id: true, word: true },
+        select: { list_id: true, word: true },
       })
 
       const existingWordSet = new Set(
-        dbWords.map((w: { subject_id: string; word: string }) => `${w.subject_id}::${w.word.trim()}`)
+        dbWords.map((w) => `${w.list_id}::${w.word.trim()}`)
       )
 
-      const newWordsData = []
+      const newWordsData: {
+        user_id: string
+        list_id: string
+        word: string
+        part_of_speech: string | null
+        meaning: string
+        example_sentence: string
+        example_sentence_translation: string | null
+        status: VocabularyWordStatus
+      }[] = []
 
       for (const item of items) {
-        const subjectId = subjectMap.get(item.subject.trim())
-        if (!subjectId) {
+        const listName = overrideListName || resolveListName(item)
+        const listId = listName ? listMap.get(listName) : undefined
+        if (!listId) {
           errorCount += 1
           continue
         }
 
-        const dedupKey = `${subjectId}::${item.word.trim()}`
+        const dedupKey = `${listId}::${item.word.trim()}`
         if (existingWordSet.has(dedupKey)) {
           duplicateCount += 1
           continue
         }
-
         existingWordSet.add(dedupKey)
 
         newWordsData.push({
           user_id: recipientUserId,
-          subject_id: subjectId,
+          list_id: listId,
           word: item.word.trim(),
           part_of_speech: item.part_of_speech?.trim() || null,
           meaning: item.meaning.trim(),
@@ -156,9 +152,7 @@ export async function importVocabularyWords(
 
       if (newWordsData.length > 0) {
         try {
-          const result = await prisma.vocabularyWord.createMany({
-            data: newWordsData,
-          })
+          const result = await prisma.vocabularyWord.createMany({ data: newWordsData })
           validCount += result.count
         } catch (e) {
           console.error("Error creating vocabulary words batch", e)
@@ -193,7 +187,7 @@ export async function importVocabularyWords(
   })
 }
 
-async function resolveVocabularyImportTarget(userId: string, importTarget: QuestionImportTarget) {
+async function resolveVocabularyImportTarget(userId: string, importTarget: VocabularyImportTarget) {
   if (importTarget.visibility === "private") {
     return {
       success: true as const,
@@ -247,43 +241,34 @@ async function resolveVocabularyImportTarget(userId: string, importTarget: Quest
 export async function getVocabularyBank(): Promise<VocabularyBankItem[]> {
   const user = await getCurrentUserOrThrow()
   const groups = await prisma.vocabularyWord.groupBy({
-    by: ["subject_id"],
+    by: ["list_id"],
     where: { user_id: user.id },
-    _count: {
-      _all: true,
-    },
+    _count: { _all: true },
   })
 
-  if (groups.length === 0) {
-    return []
-  }
+  if (groups.length === 0) return []
 
-  const subjects = await prisma.subject.findMany({
+  const lists = await prisma.vocabularyList.findMany({
     where: {
       user_id: user.id,
-      id: {
-        in: groups.map((group) => group.subject_id),
-      },
+      id: { in: groups.map((g) => g.list_id) },
     },
-    select: {
-      id: true,
-      name: true,
-    },
+    select: { id: true, name: true },
   })
 
-  const subjectNameMap = new Map(subjects.map((subject) => [subject.id, subject.name]))
+  const nameMap = new Map(lists.map((l) => [l.id, l.name]))
 
   return groups
     .map((group) => ({
-      subject_id: group.subject_id,
-      subject_name: subjectNameMap.get(group.subject_id) || "未知科目",
+      list_id: group.list_id,
+      list_name: nameMap.get(group.list_id) || "未知清單",
       word_count: group._count._all,
     }))
-    .sort((left, right) => left.subject_name.localeCompare(right.subject_name, "zh-Hant"))
+    .sort((a, b) => a.list_name.localeCompare(b.list_name, "zh-Hant"))
 }
 
 export async function getVocabularyWords(filters?: {
-  subject_id?: string
+  list_id?: string
   status?: VocabularyStatusFilter
 }): Promise<VocabularyWordItem[]> {
   const user = await getCurrentUserOrThrow()
@@ -292,11 +277,11 @@ export async function getVocabularyWords(filters?: {
   const words = await prisma.vocabularyWord.findMany({
     where: {
       user_id: user.id,
-      ...(filters?.subject_id ? { subject_id: filters.subject_id } : {}),
+      ...(filters?.list_id ? { list_id: filters.list_id } : {}),
       ...buildStatusFilter(statusFilter, todayEnd),
     },
     include: {
-      subject: {
+      list: {
         select: {
           id: true,
           name: true,
@@ -309,15 +294,11 @@ export async function getVocabularyWords(filters?: {
 }
 
 export async function getVocabularySession(
-  subjectId?: string,
+  listId?: string,
   limit = 10,
   status: VocabularyStatusFilter = "all"
 ): Promise<VocabularyQueueItem[]> {
-  const words = await getVocabularyWords({
-    subject_id: subjectId,
-    status,
-  })
-
+  const words = await getVocabularyWords({ list_id: listId, status })
   return words.slice(0, limit).map(toVocabularyQueueItem)
 }
 
@@ -327,17 +308,9 @@ export async function updateVocabularyReviewStatus(
 ): Promise<VocabularyReviewUpdateResult> {
   const user = await getCurrentUserOrThrow()
   const word = await prisma.vocabularyWord.findFirst({
-    where: {
-      id: wordId,
-      user_id: user.id,
-    },
+    where: { id: wordId, user_id: user.id },
     include: {
-      subject: {
-        select: {
-          id: true,
-          name: true,
-        },
-      },
+      list: { select: { id: true, name: true } },
     },
   })
 
@@ -389,8 +362,8 @@ const NOT_FOUND_WORD: VocabularyQueueItem = {
   example_sentence: "",
   example_sentence_translation: null,
   status: "NEW",
-  subject_id: "",
-  subject_name: "",
+  list_id: "",
+  list_name: "",
   next_review_date: null,
   last_reviewed_at: null,
   ease_factor: 2.5,
@@ -422,8 +395,8 @@ function toVocabularyQueueItem(word: VocabularyWordItem): VocabularyQueueItem {
     example_sentence_translation:
       (word as unknown as { example_sentence_translation?: string | null }).example_sentence_translation ?? null,
     status: word.status as VocabularyStatus,
-    subject_id: word.subject_id,
-    subject_name: word.subject.name,
+    list_id: word.list_id,
+    list_name: word.list.name,
     next_review_date: word.next_review_date,
     last_reviewed_at: word.last_reviewed_at,
     ease_factor: word.ease_factor,
@@ -433,42 +406,6 @@ function toVocabularyQueueItem(word: VocabularyWordItem): VocabularyQueueItem {
     average_response_ms: word.average_response_ms,
     average_confidence: word.average_confidence,
   }
-}
-
-export async function recordVocabularySessionStudyLog(
-  subjectId: string,
-  durationMinutes: number,
-  reviewedCount: number
-): Promise<void> {
-  const MAX_DURATION_MINUTES = 720
-  const clampedDuration = Math.min(Math.max(1, Math.round(durationMinutes)), MAX_DURATION_MINUTES)
-
-  const user = await getCurrentUserOrThrow()
-  const subject = await prisma.subject.findFirst({
-    where: { id: subjectId, user_id: user.id },
-    select: { id: true },
-  })
-
-  if (!subject) {
-    return
-  }
-
-  await prisma.studyLog.create({
-    data: {
-      user_id: user.id,
-      subject_id: subjectId,
-      topic: `英文單字複習（${reviewedCount} 個）`,
-      study_date: new Date(),
-      duration_minutes: clampedDuration,
-      study_type: "複習",
-      focus_score: 3,
-      planned_done: true,
-      source_type: "vocabulary_review",
-    },
-  })
-
-  revalidatePath("/study-log")
-  revalidatePath("/dashboard")
 }
 
 export async function deleteVocabularyWord(id: string): Promise<void> {

@@ -7,7 +7,7 @@ import { format } from "date-fns"
 import { BookOpenText, Check, CheckCircle2, Keyboard, Sparkles, Trash2, X, XCircle } from "lucide-react"
 import { toast } from "sonner"
 
-import { deleteVocabularyWord, getVocabularySession, recordVocabularySessionStudyLog, updateVocabularyReviewStatus } from "@/app/actions/vocabulary"
+import { deleteVocabularyWord, getVocabularySession, updateVocabularyReviewStatus } from "@/app/actions/vocabulary"
 import { VocabularyPronunciationButton } from "@/components/vocabulary-pronunciation-button"
 import { Badge } from "@/components/ui/badge"
 import { Button, buttonVariants } from "@/components/ui/button"
@@ -26,7 +26,7 @@ import type {
 type VocabularyStudyClientProps = {
   bank: VocabularyBankItem[]
   initialWords: VocabularyQueueItem[]
-  initialSubjectId?: string
+  initialListId?: string
 }
 
 type StudyMode = "flashcard" | "quiz" | "spelling"
@@ -91,9 +91,9 @@ function buildSessionState(words: VocabularyQueueItem[], mode: StudyMode): Vocab
 export function VocabularyStudyClient({
   bank,
   initialWords,
-  initialSubjectId,
+  initialListId,
 }: VocabularyStudyClientProps) {
-  const [selectedSubjectId, setSelectedSubjectId] = useState<string>(initialSubjectId ?? "all")
+  const [selectedListId, setSelectedListId] = useState<string>(initialListId ?? "all")
   const [statusFilter, setStatusFilter] = useState<VocabularyStatusFilter>("all")
   const [sessionLimit, setSessionLimit] = useState<string>("10")
   const [studyMode, setStudyMode] = useState<StudyMode>("flashcard")
@@ -125,8 +125,8 @@ export function VocabularyStudyClient({
 
   const filteredWords = useMemo(() => {
     return words.filter((word) => {
-      const matchesSubject =
-        selectedSubjectId === "all" || word.subject_id === selectedSubjectId
+      const matchesList =
+        selectedListId === "all" || word.list_id === selectedListId
       const matchesStatus =
         statusFilter === "all"
           ? true
@@ -134,22 +134,22 @@ export function VocabularyStudyClient({
             ? word.next_review_date !== null && word.next_review_date <= new Date()
             : word.status.toLowerCase() === statusFilter
 
-      return matchesSubject && matchesStatus
+      return matchesList && matchesStatus
     })
-  }, [selectedSubjectId, statusFilter, words])
+  }, [selectedListId, statusFilter, words])
 
   const currentWord = session ? session.words[session.currentIndex] : null
   const isLastCard = session
     ? session.currentIndex === session.words.length - 1
     : false
-  const selectedSubject = bank.find((item) => item.subject_id === selectedSubjectId) ?? null
+  const selectedList = bank.find((item) => item.list_id === selectedListId) ?? null
 
   const startSession = async () => {
     setIsStarting(true)
 
     try {
       const result = await getVocabularySession(
-        selectedSubjectId === "all" ? undefined : selectedSubjectId,
+        selectedListId === "all" ? undefined : selectedListId,
         Number.parseInt(sessionLimit, 10),
         statusFilter
       )
@@ -254,33 +254,10 @@ export function VocabularyStudyClient({
     await rateCurrentWord(session.pendingRating)
   }, [session, rateCurrentWord])
 
-  const endSession = useCallback((completedSession?: VocabularySessionState) => {
-    const activeSession = completedSession ?? session
-    if (activeSession && activeSession.reviewedCount > 0 && sessionStartedAtRef.current !== null) {
-      const elapsedMs = Date.now() - sessionStartedAtRef.current
-      const durationMinutes = elapsedMs / 60000
-
-      if (durationMinutes >= 1) {
-        // Determine the dominant subject from reviewed words
-        const reviewedWords = activeSession.words.slice(0, activeSession.reviewedCount)
-        const subjectCounts = new Map<string, { id: string; count: number }>()
-        for (const word of reviewedWords) {
-          const entry = subjectCounts.get(word.subject_id)
-          if (entry) {
-            entry.count += 1
-          } else {
-            subjectCounts.set(word.subject_id, { id: word.subject_id, count: 1 })
-          }
-        }
-        const dominantSubjectId = Array.from(subjectCounts.values()).sort((a, b) => b.count - a.count)[0]?.id
-        if (dominantSubjectId) {
-          void recordVocabularySessionStudyLog(dominantSubjectId, durationMinutes, activeSession.reviewedCount)
-        }
-      }
-    }
+  const endSession = useCallback(() => {
     sessionStartedAtRef.current = null
     setSession(null)
-  }, [session])
+  }, [])
 
   useEffect(() => {
     if (session?.mode === "spelling" && !session.spellingSubmitted && spellingInputRef.current) {
@@ -388,21 +365,21 @@ export function VocabularyStudyClient({
               <BookOpenText className="h-4 w-4" />
               單字練習
             </CardTitle>
-            <CardDescription>選科目、篩選熟悉度與練習模式後開始背單字。</CardDescription>
+            <CardDescription>選單字清單、篩選熟悉度與練習模式後開始背單字。</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="grid gap-4 sm:grid-cols-3">
               <div className="space-y-2">
-                <label className="text-sm font-medium">科目</label>
-                <Select value={selectedSubjectId} onValueChange={(value) => setSelectedSubjectId(value ?? "all")}>
+                <label className="text-sm font-medium">單字清單</label>
+                <Select value={selectedListId} onValueChange={(value) => setSelectedListId(value ?? "all")}>
                   <SelectTrigger className="w-full">
-                    <SelectValue>{selectedSubject?.subject_name ?? "全部科目"}</SelectValue>
+                    <SelectValue>{selectedList?.list_name ?? "全部清單"}</SelectValue>
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="all">全部科目</SelectItem>
+                    <SelectItem value="all">全部清單</SelectItem>
                     {bank.map((item) => (
-                      <SelectItem key={item.subject_id} value={item.subject_id}>
-                        {item.subject_name} ({item.word_count})
+                      <SelectItem key={item.list_id} value={item.list_id}>
+                        {item.list_name} ({item.word_count})
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -769,11 +746,8 @@ export function VocabularyStudyClient({
               <p className="text-sm text-muted-foreground">
                 你已完成 {session.reviewedCount} 個單字的複習。
               </p>
-              {sessionStartedAtRef.current !== null && Date.now() - sessionStartedAtRef.current >= 60000 ? (
-                <p className="text-xs text-muted-foreground/70">學習時間已自動記錄至讀書記錄。</p>
-              ) : null}
             </div>
-            <Button type="button" onClick={() => endSession(session)} className="rounded-2xl px-6">
+            <Button type="button" onClick={() => endSession()} className="rounded-2xl px-6">
               <Sparkles className="mr-2 h-4 w-4" />
               回到單字列表
             </Button>
@@ -816,7 +790,7 @@ export function VocabularyStudyClient({
                     <div className="text-sm text-muted-foreground">{word.meaning}</div>
                   </div>
                   <div className="flex flex-wrap items-center gap-2">
-                    <Badge variant="outline">{word.subject_name}</Badge>
+                    <Badge variant="outline">{word.list_name}</Badge>
                     <Badge variant={word.status === "FAMILIAR" ? "default" : word.status === "LEARNING" ? "secondary" : "outline"}>
                       {formatVocabularyStatus(word.status)}
                     </Badge>
