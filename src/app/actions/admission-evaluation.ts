@@ -107,23 +107,87 @@ export async function getAdmissionEvaluationV2(
       admissionLevel: null,
       confidenceLevel: "low",
       scoreGainMetric: null,
+      scoreGainCandidates: [],
+      snapshots: [],
       allTargetPrograms,
     }
   }
 
-  // ── Recent practice accuracy (last 30 days, by subject) ──
+  // ── Parallel data fetching ──
+  const now = new Date()
   const since30 = new Date()
   since30.setDate(since30.getDate() - 30)
+  const since90 = new Date()
+  since90.setDate(since90.getDate() - 90)
 
-  const recentPracticeLogs = await prisma.practiceLog.groupBy({
-    by: ["subject_id"],
-    where: {
-      user_id: user.id,
-      practice_date: { gte: since30 },
-      total_questions: { gt: 0 },
-    },
-    _sum: { correct_questions: true, total_questions: true },
-  })
+  const [
+    recentPracticeLogs,
+    unitPracticeLogs,
+    mockRecordsRaw,
+    overdueReviewCounts,
+    unresolvedWrong,
+    lastStudyDates,
+    lastPracticeDates,
+    snapshotsRaw,
+  ] = await Promise.all([
+    // Recent practice accuracy (last 30 days, by subject)
+    prisma.practiceLog.groupBy({
+      by: ["subject_id"],
+      where: { user_id: user.id, practice_date: { gte: since30 }, total_questions: { gt: 0 } },
+      _sum: { correct_questions: true, total_questions: true },
+    }),
+    // Practice accuracy per unit (last 90 days, for coverage detection)
+    prisma.practiceLog.groupBy({
+      by: ["subject_id", "unit_id", "topic"],
+      where: { user_id: user.id, practice_date: { gte: since90 }, total_questions: { gt: 0 } },
+      _sum: { correct_questions: true, total_questions: true },
+    }),
+    // Mock exam records (last 6 per subject, chronological desc)
+    prisma.mockExamRecord.findMany({
+      where: { user_id: user.id },
+      orderBy: { exam_date: "desc" },
+      select: { subject_id: true, score: true, full_score: true },
+    }),
+    // Overdue review tasks per subject
+    prisma.reviewTask.groupBy({
+      by: ["subject_id"],
+      where: { user_id: user.id, completed: false, review_date: { lt: now } },
+      _count: { id: true },
+    }),
+    // Unresolved wrong questions per subject
+    prisma.wrongQuestion.groupBy({
+      by: ["subject_id"],
+      where: { user_id: user.id, status: "ACTIVE" },
+      _count: { id: true },
+    }),
+    // Last study date per subject
+    prisma.studyLog.groupBy({
+      by: ["subject_id"],
+      where: { user_id: user.id },
+      _max: { study_date: true },
+    }),
+    // Last practice date per subject
+    prisma.practiceLog.groupBy({
+      by: ["subject_id"],
+      where: { user_id: user.id },
+      _max: { practice_date: true },
+    }),
+    // Prediction snapshots for the current target program
+    targetProgram
+      ? prisma.predictionSnapshot.findMany({
+          where: { user_id: user.id, target_program_id: targetProgram.id },
+          orderBy: { snapshot_date: "asc" },
+          take: 10,
+          select: {
+            snapshot_date: true,
+            estimated_total_conservative: true,
+            estimated_total_median: true,
+            estimated_total_optimistic: true,
+            admission_level: true,
+          },
+        })
+      : Promise.resolve([]),
+  ])
 
   const recentPracticeMap = new Map<string, number>() // subject_id → 0–100
   for (const row of recentPracticeLogs) {
@@ -131,20 +195,6 @@ export async function getAdmissionEvaluationV2(
     const total = row._sum.total_questions ?? 0
     if (total > 0) recentPracticeMap.set(row.subject_id, (correct / total) * 100)
   }
-
-  // Practice accuracy per unit (last 90 days, for coverage detection)
-  const since90 = new Date()
-  since90.setDate(since90.getDate() - 90)
-
-  const unitPracticeLogs = await prisma.practiceLog.groupBy({
-    by: ["subject_id", "unit_id", "topic"],
-    where: {
-      user_id: user.id,
-      practice_date: { gte: since90 },
-      total_questions: { gt: 0 },
-    },
-    _sum: { correct_questions: true, total_questions: true },
-  })
 
   const unitAccuracyMap = new Map<string, number>() // `subjectId:unit|topic` → 0–1
   for (const row of unitPracticeLogs) {
@@ -158,13 +208,6 @@ export async function getAdmissionEvaluationV2(
     }
   }
 
-  // ── Mock exam records (last 6 per subject, chronological desc) ──
-  const mockRecordsRaw = await prisma.mockExamRecord.findMany({
-    where: { user_id: user.id },
-    orderBy: { exam_date: "desc" },
-    select: { subject_id: true, score: true, full_score: true },
-  })
-
   const mockBySubject = new Map<string, number[]>()
   for (const r of mockRecordsRaw) {
     const pct = (r.score / r.full_score) * 100
@@ -174,44 +217,15 @@ export async function getAdmissionEvaluationV2(
     }
   }
 
-  // ── Overdue review tasks per subject ──
-  const now = new Date()
-  const overdueReviewCounts = await prisma.reviewTask.groupBy({
-    by: ["subject_id"],
-    where: {
-      user_id: user.id,
-      completed: false,
-      review_date: { lt: now },
-    },
-    _count: { id: true },
-  })
   const overdueMap = new Map<string, number>()
   for (const r of overdueReviewCounts) {
     overdueMap.set(r.subject_id, r._count.id)
   }
 
-  // ── Unresolved wrong questions per subject ──
-  const unresolvedWrong = await prisma.wrongQuestion.groupBy({
-    by: ["subject_id"],
-    where: { user_id: user.id, status: "ACTIVE" },
-    _count: { id: true },
-  })
   const wrongMap = new Map<string, number>()
   for (const r of unresolvedWrong) {
     wrongMap.set(r.subject_id, r._count.id)
   }
-
-  // ── Last activity date per subject ──
-  const lastStudyDates = await prisma.studyLog.groupBy({
-    by: ["subject_id"],
-    where: { user_id: user.id },
-    _max: { study_date: true },
-  })
-  const lastPracticeDates = await prisma.practiceLog.groupBy({
-    by: ["subject_id"],
-    where: { user_id: user.id },
-    _max: { practice_date: true },
-  })
 
   const lastActivityMap = new Map<string, Date>()
   for (const r of lastStudyDates) {
@@ -235,30 +249,22 @@ export async function getAdmissionEvaluationV2(
     const units = subject.exam_syllabus_units
     const rawWeightSum = units.reduce((s, u) => s + u.weight, 0)
 
-    // --- coverage_score: % of units with any practice data (0–100) ---
+    // --- coverage_score: weight-adjusted % of units with any practice data (0–100) ---
     const coveredUnits = units.filter((u) =>
       unitAccuracyMap.has(`${subject.id}:${buildSyllabusCoverageKey(u.unit_id ?? null, u.unit_name)}`)
     )
-    const coverageRate = rawWeightSum > 0 ? coveredUnits.length / units.length : 0
+    const coveredWeight = coveredUnits.reduce((s, u) => s + u.weight, 0)
+    const coverageRate = rawWeightSum > 0 ? coveredWeight / rawWeightSum : 0
     const coverageScore = coverageRate * 100
 
     // --- unit_mastery_score: weighted avg of mastery scores (0–5 → 0–100) ---
     const unitsWithMastery = units.filter((u) => u.mastery_score != null)
     let unitMasteryScore = 0
     if (unitsWithMastery.length > 0 && rawWeightSum > 0) {
-      const weightedSum = unitsWithMastery.reduce(
-        (s, u) => s + (u.mastery_score! / 5) * 100 * (u.weight / rawWeightSum),
-        0,
-      )
-      // For units without mastery, treat as 0 contribution
-      const coveredWeight = unitsWithMastery.reduce((s, u) => s + u.weight, 0)
-      unitMasteryScore = rawWeightSum > 0 ? (weightedSum * rawWeightSum) / rawWeightSum : weightedSum
-      // Recompute as proper weighted avg including zeros for unmeasured units
       unitMasteryScore = units.reduce((s, u) => {
         const score = u.mastery_score != null ? (u.mastery_score / 5) * 100 : 0
         return s + score * (u.weight / rawWeightSum)
       }, 0)
-      void coveredWeight // suppress unused warning
     }
 
     // --- recent_practice_score (0–100) ---
@@ -458,6 +464,14 @@ export async function getAdmissionEvaluationV2(
     ? { ...topGain, unitName: null }
     : null
 
+  const snapshots = snapshotsRaw.map((s) => ({
+    snapshotDate: s.snapshot_date,
+    estimatedTotalConservative: s.estimated_total_conservative,
+    estimatedTotalMedian: s.estimated_total_median,
+    estimatedTotalOptimistic: s.estimated_total_optimistic,
+    admissionLevel: s.admission_level as AdmissionLevel,
+  }))
+
   return {
     isConfigured: true,
     subjects: evaluatedSubjects,
@@ -467,6 +481,8 @@ export async function getAdmissionEvaluationV2(
     admissionLevel,
     confidenceLevel,
     scoreGainMetric,
+    scoreGainCandidates,
+    snapshots,
     allTargetPrograms,
   }
 }

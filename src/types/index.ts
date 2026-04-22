@@ -667,6 +667,18 @@ export type AdmissionEvaluationV2Data = {
     unitName: string | null
     estimatedPointsPer5Hours: number
   } | null
+  scoreGainCandidates: Array<{
+    subjectId: string
+    subjectName: string
+    estimatedPointsPer5Hours: number
+  }>
+  snapshots: Array<{
+    snapshotDate: Date
+    estimatedTotalConservative: number
+    estimatedTotalMedian: number
+    estimatedTotalOptimistic: number
+    admissionLevel: AdmissionLevel
+  }>
   allTargetPrograms: TargetProgramItem[]
 }
 

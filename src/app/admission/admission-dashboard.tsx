@@ -15,13 +15,31 @@ import {
   Zap,
 } from "lucide-react"
 import { toast } from "sonner"
+import {
+  AreaChart,
+  Area,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  ReferenceLine,
+  ResponsiveContainer,
+} from "recharts"
 
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { TargetProgramManager } from "./target-program-manager"
-import { savePredictionSnapshot } from "@/app/actions/admission-evaluation"
-import type { AdmissionEvaluationV2Data, AdmissionLevel, ConfidenceLevel } from "@/types"
+import {
+  savePredictionSnapshot,
+  getAdmissionEvaluationV2,
+} from "@/app/actions/admission-evaluation"
+import type {
+  AdmissionEvaluationV2Data,
+  AdmissionLevel,
+  ConfidenceLevel,
+  SubjectEvaluationV2Item,
+} from "@/types"
 
 // ─── label helpers ─────────────────────────────────────────────────────────────
 
@@ -71,6 +89,17 @@ function GapBadge({ gap }: { gap: number }) {
   )
 }
 
+function getFeasibilityNote(sub: SubjectEvaluationV2Item): string {
+  if (sub.estimatedScoreMedian >= 90) return "已接近滿分，提升空間有限。"
+  if (sub.mainPenaltyReason === "待複習過多") return "先清待複習任務，可快速回血 5 分。"
+  if (sub.mainPenaltyReason === "錯題未清") return "集中清錯題，性價比最高。"
+  if (sub.mainPenaltyReason === "高權重單元太弱") return "集中攻克高權重弱點單元可有效提分。"
+  if (sub.mainPenaltyReason === "長時間沒碰") return "恢復固定練習頻率是首要任務。"
+  if (sub.estimatedScoreMedian >= 70) return "目前表現穩定，集中攻克高權重弱點單元可有效提分。"
+  if (sub.estimatedScoreMedian >= 50) return "尚有明顯提升空間，優先清錯題、補覆蓋率效果最佳。"
+  return "基礎尚待強化，建議優先提升單元掌握度與增加模考次數。"
+}
+
 // ─── Props ────────────────────────────────────────────────────────────────────
 
 type Props = {
@@ -84,11 +113,16 @@ export function AdmissionDashboard({ initialData }: Props) {
     initialData.targetProgram?.id ?? null,
   )
   const [isSaving, startSaveTransition] = useTransition()
+  const [isProgramSwitching, startProgramTransition] = useTransition()
   const [expandedSubjects, setExpandedSubjects] = useState<Set<string>>(new Set())
 
   function handleSelectProgram(id: string) {
     setSelectedProgramId(id)
-    router.push(`/admission?target=${id}`)
+    startProgramTransition(async () => {
+      const result = await getAdmissionEvaluationV2(id)
+      setData(result)
+      router.replace(`/admission?target=${id}`, { scroll: false })
+    })
   }
 
   function toggleSubject(subjectId: string) {
@@ -112,14 +146,24 @@ export function AdmissionDashboard({ initialData }: Props) {
       const result = await savePredictionSnapshot(selectedProgramId)
       if (result.success) {
         toast.success(result.message)
+        // Reload data to pick up new snapshot
+        const updated = await getAdmissionEvaluationV2(selectedProgramId)
+        setData(updated)
       } else {
         toast.error(result.message)
       }
     })
   }
 
+  const snapshotChartData = data.snapshots.map((s) => ({
+    date: new Date(s.snapshotDate).toLocaleDateString("zh-TW", { month: "numeric", day: "numeric" }),
+    median: s.estimatedTotalMedian,
+    conservative: s.estimatedTotalConservative,
+    optimistic: s.estimatedTotalOptimistic,
+  }))
+
   return (
-    <div className="space-y-6">
+    <div className={`space-y-6 transition-opacity duration-200 ${isProgramSwitching ? "opacity-50 pointer-events-none" : ""}`}>
       {/* Target program manager */}
       <TargetProgramManager
         programs={data.allTargetPrograms}
@@ -273,7 +317,86 @@ export function AdmissionDashboard({ initialData }: Props) {
             </CardContent>
           </Card>
 
-          {/* ── Section 2: Subject cards ── */}
+          {/* ── Section 2: Snapshot trend chart ── */}
+          {snapshotChartData.length > 1 && data.targetProgram && (
+            <Card>
+              <CardHeader className="pb-3">
+                <CardTitle className="text-base">預估走勢</CardTitle>
+                <CardDescription>最近 {snapshotChartData.length} 次快照</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <ResponsiveContainer width="100%" height={160}>
+                  <AreaChart data={snapshotChartData} margin={{ top: 4, right: 4, left: -20, bottom: 0 }}>
+                    <defs>
+                      <linearGradient id="medianGrad" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%" stopColor="hsl(var(--primary))" stopOpacity={0.15} />
+                        <stop offset="95%" stopColor="hsl(var(--primary))" stopOpacity={0} />
+                      </linearGradient>
+                    </defs>
+                    <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
+                    <XAxis
+                      dataKey="date"
+                      tick={{ fontSize: 11 }}
+                      tickLine={false}
+                      axisLine={false}
+                    />
+                    <YAxis
+                      domain={[
+                        (min: number) => Math.max(0, Math.floor(min - 5)),
+                        (max: number) => Math.min(100, Math.ceil(max + 5)),
+                      ]}
+                      tick={{ fontSize: 11 }}
+                      tickLine={false}
+                      axisLine={false}
+                    />
+                    <Tooltip
+                      contentStyle={{ fontSize: 12, borderRadius: 8 }}
+                      formatter={(value, name) => {
+                        const labels: Record<string, string> = { median: "中位", conservative: "保守", optimistic: "樂觀" }
+                        return [value, labels[String(name)] ?? name]
+                      }}
+                    />
+                    <Area
+                      type="monotone"
+                      dataKey="conservative"
+                      stroke="hsl(var(--muted-foreground))"
+                      strokeWidth={1}
+                      strokeDasharray="4 2"
+                      fill="transparent"
+                      dot={false}
+                    />
+                    <Area
+                      type="monotone"
+                      dataKey="median"
+                      stroke="hsl(var(--primary))"
+                      strokeWidth={2}
+                      fill="url(#medianGrad)"
+                      dot={{ r: 3, fill: "hsl(var(--primary))" }}
+                    />
+                    <Area
+                      type="monotone"
+                      dataKey="optimistic"
+                      stroke="hsl(var(--muted-foreground))"
+                      strokeWidth={1}
+                      strokeDasharray="4 2"
+                      fill="transparent"
+                      dot={false}
+                    />
+                    {data.targetProgram.lastYearLine > 0 && (
+                      <ReferenceLine
+                        y={data.targetProgram.lastYearLine}
+                        stroke="hsl(var(--destructive))"
+                        strokeDasharray="3 3"
+                        label={{ value: "上榜線", position: "right", fontSize: 10 }}
+                      />
+                    )}
+                  </AreaChart>
+                </ResponsiveContainer>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* ── Section 3: Subject cards ── */}
           <div>
             <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-muted-foreground">
               三科拆解
@@ -285,7 +408,16 @@ export function AdmissionDashboard({ initialData }: Props) {
                   <Card key={sub.subjectId}>
                     <CardHeader
                       className="cursor-pointer pb-2 pt-4"
+                      role="button"
+                      tabIndex={0}
+                      aria-expanded={isExpanded}
                       onClick={() => toggleSubject(sub.subjectId)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" || e.key === " ") {
+                          e.preventDefault()
+                          toggleSubject(sub.subjectId)
+                        }
+                      }}
                     >
                       <div className="flex items-center justify-between">
                         <div className="flex items-center gap-3">
@@ -432,13 +564,7 @@ export function AdmissionDashboard({ initialData }: Props) {
                         {/* Feasibility note */}
                         <div className="rounded-lg bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
                           <span className="font-medium text-foreground">再提升 5 分可行性：</span>
-                          {sub.estimatedScoreMedian >= 90
-                            ? "已接近滿分，提升空間有限。"
-                            : sub.estimatedScoreMedian >= 70
-                              ? "目前表現穩定，集中攻克高權重弱點單元可有效提分。"
-                              : sub.estimatedScoreMedian >= 50
-                                ? "尚有明顯提升空間，優先清錯題、補覆蓋率效果最佳。"
-                                : "基礎尚待強化，建議優先提升單元掌握度與增加模考次數。"}
+                          {getFeasibilityNote(sub)}
                         </div>
                       </CardContent>
                     )}
@@ -448,7 +574,7 @@ export function AdmissionDashboard({ initialData }: Props) {
             </div>
           </div>
 
-          {/* ── Section 3: Score gain ── */}
+          {/* ── Section 4: Score gain ── */}
           {data.scoreGainMetric && (
             <Card>
               <CardHeader className="pb-3">
@@ -474,47 +600,39 @@ export function AdmissionDashboard({ initialData }: Props) {
                   </div>
                 </div>
 
-                {/* All subjects ranked */}
+                {/* All subjects ranked (server-sorted, no client recalculation) */}
                 <div>
                   <p className="mb-2 text-xs font-medium text-muted-foreground">各科效益排名</p>
                   <div className="space-y-2">
-                    {data.subjects
-                      .filter((s) => s.examWeight != null)
-                      .map((s) => {
-                        const roomToGrow = 100 - s.estimatedScoreMedian
-                        const difficultyFactor = s.estimatedScoreMedian < 50 ? 1.5 : 1.0
-                        const pts =
-                          Math.round(roomToGrow * (s.examWeight ?? 0) * difficultyFactor * 0.1 * 10) /
-                          10
-                        const isTop = s.subjectId === data.scoreGainMetric?.subjectId
-                        return (
-                          <div
-                            key={s.subjectId}
-                            className={`flex items-center justify-between rounded-lg px-3 py-2 ${
-                              isTop ? "bg-amber-50 ring-1 ring-amber-200" : "bg-muted/30"
-                            }`}
-                          >
-                            <div className="flex items-center gap-2">
-                              {isTop ? (
-                                <CheckCircle2 className="h-4 w-4 text-amber-500" />
-                              ) : (
-                                <div className="h-4 w-4" />
-                              )}
-                              <span className="text-sm font-medium">{s.subjectName}</span>
+                    {data.scoreGainCandidates.map((candidate) => {
+                      const isTop = candidate.subjectId === data.scoreGainMetric?.subjectId
+                      const sub = data.subjects.find((s) => s.subjectId === candidate.subjectId)
+                      return (
+                        <div
+                          key={candidate.subjectId}
+                          className={`flex items-center justify-between rounded-lg px-3 py-2 ${
+                            isTop ? "bg-amber-50 ring-1 ring-amber-200" : "bg-muted/30"
+                          }`}
+                        >
+                          <div className="flex items-center gap-2">
+                            {isTop ? (
+                              <CheckCircle2 className="h-4 w-4 text-amber-500" />
+                            ) : (
+                              <div className="h-4 w-4" />
+                            )}
+                            <span className="text-sm font-medium">{candidate.subjectName}</span>
+                            {sub && (
                               <span className="text-xs text-muted-foreground">
-                                目前 {s.estimatedScoreMedian} 分
+                                目前 {sub.estimatedScoreMedian} 分
                               </span>
-                            </div>
-                            <span className="text-sm font-medium tabular-nums">
-                              +{pts} 分/5h
-                            </span>
+                            )}
                           </div>
-                        )
-                      })
-                      .sort((a, b) => {
-                        // Already sorted by server, just render
-                        return 0
-                      })}
+                          <span className="text-sm font-medium tabular-nums">
+                            +{candidate.estimatedPointsPer5Hours} 分/5h
+                          </span>
+                        </div>
+                      )
+                    })}
                   </div>
                 </div>
               </CardContent>
