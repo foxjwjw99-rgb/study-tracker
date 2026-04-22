@@ -79,8 +79,7 @@ export function getVocabularySchedule(input: VocabularyScheduleInput): Vocabular
     nextLapseCount += 1
     quality = 2
   } else if (input.rating === "okay") {
-    const baseInterval = getOkayInterval(input.intervalDays, nextEaseFactor, input.reviewCount)
-    nextIntervalDays = Math.max(1, baseInterval * 0.8)
+    nextIntervalDays = Math.max(1, getOkayInterval(input.intervalDays, nextEaseFactor, input.reviewCount))
     quality = 3
   } else {
     nextIntervalDays = getEasyInterval(input.intervalDays, nextEaseFactor, input.reviewCount)
@@ -132,7 +131,7 @@ export function formatVocabularyStatus(status: VocabularyStatus) {
 
 function getEasyInterval(currentIntervalDays: number, easeFactor: number, reviewCount: number) {
   if (reviewCount === 0 || currentIntervalDays <= 0) {
-    return 1
+    return 3
   }
 
   return Math.max(1, currentIntervalDays * easeFactor)
@@ -140,7 +139,7 @@ function getEasyInterval(currentIntervalDays: number, easeFactor: number, review
 
 function getOkayInterval(currentIntervalDays: number, easeFactor: number, reviewCount: number) {
   if (reviewCount === 0 || currentIntervalDays <= 0) {
-    return 1
+    return 2
   }
 
   // Grow at ~75% the rate of "easy" to reward continued review without stalling
