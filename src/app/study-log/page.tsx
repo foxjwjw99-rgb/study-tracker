@@ -1,9 +1,9 @@
 import Link from "next/link"
-import { format } from "date-fns"
 import { BookOpen, Clock3, Flame, PlusCircle, Trash2 } from "lucide-react"
 
 import { getSubjects } from "@/app/actions/subject"
 import { deleteStudyLog, getStudyLogs } from "@/app/actions/study-log"
+import { formatDateTimeInTaipei } from "@/lib/date-utils"
 import { StudyLogForm } from "./study-log-form"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -110,7 +110,7 @@ function StudyLogCard({ log, isToday }: { log: StudyLogListItem; isToday: boolea
           </div>
 
           <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
-            <span>{format(log.study_date, "MM/dd HH:mm")}</span>
+            <span>{formatDateTimeInTaipei(log.study_date)}</span>
             <span>{log.duration_minutes} 分鐘</span>
             <span>專注 {log.focus_score}/5</span>
           </div>

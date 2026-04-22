@@ -76,3 +76,15 @@ export function formatShortDateInTaipei(date: Date): string {
   const taipeiDate = new Date(date.getTime() + TAIPEI_OFFSET_MS)
   return `${taipeiDate.getUTCMonth() + 1}/${taipeiDate.getUTCDate()}`
 }
+
+/**
+ * Format a UTC Date as "MM/dd HH:mm" using Asia/Taipei local time.
+ */
+export function formatDateTimeInTaipei(date: Date): string {
+  const taipeiDate = new Date(date.getTime() + TAIPEI_OFFSET_MS)
+  const month = String(taipeiDate.getUTCMonth() + 1).padStart(2, "0")
+  const day = String(taipeiDate.getUTCDate()).padStart(2, "0")
+  const hour = String(taipeiDate.getUTCHours()).padStart(2, "0")
+  const minute = String(taipeiDate.getUTCMinutes()).padStart(2, "0")
+  return `${month}/${day} ${hour}:${minute}`
+}

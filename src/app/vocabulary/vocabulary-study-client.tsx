@@ -43,6 +43,9 @@ type VocabularySessionState = {
   spellingInput: string
   spellingSubmitted: boolean
   flashcardRevealed: boolean
+  requeuedWordIds: string[]
+  correctCount: number
+  hardCount: number
 }
 
 const STATUS_FILTER_OPTIONS: Array<{ value: VocabularyStatusFilter; label: string }> = [
@@ -85,6 +88,9 @@ function buildSessionState(words: VocabularyQueueItem[], mode: StudyMode): Vocab
     spellingInput: "",
     spellingSubmitted: false,
     flashcardRevealed: false,
+    requeuedWordIds: [],
+    correctCount: 0,
+    hardCount: 0,
   }
 }
 
@@ -102,6 +108,9 @@ export function VocabularyStudyClient({
   const [isStarting, setIsStarting] = useState(false)
   const [isUpdating, setIsUpdating] = useState(false)
   const [mounted, setMounted] = useState(false)
+  const [searchQuery, setSearchQuery] = useState("")
+  const [wordListPage, setWordListPage] = useState(1)
+  const WORDS_PER_PAGE = 20
   const spellingInputRef = useRef<HTMLInputElement>(null)
   const sessionStartedAtRef = useRef<number | null>(null)
 
@@ -133,10 +142,22 @@ export function VocabularyStudyClient({
           : statusFilter === "due"
             ? word.next_review_date !== null && word.next_review_date <= new Date()
             : word.status.toLowerCase() === statusFilter
+      const q = searchQuery.trim().toLowerCase()
+      const matchesSearch =
+        q === "" ||
+        word.word.toLowerCase().includes(q) ||
+        word.meaning.includes(q)
 
-      return matchesList && matchesStatus
+      return matchesList && matchesStatus && matchesSearch
     })
-  }, [selectedListId, statusFilter, words])
+  }, [selectedListId, statusFilter, searchQuery, words])
+
+  const totalWordPages = Math.max(1, Math.ceil(filteredWords.length / WORDS_PER_PAGE))
+  const pagedWords = filteredWords.slice((wordListPage - 1) * WORDS_PER_PAGE, wordListPage * WORDS_PER_PAGE)
+
+  useEffect(() => {
+    setWordListPage(1)
+  }, [selectedListId, statusFilter, searchQuery])
 
   const currentWord = session ? session.words[session.currentIndex] : null
   const isLastCard = session
@@ -192,15 +213,30 @@ export function VocabularyStudyClient({
         currentWords.map((word) => (word.id === result.word.id ? result.word : word))
       )
 
+      const isHard = rating === "hard"
+      const alreadyRequeued = session.requeuedWordIds.includes(currentWord.id)
+      const updatedWords =
+        isHard && !alreadyRequeued
+          ? [...session.words, currentWord]
+          : session.words
+      const updatedRequeuedIds =
+        isHard && !alreadyRequeued
+          ? [...session.requeuedWordIds, currentWord.id]
+          : session.requeuedWordIds
+
       const nextIndex = session.currentIndex + 1
-      const nextWord = session.words[nextIndex]
+      const nextWord = updatedWords[nextIndex]
 
       setSession({
         ...session,
+        words: updatedWords,
+        requeuedWordIds: updatedRequeuedIds,
         reviewedCount: session.reviewedCount + 1,
+        correctCount: session.correctCount + (isHard ? 0 : 1),
+        hardCount: session.hardCount + (isHard ? 1 : 0),
         currentIndex: nextIndex,
         cardStartedAt: Date.now(),
-        choices: nextWord && session.mode === "quiz" ? generateChoices(session.words, nextWord) : [],
+        choices: nextWord && session.mode === "quiz" ? generateChoices(updatedWords, nextWord) : [],
         selectedOptionId: null,
         pendingRating: null,
         spellingInput: "",
@@ -216,19 +252,19 @@ export function VocabularyStudyClient({
     }
   }, [currentWord, session])
 
-  const handleOptionSelect = (option: VocabularyQueueItem) => {
+  const handleOptionSelect = useCallback((option: VocabularyQueueItem) => {
     if (!session || session.selectedOptionId !== null || !currentWord) {
       return
     }
 
     const isCorrect = option.id === currentWord.id
 
-    setSession({
-      ...session,
+    setSession((s) => s ? {
+      ...s,
       selectedOptionId: option.id,
       pendingRating: isCorrect ? "easy" : "hard",
-    })
-  }
+    } : s)
+  }, [session, currentWord])
 
   const handleSpellingSubmit = () => {
     if (!session || !currentWord || session.spellingSubmitted) {
@@ -273,7 +309,6 @@ export function VocabularyStudyClient({
     }
 
     const handleKeyDown = (e: KeyboardEvent) => {
-      // Ignore if user is typing in an input
       if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) {
         return
       }
@@ -306,6 +341,36 @@ export function VocabularyStudyClient({
     window.addEventListener("keydown", handleKeyDown)
     return () => window.removeEventListener("keydown", handleKeyDown)
   }, [session, isUpdating, handleNextWord])
+
+  // Keyboard shortcuts for quiz mode
+  useEffect(() => {
+    if (!session || session.mode !== "quiz" || isUpdating) {
+      return
+    }
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) {
+        return
+      }
+
+      if (session.selectedOptionId === null) {
+        const index = ["1", "2", "3", "4"].indexOf(e.key)
+        if (index !== -1 && session.choices[index]) {
+          e.preventDefault()
+          handleOptionSelect(session.choices[index])
+        }
+        return
+      }
+
+      if (e.key === " " || e.key === "Enter") {
+        e.preventDefault()
+        void handleNextWord()
+      }
+    }
+
+    window.addEventListener("keydown", handleKeyDown)
+    return () => window.removeEventListener("keydown", handleKeyDown)
+  }, [session, isUpdating, handleNextWord, handleOptionSelect])
 
   useEffect(() => {
     if (!session) {
@@ -497,7 +562,7 @@ export function VocabularyStudyClient({
               <div
                 className="h-full rounded-full bg-primary/50 transition-all duration-500 ease-out"
                 style={{
-                  width: `${((session.currentIndex + 1) / session.words.length) * 100}%`,
+                  width: `${Math.min(100, ((session.currentIndex + 1) / session.words.length) * 100)}%`,
                 }}
               />
             </div>
@@ -735,24 +800,15 @@ export function VocabularyStudyClient({
       ) : null}
 
       {session && !currentWord && mounted ? createPortal(
-        <div className="fixed inset-0 z-[100] flex flex-col items-center justify-center bg-background px-5">
-          <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_top,_color-mix(in_oklab,var(--primary)_5%,transparent)_0%,transparent_60%)]" />
-          <div className="relative space-y-6 text-center">
-            <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-emerald-100 text-emerald-600 dark:bg-emerald-900/40 dark:text-emerald-400">
-              <Check className="h-8 w-8" />
-            </div>
-            <div className="space-y-2">
-              <h2 className="text-2xl font-semibold tracking-tight">本輪完成</h2>
-              <p className="text-sm text-muted-foreground">
-                你已完成 {session.reviewedCount} 個單字的複習。
-              </p>
-            </div>
-            <Button type="button" onClick={() => endSession()} className="rounded-2xl px-6">
-              <Sparkles className="mr-2 h-4 w-4" />
-              回到單字列表
-            </Button>
-          </div>
-        </div>,
+        <CompletionScreen
+          session={session}
+          sessionStartedAt={sessionStartedAtRef.current}
+          onEnd={() => endSession()}
+          onRestart={() => {
+            endSession()
+            void startSession()
+          }}
+        />,
         document.body
       ) : null}
 
@@ -762,12 +818,19 @@ export function VocabularyStudyClient({
           <CardDescription>查看目前單字狀態與下次複習時間。</CardDescription>
         </CardHeader>
         <CardContent className="space-y-3">
+          <Input
+            type="search"
+            placeholder="搜尋單字或中文意思…"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="h-9"
+          />
           {filteredWords.length === 0 ? (
             <div className="rounded-lg border border-dashed p-4 text-sm text-muted-foreground">
               目前沒有符合條件的單字。
             </div>
           ) : (
-            filteredWords.map((word) => (
+            pagedWords.map((word) => (
               <div key={word.id} className="rounded-lg border p-4">
                 <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                   <div className="min-w-0">
@@ -835,6 +898,33 @@ export function VocabularyStudyClient({
               </div>
             ))
           )}
+          {totalWordPages > 1 ? (
+            <div className="flex items-center justify-between pt-2">
+              <span className="text-xs text-muted-foreground">
+                第 {wordListPage} / {totalWordPages} 頁，共 {filteredWords.length} 個
+              </span>
+              <div className="flex gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  disabled={wordListPage <= 1}
+                  onClick={() => setWordListPage((p) => p - 1)}
+                >
+                  上一頁
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  disabled={wordListPage >= totalWordPages}
+                  onClick={() => setWordListPage((p) => p + 1)}
+                >
+                  下一頁
+                </Button>
+              </div>
+            </div>
+          ) : null}
         </CardContent>
       </Card>
     </div>
@@ -886,6 +976,68 @@ function AnsweredWordCard({
           ) : null}
         </div>
       ) : null}
+    </div>
+  )
+}
+
+function CompletionScreen({
+  session,
+  sessionStartedAt,
+  onEnd,
+  onRestart,
+}: {
+  session: VocabularySessionState
+  sessionStartedAt: number | null
+  onEnd: () => void
+  onRestart: () => void
+}) {
+  const totalReviewed = session.reviewedCount
+  const correctCount = session.correctCount
+  const hardCount = session.hardCount
+  const accuracyPct = totalReviewed > 0 ? Math.round((correctCount / totalReviewed) * 100) : 0
+  const elapsedMin =
+    sessionStartedAt !== null ? Math.round((Date.now() - sessionStartedAt) / 60000) : 0
+
+  return (
+    <div className="fixed inset-0 z-[100] flex flex-col items-center justify-center bg-background px-5">
+      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_top,_color-mix(in_oklab,var(--primary)_5%,transparent)_0%,transparent_60%)]" />
+      <div className="relative space-y-6 text-center">
+        <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-emerald-100 text-emerald-600 dark:bg-emerald-900/40 dark:text-emerald-400">
+          <Check className="h-8 w-8" />
+        </div>
+        <div className="space-y-3">
+          <h2 className="text-2xl font-semibold tracking-tight">本輪完成</h2>
+          <p className="text-sm text-muted-foreground">你已完成 {totalReviewed} 個單字的複習。</p>
+          <div className="flex items-center justify-center gap-6 py-1">
+            <div className="text-center">
+              <div className="text-2xl font-bold text-emerald-600 dark:text-emerald-400">{correctCount}</div>
+              <div className="text-xs text-muted-foreground">答對</div>
+            </div>
+            <div className="h-8 w-px bg-border" />
+            <div className="text-center">
+              <div className="text-2xl font-bold text-red-500 dark:text-red-400">{hardCount}</div>
+              <div className="text-xs text-muted-foreground">加強</div>
+            </div>
+            <div className="h-8 w-px bg-border" />
+            <div className="text-center">
+              <div className="text-2xl font-bold">{accuracyPct}%</div>
+              <div className="text-xs text-muted-foreground">正確率</div>
+            </div>
+          </div>
+          {elapsedMin >= 1 ? (
+            <p className="text-xs text-muted-foreground/70">學習用時約 {elapsedMin} 分鐘。</p>
+          ) : null}
+        </div>
+        <div className="flex flex-col gap-3 sm:flex-row sm:justify-center">
+          <Button type="button" onClick={onRestart} variant="outline" className="rounded-2xl px-6">
+            再來一輪
+          </Button>
+          <Button type="button" onClick={onEnd} className="rounded-2xl px-6">
+            <Sparkles className="mr-2 h-4 w-4" />
+            回到單字列表
+          </Button>
+        </div>
+      </div>
     </div>
   )
 }
