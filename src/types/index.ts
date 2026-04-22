@@ -236,6 +236,21 @@ export type DashboardSubjectTopicSectionItem = {
   topics: DashboardTopicDetailItem[]
 }
 
+export type DashboardSubjectMasteryItem = {
+  subjectId: string
+  subjectName: string
+  minutes14d: number
+  masteryRate: number
+}
+
+export type DashboardAdmissionSummary = {
+  schoolName: string
+  departmentName: string
+  admissionLevel: AdmissionLevel
+  confidenceLevel: ConfidenceLevel
+  gapVsLastYearLine: number
+}
+
 export type DashboardData = {
   daysUntilExam: number | null
   todaysStudyMinutes: number
@@ -243,11 +258,15 @@ export type DashboardData = {
   pendingReviews: number
   streakDays: number
   completedToday: boolean
+  dailyStudyGoalMinutes: number
+  thisWeekMinutes: number
+  lastWeekMinutes: number
   trendData: DashboardTrendPoint[]
   subjectHours: SubjectHoursItem[]
   weakTopics: WeakTopicItem[]
   nextReviewFocus: DashboardReviewFocusItem[]
   subjectReadiness: DashboardSubjectReadinessItem[]
+  subjectMastery14d: DashboardSubjectMasteryItem[]
   vocabularyListStats: DashboardVocabularyListItem[]
   weakestAreas: DashboardWeakAreaItem[]
   subjectCoverage: DashboardSubjectCoverageItem[]
@@ -255,6 +274,7 @@ export type DashboardData = {
   todayPlan: DashboardPlanItem[]
   onboardingSteps: DashboardOnboardingStep[]
   vocabularyOverview: DashboardVocabularyOverview
+  admissionSummary: DashboardAdmissionSummary | null
   recommendation: string
   hasData: boolean
 }
