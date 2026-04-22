@@ -14,12 +14,16 @@ import {
   getStartOfTodayUTC,
 } from "@/lib/date-utils"
 
+import { getAdmissionEvaluationV2 } from "@/app/actions/admission-evaluation"
+
 import type {
+  DashboardAdmissionSummary,
   DashboardData,
   DashboardOnboardingStep,
   DashboardPlanItem,
   DashboardReviewFocusItem,
   DashboardSubjectCoverageItem,
+  DashboardSubjectMasteryItem,
   DashboardSubjectReadinessItem,
   DashboardSubjectTopicSectionItem,
   DashboardTopicDetailItem,
@@ -33,6 +37,7 @@ import type {
 
 const SUBJECT_WEEKLY_TARGET_MINUTES = 240
 const UNIT_WEEKLY_TARGET_MINUTES = 120
+const DAILY_STUDY_GOAL_MINUTES = 240
 
 type SubjectSummary = { id: string; name: string }
 type AreaMetric = {
@@ -174,6 +179,19 @@ export async function getDashboardData(): Promise<DashboardData> {
     prisma.studyLog.findMany({ where: { user_id: user.id }, select: { subject_id: true, study_date: true } }),
     prisma.practiceLog.findMany({ where: { user_id: user.id }, select: { subject_id: true, practice_date: true } }),
     prisma.vocabularyReviewLog.findMany({ where: { user_id: user.id }, select: { list_id: true, created_at: true } }),
+  ])
+
+  const [studyLogs14dBySubject, lastWeekAgg, admissionEvalSafe] = await Promise.all([
+    prisma.studyLog.groupBy({
+      by: ["subject_id"],
+      where: { user_id: user.id, study_date: { gte: startOf14DaysAgo, lte: endOfToday } },
+      _sum: { duration_minutes: true },
+    }),
+    prisma.studyLog.aggregate({
+      where: { user_id: user.id, study_date: { gte: startOf14DaysAgo, lt: startOf7DaysAgo } },
+      _sum: { duration_minutes: true },
+    }),
+    getAdmissionEvaluationV2().catch(() => null),
   ])
 
   const todaysStudyMinutes = todaysStudy._sum.duration_minutes || 0
@@ -384,6 +402,47 @@ export async function getDashboardData(): Promise<DashboardData> {
     hasData = !!(hasStudy || hasPractice || hasReview || hasQuestion)
   }
 
+  const thisWeekMinutes = trendData.reduce((sum, point) => sum + point.minutes, 0)
+  const lastWeekMinutes = lastWeekAgg._sum.duration_minutes || 0
+
+  const readinessScoreBySubject = new Map(
+    subjectReadiness.map((item) => [item.subjectId, item.score]),
+  )
+  const subjectMastery14d: DashboardSubjectMasteryItem[] = studyLogs14dBySubject
+    .map((entry) => ({
+      subjectId: entry.subject_id,
+      subjectName: subjectNameMap.get(entry.subject_id) || "未知科目",
+      minutes14d: entry._sum.duration_minutes || 0,
+      masteryRate: readinessScoreBySubject.get(entry.subject_id) ?? 0,
+    }))
+    .sort((a, b) => b.minutes14d - a.minutes14d || a.subjectName.localeCompare(b.subjectName, "zh-Hant"))
+  for (const subject of subjects) {
+    if (!subjectMastery14d.some((item) => item.subjectId === subject.id)) {
+      subjectMastery14d.push({
+        subjectId: subject.id,
+        subjectName: subject.name,
+        minutes14d: 0,
+        masteryRate: readinessScoreBySubject.get(subject.id) ?? 0,
+      })
+    }
+  }
+
+  let admissionSummary: DashboardAdmissionSummary | null = null
+  if (
+    admissionEvalSafe &&
+    admissionEvalSafe.targetProgram &&
+    admissionEvalSafe.admissionLevel &&
+    admissionEvalSafe.gaps
+  ) {
+    admissionSummary = {
+      schoolName: admissionEvalSafe.targetProgram.schoolName,
+      departmentName: admissionEvalSafe.targetProgram.departmentName,
+      admissionLevel: admissionEvalSafe.admissionLevel,
+      confidenceLevel: admissionEvalSafe.confidenceLevel,
+      gapVsLastYearLine: admissionEvalSafe.gaps.vsLastYearLine,
+    }
+  }
+
   return {
     daysUntilExam,
     todaysStudyMinutes,
@@ -391,11 +450,15 @@ export async function getDashboardData(): Promise<DashboardData> {
     pendingReviews,
     streakDays,
     completedToday,
+    dailyStudyGoalMinutes: DAILY_STUDY_GOAL_MINUTES,
+    thisWeekMinutes,
+    lastWeekMinutes,
     trendData,
     subjectHours,
     weakTopics,
     nextReviewFocus,
     subjectReadiness,
+    subjectMastery14d,
     vocabularyListStats,
     weakestAreas: areaAnalysis.weakestAreas,
     subjectCoverage,
@@ -403,6 +466,7 @@ export async function getDashboardData(): Promise<DashboardData> {
     todayPlan,
     onboardingSteps,
     vocabularyOverview,
+    admissionSummary,
     recommendation,
     hasData,
   }
