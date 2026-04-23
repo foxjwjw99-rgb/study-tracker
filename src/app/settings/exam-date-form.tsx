@@ -4,7 +4,6 @@ import { useState } from "react"
 import { useRouter } from "next/navigation"
 import { useFormStatus } from "react-dom"
 import { CalendarIcon } from "lucide-react"
-import { format } from "date-fns"
 import { toast } from "sonner"
 
 import { cn } from "@/lib/utils"
@@ -16,6 +15,13 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover"
 import { updateExamDate } from "@/app/actions/subject"
+
+const twDateFormatter = new Intl.DateTimeFormat("zh-TW-u-ca-gregory", {
+  timeZone: "Asia/Taipei",
+  year: "numeric",
+  month: "long",
+  day: "numeric",
+})
 
 export function ExamDateForm({ initialDate }: { initialDate: Date | null }) {
   const [date, setDate] = useState<Date | undefined>(initialDate || undefined)
@@ -43,7 +49,7 @@ export function ExamDateForm({ initialDate }: { initialDate: Date | null }) {
           )}
         >
           <CalendarIcon className="mr-2 h-4 w-4" />
-          {date ? format(date, "yyyy年M月d日") : <span>選擇日期</span>}
+          {date ? twDateFormatter.format(date) : <span>選擇日期</span>}
         </PopoverTrigger>
         <PopoverContent className="w-auto p-0" align="start">
           <Calendar

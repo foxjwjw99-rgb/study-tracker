@@ -37,7 +37,7 @@ const STATUS_COLORS: Record<string, string> = {
 
 export function AccuracyChart({ data }: { data: AccuracyTrendPoint[] }) {
   return (
-    <ResponsiveContainer width="100%" height="100%">
+    <ResponsiveContainer width="100%" height="100%" debounce={50}>
       <LineChart data={data} margin={{ top: 5, right: 16, left: -16, bottom: 5 }}>
         <CartesianGrid strokeDasharray="3 3" vertical={false} />
         <XAxis dataKey="date" stroke="#888888" fontSize={12} tickLine={false} axisLine={false} />
@@ -69,7 +69,7 @@ export function AccuracyChart({ data }: { data: AccuracyTrendPoint[] }) {
 
 export function VocabularyStatusChart({ data }: { data: VocabularyStatusDistributionItem[] }) {
   return (
-    <ResponsiveContainer width="100%" height="100%">
+    <ResponsiveContainer width="100%" height="100%" debounce={50}>
       <PieChart>
         <Tooltip
           contentStyle={tooltipStyle}
@@ -88,7 +88,7 @@ export function VocabularyStatusChart({ data }: { data: VocabularyStatusDistribu
 
 export function VocabularyTrendChart({ data }: { data: VocabularyDailyTrendPoint[] }) {
   return (
-    <ResponsiveContainer width="100%" height="100%">
+    <ResponsiveContainer width="100%" height="100%" debounce={50}>
       <BarChart data={data} margin={{ top: 5, right: 16, left: -16, bottom: 5 }}>
         <CartesianGrid strokeDasharray="3 3" vertical={false} />
         <XAxis dataKey="date" stroke="#888888" fontSize={12} tickLine={false} axisLine={false} />

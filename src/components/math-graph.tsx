@@ -227,7 +227,7 @@ export function MathGraph() {
       {/* Chart */}
       <div className="h-80 w-full">
         {chartData.length > 0 ? (
-          <ResponsiveContainer width="100%" height="100%">
+          <ResponsiveContainer width="100%" height="100%" debounce={50}>
             <LineChart data={chartData} margin={{ top: 8, right: 16, bottom: 8, left: 0 }}>
               <CartesianGrid
                 strokeDasharray="3 3"
