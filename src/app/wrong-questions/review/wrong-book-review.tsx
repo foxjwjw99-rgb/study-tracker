@@ -9,7 +9,7 @@ import Link from "next/link"
 import { submitWrongQuestionReview } from "@/app/actions/wrong-questions"
 import { Badge } from "@/components/ui/badge"
 import { Button, buttonVariants } from "@/components/ui/button"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Card, CardContent } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { MathText } from "@/components/math-text"
 import { cn } from "@/lib/utils"
@@ -59,10 +59,10 @@ export function WrongBookReview({ items, subjectName }: Props) {
   if (items.length === 0) {
     return (
       <Card>
-        <CardHeader>
-          <CardTitle>今天沒有到期的錯題</CardTitle>
-          <CardDescription>繼續保持！明天再回來複習。</CardDescription>
-        </CardHeader>
+        <CardContent className="p-6">
+          <p className="font-semibold">今天沒有到期的錯題</p>
+          <p className="mt-1 text-sm text-muted-foreground">繼續保持！明天再回來複習。</p>
+        </CardContent>
       </Card>
     )
   }
@@ -71,11 +71,11 @@ export function WrongBookReview({ items, subjectName }: Props) {
     const accuracy = Math.round((sessionResult.correct / sessionResult.total) * 100)
     return (
       <Card>
-        <CardHeader>
-          <CardTitle>複習完成</CardTitle>
-          <CardDescription>本輪錯題複習結果</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
+        <CardContent className="space-y-4 p-5">
+          <div>
+            <p className="font-semibold">複習完成</p>
+            <p className="text-sm text-muted-foreground">本輪錯題複習結果</p>
+          </div>
           <div className="grid gap-3 sm:grid-cols-3">
             <div className="rounded-2xl border border-border/70 bg-background/70 p-4 text-center">
               <p className="text-sm text-muted-foreground">複習題數</p>
@@ -182,22 +182,32 @@ export function WrongBookReview({ items, subjectName }: Props) {
 
   return (
     <div className="space-y-4">
+      {/* Progress row */}
       <div className="flex items-center justify-between text-sm text-muted-foreground">
         <span>第 {state.index + 1} / {items.length} 題</span>
-        <div className="flex gap-2">
-          <Badge variant="outline">{current.subject.name}</Badge>
-          <Badge variant="outline">{current.topic}</Badge>
-          {current.wrong_count > 1 && <Badge variant="destructive">已錯 {current.wrong_count} 次</Badge>}
+        <div className="flex gap-1.5">
+          <Badge variant="outline" className="rounded-full px-3 text-xs font-normal">
+            {current.subject.name}
+          </Badge>
+          <Badge variant="outline" className="rounded-full px-3 text-xs font-normal">
+            {current.topic}
+          </Badge>
+          {current.wrong_count > 1 && (
+            <Badge variant="destructive" className="rounded-full px-3 text-xs font-normal">
+              已錯 {current.wrong_count} 次
+            </Badge>
+          )}
         </div>
       </div>
 
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base font-medium leading-relaxed">
+      {/* Question card */}
+      <Card className="shadow-sm">
+        <CardContent className="space-y-4 p-5">
+          {/* Question text */}
+          <p className="text-base leading-relaxed">
             <MathText text={question.question} />
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
+          </p>
+
           {isFib ? (
             <div className="space-y-2">
               <Input
@@ -206,9 +216,15 @@ export function WrongBookReview({ items, subjectName }: Props) {
                 onChange={(e) => setState((s) => ({ ...s, typedAnswer: e.target.value }))}
                 disabled={answered}
                 onKeyDown={(e) => e.key === "Enter" && !answered && checkAnswer()}
+                className="rounded-xl"
               />
               {answered && (
-                <div className={`rounded-lg p-3 text-sm ${correct ? "bg-emerald-50/50 text-emerald-700 dark:bg-emerald-950/30 dark:text-emerald-300" : "bg-destructive/10 text-destructive"}`}>
+                <div className={cn(
+                  "rounded-xl p-3 text-sm",
+                  correct
+                    ? "bg-emerald-50/50 text-emerald-700 dark:bg-emerald-950/30 dark:text-emerald-300"
+                    : "bg-destructive/10 text-destructive"
+                )}>
                   {correct ? "✓ 正確" : `✗ 正確答案：${question.text_answer}`}
                 </div>
               )}
@@ -216,42 +232,54 @@ export function WrongBookReview({ items, subjectName }: Props) {
           ) : (
             <div className="space-y-2">
               {options.map((option, idx) => {
-                let variant: "outline" | "default" | "destructive" | "secondary" = "outline"
-                if (answered) {
-                  if (idx === question.answer) variant = "default"
-                  else if (idx === state.selectedAnswer && state.selectedAnswer !== question.answer) variant = "destructive"
-                  else variant = "outline"
-                } else if (state.selectedAnswer === idx) {
-                  variant = "secondary"
-                }
+                const isSelected = state.selectedAnswer === idx
+                const isCorrectAnswer = answered && idx === question.answer
+                const isWrongSelected = answered && idx === state.selectedAnswer && state.selectedAnswer !== question.answer
+
                 return (
-                  <Button
+                  <button
                     key={idx}
-                    variant={variant}
-                    className="h-auto w-full justify-start whitespace-normal text-left"
                     disabled={answered}
                     onClick={() => setState((s) => ({ ...s, selectedAnswer: idx }))}
+                    className={cn(
+                      "flex w-full items-center gap-3 rounded-2xl border px-4 py-3 text-left text-sm transition-colors",
+                      isCorrectAnswer
+                        ? "border-emerald-400/60 bg-emerald-50/60 text-emerald-800 dark:bg-emerald-950/30 dark:text-emerald-200"
+                        : isWrongSelected
+                          ? "border-destructive/40 bg-destructive/10 text-destructive"
+                          : isSelected
+                            ? "border-accent-foreground/20 bg-accent text-accent-foreground"
+                            : "border-border bg-card text-foreground hover:bg-muted/40"
+                    )}
                   >
-                    <span className="mr-2 shrink-0 font-mono">{String.fromCharCode(65 + idx)}.</span>
+                    <span className={cn(
+                      "w-5 shrink-0 font-semibold",
+                      isSelected && !answered ? "text-foreground" : "text-muted-foreground"
+                    )}>
+                      {String.fromCharCode(65 + idx)}.
+                    </span>
                     <MathText text={option} />
-                  </Button>
+                  </button>
                 )
               })}
             </div>
           )}
 
           {answered && question.explanation && (
-            <div className="rounded-lg border border-border/60 bg-muted/30 p-3 text-sm text-muted-foreground">
+            <div className="rounded-xl border border-border/60 bg-muted/30 p-3 text-sm text-muted-foreground">
               <p className="font-medium text-foreground">解析</p>
               <p className="mt-1">{question.explanation}</p>
             </div>
           )}
 
-          <div className="flex justify-end gap-2">
+          {/* Action button */}
+          <div className="flex justify-end">
             {!answered ? (
-              <Button onClick={checkAnswer}>確認答案</Button>
+              <Button onClick={checkAnswer} className="rounded-full px-6">
+                確認答案
+              </Button>
             ) : (
-              <Button onClick={moveNext} disabled={isSubmitting}>
+              <Button onClick={moveNext} disabled={isSubmitting} className="rounded-full px-6">
                 {state.index === items.length - 1 ? "完成複習" : "下一題"}
               </Button>
             )}

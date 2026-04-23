@@ -138,19 +138,19 @@ export function AppShell({ children, currentUser }: AppShellProps) {
               href={item.href}
               aria-current={isActive ? "page" : undefined}
               className={cn(
-                "relative flex flex-1 flex-col items-center gap-0.5 py-3.5 text-xs font-medium transition-colors",
+                "relative flex flex-1 flex-col items-center gap-0.5 py-2.5 text-[10px] font-medium transition-colors",
                 isActive ? "text-primary" : "text-muted-foreground"
               )}
             >
               {isActive && (
                 <span
                   aria-hidden="true"
-                  className="absolute inset-x-6 top-0 h-0.5 rounded-full bg-primary"
+                  className="absolute inset-x-4 top-0 h-0.5 rounded-full bg-primary"
                 />
               )}
               <item.icon
                 className={cn(
-                  "h-5 w-5 transition-transform duration-150",
+                  "h-4 w-4 transition-transform duration-150",
                   isActive && "scale-110"
                 )}
               />
