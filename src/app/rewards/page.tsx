@@ -66,7 +66,7 @@ export default async function RewardsPage() {
             <CardTitle>獎池內容</CardTitle>
             <CardDescription>目前先照你指定的機率直接抽。</CardDescription>
           </CardHeader>
-          <CardContent className="space-y-3">
+          <CardContent className="stagger-children stagger-fast space-y-3">
             {REWARD_POOL.map((prize) => (
               <div key={prize.key} className="rounded-2xl border border-border/70 bg-background/70 p-4">
                 <div className="flex items-start justify-between gap-3">
@@ -88,7 +88,7 @@ export default async function RewardsPage() {
             <CardTitle>抽獎紀錄</CardTitle>
             <CardDescription>先把每一次結果記清楚，後面你要做統計或控預算都方便。</CardDescription>
           </CardHeader>
-          <CardContent className="space-y-3">
+          <CardContent className="stagger-children stagger-fast space-y-3">
             {data.recentDraws.length > 0 ? (
               data.recentDraws.map((reward) => (
                 <div key={reward.id} className="rounded-2xl border border-border/70 bg-background/70 p-4">
