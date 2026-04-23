@@ -5,8 +5,17 @@ import { useEffect, useRef, useState } from "react"
 type AnimatedNumberProps = {
   value: number
   durationMs?: number
-  format?: (value: number) => string
+  format?: "minutes"
   className?: string
+}
+
+function formatMinutes(minutes: number): string {
+  const safeMinutes = Math.max(0, Math.round(minutes))
+  const hours = Math.floor(safeMinutes / 60)
+  const mins = safeMinutes % 60
+  if (hours === 0) return `${mins}m`
+  if (mins === 0) return `${hours}h`
+  return `${hours}h ${mins}m`
 }
 
 function prefersReducedMotion() {
@@ -52,5 +61,6 @@ export function AnimatedNumber({
   }, [value, durationMs])
 
   const rounded = Math.round(display)
-  return <span className={className}>{format ? format(rounded) : rounded}</span>
+  const rendered = format === "minutes" ? formatMinutes(rounded) : rounded
+  return <span className={className}>{rendered}</span>
 }

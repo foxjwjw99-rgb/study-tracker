@@ -195,7 +195,7 @@ function TodayStudyCard({
               今日讀書時間
             </p>
             <p className="mt-3 text-4xl font-semibold tracking-tight text-foreground tabular-nums">
-              <AnimatedNumber value={todaysStudyMinutes} format={formatMinutes} />
+              <AnimatedNumber value={todaysStudyMinutes} format="minutes" />
             </p>
           </div>
           <div className="rounded-xl bg-primary/12 p-2.5 text-primary">
@@ -249,7 +249,7 @@ function WeeklyTotalCard({
               本週累積
             </p>
             <p className="mt-3 text-4xl font-semibold tracking-tight text-foreground tabular-nums">
-              <AnimatedNumber value={thisWeekMinutes} format={formatMinutes} />
+              <AnimatedNumber value={thisWeekMinutes} format="minutes" />
             </p>
           </div>
           <div
