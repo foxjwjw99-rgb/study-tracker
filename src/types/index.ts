@@ -611,6 +611,12 @@ export type PracticeQuestionItem = {
   visibility?: QuestionVisibility
   shared_study_group_id?: string | null
   shared_study_group_name?: string | null
+  difficulty?: string | null
+  tags?: string[] | null
+  source?: { exam?: string; year?: number; number?: number } | null
+  hint?: string | null
+  status?: string | null
+  blanks?: Array<{ label?: string; answer: string; alternatives: string[] }> | null
 }
 
 export type PracticeQuestionAnswerInput = {

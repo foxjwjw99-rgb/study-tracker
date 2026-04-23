@@ -94,6 +94,7 @@ export function QuestionPractice({ questionBank, initialSubjectId }: QuestionPra
   const [isSubmitting, setIsSubmitting] = useState(false)
   // Track per-question wrong-book states after submission (question_id -> wrongQuestionId | null | "removed")
   const [wqStates, setWqStates] = useState<Record<string, string | null | "removed">>({})
+  const [showHint, setShowHint] = useState(false)
 
   const selectedSubject = useMemo(
     () => questionBank.find((item) => item.subject_id === selectedSubjectId) ?? null,
@@ -326,6 +327,7 @@ export function QuestionPractice({ questionBank, initialSubjectId }: QuestionPra
     const savedNextAnswer =
       session.answers.find((answer) => answer.question_id === nextQuestion.id) ?? null
 
+    setShowHint(false)
     setSession({
       ...session,
       currentIndex: session.currentIndex + 1,
@@ -503,6 +505,9 @@ export function QuestionPractice({ questionBank, initialSubjectId }: QuestionPra
               </Badge>
               <Badge variant="outline">{currentQuestion.subject_name}</Badge>
               <Badge variant="outline">{currentQuestion.topic}</Badge>
+              {currentQuestion.difficulty === "easy" && <Badge variant="outline" className="border-green-400 text-green-700 dark:text-green-400">簡單</Badge>}
+              {currentQuestion.difficulty === "medium" && <Badge variant="secondary" className="bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-300">中等</Badge>}
+              {currentQuestion.difficulty === "hard" && <Badge variant="destructive">困難</Badge>}
             </div>
             <div className="space-y-2">
               <div className="flex items-center gap-3">
@@ -554,6 +559,23 @@ export function QuestionPractice({ questionBank, initialSubjectId }: QuestionPra
             <CardTitle className="text-xl font-medium leading-8">
               <RichContent rich={currentQuestion.question_structured} fallback={currentQuestion.question} className="leading-8" />
             </CardTitle>
+            {currentQuestion.hint && !session.isAnswerChecked ? (
+              <div className="text-sm">
+                <button
+                  type="button"
+                  className="inline-flex items-center gap-1 text-muted-foreground hover:text-foreground"
+                  onClick={() => setShowHint((v) => !v)}
+                >
+                  <CircleHelp className="h-3.5 w-3.5" />
+                  {showHint ? "隱藏提示" : "顯示提示"}
+                </button>
+                {showHint ? (
+                  <div className="mt-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-amber-800 dark:border-amber-900/40 dark:bg-amber-950/20 dark:text-amber-300">
+                    <MathText text={currentQuestion.hint} />
+                  </div>
+                ) : null}
+              </div>
+            ) : null}
             <CardDescription>先做完一輪，再回頭看哪個單元最需要補強。</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
@@ -609,6 +631,13 @@ export function QuestionPractice({ questionBank, initialSubjectId }: QuestionPra
                         ) : currentQuestion.ai_explanation ? (
                           <p className="break-words text-muted-foreground">
                             解析（AI 生成）：{currentQuestion.ai_explanation}
+                          </p>
+                        ) : null}
+                        {currentQuestion.source ? (
+                          <p className="text-xs text-muted-foreground">
+                            來源：{currentQuestion.source.exam ?? ""}
+                            {currentQuestion.source.year ? ` (${currentQuestion.source.year})` : ""}
+                            {currentQuestion.source.number ? ` 第 ${currentQuestion.source.number} 題` : ""}
                           </p>
                         ) : null}
                         <div className="flex gap-2 pt-1">
@@ -762,6 +791,13 @@ export function QuestionPractice({ questionBank, initialSubjectId }: QuestionPra
                         ) : currentQuestion.ai_explanation ? (
                           <p className="break-words text-muted-foreground">
                             解析（AI 生成）：{currentQuestion.ai_explanation}
+                          </p>
+                        ) : null}
+                        {currentQuestion.source ? (
+                          <p className="text-xs text-muted-foreground">
+                            來源：{currentQuestion.source.exam ?? ""}
+                            {currentQuestion.source.year ? ` (${currentQuestion.source.year})` : ""}
+                            {currentQuestion.source.number ? ` 第 ${currentQuestion.source.number} 題` : ""}
                           </p>
                         ) : null}
                       </div>

@@ -44,6 +44,8 @@ export type WrongQuestionWithQuestion = {
     text_answer: string | null
     explanation: string | null
     topic: string
+    difficulty: string | null
+    hint: string | null
   } | null
   unit_id: string | null
   topic: string
@@ -117,6 +119,8 @@ export async function getWrongQuestionsWithFilters(params: {
           text_answer: true,
           explanation: true,
           topic: true,
+          difficulty: true,
+          hint: true,
         },
       },
     },
@@ -149,6 +153,8 @@ export async function getDueWrongQuestions(subject_id?: string): Promise<WrongQu
           text_answer: true,
           explanation: true,
           topic: true,
+          difficulty: true,
+          hint: true,
         },
       },
     },
@@ -176,6 +182,8 @@ export async function getWrongQuestionById(
           text_answer: true,
           explanation: true,
           topic: true,
+          difficulty: true,
+          hint: true,
         },
       },
     },

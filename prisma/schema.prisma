@@ -372,6 +372,9 @@ model QuestionGroup {
   context            String // 共同題幹 / 情境段落
   context_structured String? // JSON: {text:string,latex:string,image_url:string}
   table_data         String? // JSON: { headers: string[], rows: string[][] }
+  difficulty         String? // "easy" | "medium" | "hard"
+  tags               String? // JSON: string[]
+  status             String  @default("published") // "draft" | "published" | "deprecated"
 
   // AI 單元自動對應追蹤
   ai_unit_mapping_status AiUnitMappingStatus @default(PENDING)
@@ -410,6 +413,12 @@ model Question {
   ai_explanation         String? // AI 生成的解析（與人工 explanation 併存）
   image_url              String?
   table_data             String? // JSON: { headers: string[], rows: string[][] }
+  difficulty             String? // "easy" | "medium" | "hard"
+  tags                   String? // JSON: string[]
+  source                 String? // JSON: {exam?:string,year?:number,number?:number}
+  hint                   String?
+  status                 String  @default("published") // "draft" | "published" | "deprecated"
+  blanks                 String? // JSON: [{label?,answer,alternatives?}]
   visibility             String         @default("private") // private / study_group
   shared_study_group_id  String?
   shared_study_group     StudyGroup?    @relation(fields: [shared_study_group_id], references: [id], onDelete: SetNull)
