@@ -9,6 +9,7 @@ import {
 } from "lucide-react"
 
 import { getDashboardData } from "@/app/actions/dashboard"
+import { AnimatedNumber } from "@/components/animated-number"
 import {
   Card,
   CardContent,
@@ -122,7 +123,7 @@ export default async function DashboardPage() {
 
   return (
     <div className="mx-auto flex max-w-7xl flex-col gap-6">
-      <section className="grid gap-4 md:grid-cols-3">
+      <section className="stagger-children grid gap-4 md:grid-cols-3">
         <TodayStudyCard
           todaysStudyMinutes={data.todaysStudyMinutes}
           goalMinutes={data.dailyStudyGoalMinutes}
@@ -147,9 +148,11 @@ export default async function DashboardPage() {
         </CardHeader>
         <CardContent className="space-y-4">
           {data.subjectMastery14d.length > 0 ? (
-            data.subjectMastery14d.map((item) => (
-              <SubjectMasteryRow key={item.subjectId} item={item} />
-            ))
+            <div className="stagger-children stagger-fast space-y-4">
+              {data.subjectMastery14d.map((item) => (
+                <SubjectMasteryRow key={item.subjectId} item={item} />
+              ))}
+            </div>
           ) : (
             <InlineEmptyState
               title="還沒有科目資料"
@@ -191,8 +194,8 @@ function TodayStudyCard({
             <p className="text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">
               今日讀書時間
             </p>
-            <p className="mt-3 text-4xl font-semibold tracking-tight text-foreground">
-              {formatMinutes(todaysStudyMinutes)}
+            <p className="mt-3 text-4xl font-semibold tracking-tight text-foreground tabular-nums">
+              <AnimatedNumber value={todaysStudyMinutes} format={formatMinutes} />
             </p>
           </div>
           <div className="rounded-xl bg-primary/12 p-2.5 text-primary">
@@ -203,7 +206,7 @@ function TodayStudyCard({
         <div className="space-y-2">
           <div className="h-2 overflow-hidden rounded-full bg-muted">
             <div
-              className="h-full rounded-full bg-primary transition-all"
+              className="h-full rounded-full bg-primary transition-[width] duration-700 ease-out"
               style={{ width: `${progress}%` }}
             />
           </div>
@@ -245,8 +248,8 @@ function WeeklyTotalCard({
             <p className="text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">
               本週累積
             </p>
-            <p className="mt-3 text-4xl font-semibold tracking-tight text-foreground">
-              {formatMinutes(thisWeekMinutes)}
+            <p className="mt-3 text-4xl font-semibold tracking-tight text-foreground tabular-nums">
+              <AnimatedNumber value={thisWeekMinutes} format={formatMinutes} />
             </p>
           </div>
           <div
@@ -278,7 +281,7 @@ function WeeklyTotalCard({
                 >
                   <div
                     className={cn(
-                      "w-full rounded-sm transition-all",
+                      "w-full rounded-sm transition-[height] duration-700 ease-out",
                       isToday ? "bg-primary" : "bg-primary/40",
                     )}
                     style={{ height: `${Math.max(4, heightPct)}%` }}
@@ -407,7 +410,7 @@ function SubjectMasteryRow({ item }: { item: DashboardSubjectMasteryItem }) {
       </div>
       <div className="mt-2 h-2 overflow-hidden rounded-full bg-muted">
         <div
-          className={cn("h-full rounded-full transition-all", barTone)}
+          className={cn("h-full rounded-full transition-[width] duration-700 ease-out", barTone)}
           style={{ width: `${masteryPct}%` }}
         />
       </div>

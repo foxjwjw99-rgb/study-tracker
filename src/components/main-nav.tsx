@@ -1,7 +1,8 @@
 "use client"
 
-import Link from "next/link"
 import { usePathname } from "next/navigation"
+
+import { VTLink } from "@/components/view-transition-link"
 import {
   BarChart3,
   BookMarked,
@@ -86,7 +87,7 @@ export function MainNav({
             const isActive =
               pathname === item.href || pathname.startsWith(`${item.href}/`)
             return (
-              <Link
+              <VTLink
                 key={item.href}
                 href={item.href}
                 onClick={onNavigate}
@@ -102,7 +103,7 @@ export function MainNav({
                 )}
                 <item.icon className="h-4 w-4 shrink-0" />
                 {item.title}
-              </Link>
+              </VTLink>
             )
           })}
         </div>

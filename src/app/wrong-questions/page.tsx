@@ -34,7 +34,7 @@ export default async function WrongQuestionsPage() {
         </p>
       </div>
 
-      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+      <div className="stagger-children grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <StatCard label="今天到期" value={stats.dueCount} tone={stats.dueCount > 0 ? "warning" : "default"} />
         <StatCard label="未掌握錯題" value={stats.unresolvedCount} />
         <StatCard label="最近 7 天新增" value={stats.recentAddedCount} />

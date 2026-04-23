@@ -1,6 +1,5 @@
 "use client"
 
-import Link from "next/link"
 import { useState } from "react"
 import { GraduationCap, Menu } from "lucide-react"
 import { usePathname } from "next/navigation"
@@ -8,6 +7,7 @@ import { usePathname } from "next/navigation"
 import { SignOutButton } from "@/components/auth/sign-out-button"
 import { NotificationCenter } from "@/components/notification-center"
 import { MainNav, BOTTOM_NAV_ITEMS, getPageTitle } from "@/components/main-nav"
+import { VTLink } from "@/components/view-transition-link"
 import { Button } from "@/components/ui/button"
 import {
   Sheet,
@@ -133,7 +133,7 @@ export function AppShell({ children, currentUser }: AppShellProps) {
           const isActive =
             pathname === item.href || pathname.startsWith(`${item.href}/`)
           return (
-            <Link
+            <VTLink
               key={item.href}
               href={item.href}
               aria-current={isActive ? "page" : undefined}
@@ -155,7 +155,7 @@ export function AppShell({ children, currentUser }: AppShellProps) {
                 )}
               />
               <span className="leading-none">{item.title}</span>
-            </Link>
+            </VTLink>
           )
         })}
       </nav>
