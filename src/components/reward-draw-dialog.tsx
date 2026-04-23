@@ -146,7 +146,7 @@ export function DrawRewardDialogButton({ availableDraws }: { availableDraws: num
   const isRevealing = state.phase === "revealing"
   const targetKey = isRevealing ? state.reward.prize_key : undefined
   const reelItems = useMemo(() => buildReel(targetKey), [targetKey])
-  const reelDistance = (reelItems.length - 3) * REEL_ROW_HEIGHT
+  const reelDistance = (reelItems.length - 2) * REEL_ROW_HEIGHT
 
   return (
     <>
