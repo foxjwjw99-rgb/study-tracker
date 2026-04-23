@@ -49,13 +49,30 @@ import type { QuestionVisibility, StudyGroupSummary } from "@/types"
 const EXAMPLE_JSON = `[
   {
     "subject": "數學",
-    "topic": "代數",
-    "question": "2 + 2 等於多少？",
+    "topic": "微積分",
     "question_type": "multiple_choice",
-    "options": ["3", "4", "5", "6"],
+    "question": "求 $\\\\lim_{x \\\\to 0} \\\\dfrac{\\\\sin x}{x}$ 的值",
+    "options": ["$0$", "$1$", "$\\\\infty$", "不存在"],
     "answer": 1,
-    "explanation": "因為 2 加 2 等於 4。",
-    "external_id": "math-basic-001"
+    "explanation": "利用夾擠定理可得 $\\\\lim_{x \\\\to 0} \\\\dfrac{\\\\sin x}{x} = 1$",
+    "difficulty": "easy",
+    "tags": ["極限", "三角函數"],
+    "hint": "考慮夾擠定理",
+    "source": { "exam": "112四技二專統測", "year": 2023, "number": 3 },
+    "status": "published",
+    "external_id": "calc-limit-001"
+  },
+  {
+    "subject": "數學",
+    "topic": "積分",
+    "question_type": "fill_in_blank",
+    "question": "$$\\\\int_0^3 x^2\\\\,dx =$$ ___",
+    "blanks": [
+      { "label": "(1)", "answer": "9", "alternatives": ["9.0"] }
+    ],
+    "explanation": "$$\\\\int_0^3 x^2\\\\,dx = \\\\left[\\\\frac{x^3}{3}\\\\right]_0^3 = 9$$",
+    "difficulty": "easy",
+    "external_id": "calc-integral-001"
   },
   {
     "subject": "英文",
@@ -68,6 +85,9 @@ const EXAMPLE_JSON = `[
   {
     "subject": "國文",
     "topic": "閱讀測驗",
+    "difficulty": "hard",
+    "tags": ["閱讀理解"],
+    "status": "published",
     "group_title": "閱讀題組 1",
     "group_context": "閱讀下文，回答第 1–2 題。",
     "external_id": "cn-group-001",
@@ -80,7 +100,9 @@ const EXAMPLE_JSON = `[
       {
         "question": "本文主旨是 ___。",
         "question_type": "fill_in_blank",
-        "text_answer": "珍惜時間|把握當下"
+        "blanks": [
+          { "label": "(1)", "answer": "珍惜時間", "alternatives": ["把握當下"] }
+        ]
       }
     ]
   }
@@ -369,6 +391,7 @@ export function ImportClient({ studyGroups }: ImportClientProps) {
           <CardTitle>貼上或上傳題目</CardTitle>
           <CardDescription>
             支援 JSON（單題、填空、題組、數學規格）、CSV（單題或題組）、Excel（題組）。上傳後系統會自動偵測格式，送出前先做驗證與預覽。
+            題目文字支援 LaTeX 數學語法：行內公式用 <code className="rounded bg-muted px-1 text-xs">$...$</code>，區塊公式用 <code className="rounded bg-muted px-1 text-xs">$$...$$</code>。
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">

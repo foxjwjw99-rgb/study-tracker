@@ -839,6 +839,7 @@ async function getAccessibleStudyGroupIds(userId: string) {
 
 function buildAccessibleQuestionWhere(userId: string, accessibleGroupIds: string[]) {
   return {
+    status: "published",
     OR: [
       {
         user_id: userId,
@@ -942,6 +943,12 @@ function buildPracticeQuestionItem(
     visibility: question.visibility === "study_group" ? "study_group" : "private",
     shared_study_group_id: question.shared_study_group_id,
     shared_study_group_name: question.shared_study_group?.name ?? null,
+    difficulty: question.difficulty ?? null,
+    tags:       question.tags ? safeParseJson(question.tags) as string[] | null : null,
+    source:     question.source ? safeParseJson(question.source) as { exam?: string; year?: number; number?: number } | null : null,
+    hint:       question.hint ?? null,
+    status:     question.status ?? null,
+    blanks:     question.blanks ? safeParseJson(question.blanks) as Array<{ label?: string; answer: string; alternatives: string[] }> | null : null,
   } satisfies Omit<PracticeQuestionItem, "question_type" | "options" | "answer" | "text_answer" | "options_structured">
 
   if (isFib) {

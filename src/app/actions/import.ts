@@ -12,6 +12,7 @@ import {
   isImportedQuestionGroup,
   mathImportPayloadSchema,
   isMathSpecFormat,
+  blanksToDerivedTextAnswer,
   type ImportedQuestion,
   type ImportedQuestionGroup,
   type MathMcQuestion,
@@ -425,10 +426,18 @@ async function importSingleQuestion(
         question_type: isFib ? "fill_in_blank" : "multiple_choice",
         options: isFib ? "[]" : JSON.stringify(question.options),
         answer: isFib ? 0 : question.answer,
-        text_answer: isFib ? question.text_answer : null,
+        text_answer: isFib
+          ? (question.text_answer ?? ('blanks' in question && question.blanks ? blanksToDerivedTextAnswer(question.blanks) : null))
+          : null,
         explanation: question.explanation ?? null,
         image_url: question.image ?? null,
         table_data: question.table ? JSON.stringify(question.table) : null,
+        difficulty: question.difficulty ?? null,
+        tags:       question.tags ? JSON.stringify(question.tags) : null,
+        source:     question.source ? JSON.stringify(question.source) : null,
+        hint:       question.hint ?? null,
+        status:     question.status ?? "published",
+        blanks:     'blanks' in question && question.blanks ? JSON.stringify(question.blanks) : null,
         visibility: importTarget.visibility,
         shared_study_group_id: importTarget.visibility === "study_group" ? importTarget.shared_study_group_id : null,
       },
@@ -504,9 +513,12 @@ async function importSingleGroup(
         topic: resolvedGroupUnit.topicSnapshot || group.topic,
         unit_id: resolvedGroupUnit.unitId,
         external_id: group.external_id ?? null,
-        title: group.group_title ?? null,
-        context: group.group_context,
-        table_data: group.table ? JSON.stringify(group.table) : null,
+        title:       group.group_title ?? null,
+        context:     group.group_context,
+        table_data:  group.table ? JSON.stringify(group.table) : null,
+        difficulty:  group.difficulty ?? null,
+        tags:        group.tags ? JSON.stringify(group.tags) : null,
+        status:      group.status ?? "published",
       },
     })
   } catch (err) {
@@ -578,13 +590,20 @@ async function importSingleGroup(
           question_type: isFib ? "fill_in_blank" : "multiple_choice",
           options: isFib ? "[]" : JSON.stringify(question.options),
           answer: isFib ? 0 : question.answer,
-          text_answer: isFib ? question.text_answer : null,
+          text_answer: isFib
+            ? (question.text_answer ?? ('blanks' in question && question.blanks ? blanksToDerivedTextAnswer(question.blanks) : null))
+            : null,
           explanation: question.explanation ?? null,
-          image_url: question.image ?? null,
-          table_data: question.table ? JSON.stringify(question.table) : null,
-          visibility: importTarget.visibility,
+          image_url:   question.image ?? null,
+          table_data:  question.table ? JSON.stringify(question.table) : null,
+          difficulty:  question.difficulty ?? null,
+          tags:        question.tags ? JSON.stringify(question.tags) : null,
+          hint:        question.hint ?? null,
+          status:      group.status ?? "published",
+          blanks:      'blanks' in question && question.blanks ? JSON.stringify(question.blanks) : null,
+          visibility:  importTarget.visibility,
           shared_study_group_id: importTarget.visibility === "study_group" ? importTarget.shared_study_group_id : null,
-          group_id: createdGroup!.id,
+          group_id:    createdGroup!.id,
           group_order: index,
         },
       })
@@ -787,6 +806,7 @@ async function importMathQuestions(
               explanation: richContentToLegacyText(explanationRich) || null,
               explanation_structured: JSON.stringify(explanationRich),
               image_url: q.question_image_url || null,
+              status: "published",
               visibility: target.visibility,
               shared_study_group_id:
                 target.visibility === "study_group"
@@ -910,6 +930,7 @@ async function importMathQuestions(
                 explanation: richContentToLegacyText(explanationRich) || null,
                 explanation_structured: JSON.stringify(explanationRich),
                 image_url: q.question_image_url || null,
+                status: "published",
                 visibility: target.visibility,
                 shared_study_group_id:
                   target.visibility === "study_group"
