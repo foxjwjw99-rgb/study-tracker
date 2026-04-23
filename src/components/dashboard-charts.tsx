@@ -26,7 +26,7 @@ const tooltipStyle = {
 
 export function TrendChart({ data }: { data: TrendData[] }) {
   return (
-    <ResponsiveContainer width="100%" height="100%">
+    <ResponsiveContainer width="100%" height="100%" debounce={50}>
       <BarChart data={data} barCategoryGap="24%">
         <CartesianGrid vertical={false} stroke="var(--color-border)" strokeDasharray="3 3" />
         <XAxis dataKey="date" tickLine={false} axisLine={false} {...axisStyle} />
@@ -48,7 +48,7 @@ export function TrendChart({ data }: { data: TrendData[] }) {
 
 export function SubjectChart({ data }: { data: SubjectData[] }) {
   return (
-    <ResponsiveContainer width="100%" height="100%">
+    <ResponsiveContainer width="100%" height="100%" debounce={50}>
       <BarChart data={data} layout="vertical" barCategoryGap="20%" margin={{ left: 8 }}>
         <CartesianGrid horizontal={false} stroke="var(--color-border)" strokeDasharray="3 3" />
         <XAxis

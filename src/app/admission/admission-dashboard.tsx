@@ -156,7 +156,7 @@ export function AdmissionDashboard({ initialData }: Props) {
   }
 
   const snapshotChartData = data.snapshots.map((s) => ({
-    date: new Date(s.snapshotDate).toLocaleDateString("zh-TW", { month: "numeric", day: "numeric" }),
+    date: new Date(s.snapshotDate).toLocaleDateString("zh-TW", { timeZone: "Asia/Taipei", month: "numeric", day: "numeric" }),
     median: s.estimatedTotalMedian,
     conservative: s.estimatedTotalConservative,
     optimistic: s.estimatedTotalOptimistic,
@@ -325,7 +325,7 @@ export function AdmissionDashboard({ initialData }: Props) {
                 <CardDescription>最近 {snapshotChartData.length} 次快照</CardDescription>
               </CardHeader>
               <CardContent>
-                <ResponsiveContainer width="100%" height={160}>
+                <ResponsiveContainer width="100%" height={160} debounce={50}>
                   <AreaChart data={snapshotChartData} margin={{ top: 4, right: 4, left: -20, bottom: 0 }}>
                     <defs>
                       <linearGradient id="medianGrad" x1="0" y1="0" x2="0" y2="1">

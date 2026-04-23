@@ -35,8 +35,7 @@ export const VTLink = forwardRef<HTMLAnchorElement, ViewTransitionLinkProps>(fun
     if (!target || target.startsWith("http")) return
 
     event.preventDefault()
-    const start = (document as unknown as { startViewTransition: (cb: () => void) => void }).startViewTransition
-    start(() => {
+    ;(document as unknown as { startViewTransition: (cb: () => void) => void }).startViewTransition(() => {
       router.push(target)
     })
   }
