@@ -19,7 +19,7 @@ export default async function AppleIcon() {
           width: "100%",
           height: "100%",
           display: "flex",
-          background: "#4B6B5E",
+          background: "#C13E43",
         }}
       >
         <img
