@@ -30,9 +30,9 @@ const tooltipStyle = {
 }
 
 const STATUS_COLORS: Record<string, string> = {
-  NEW: "#D0CEC2",
-  LEARNING: "#BF9A41",
-  FAMILIAR: "#7BAA80",
+  NEW: "#E7CA6B",
+  LEARNING: "#F9D502",
+  FAMILIAR: "#376EA5",
 }
 
 export function AccuracyChart({ data }: { data: AccuracyTrendPoint[] }) {
@@ -95,8 +95,8 @@ export function VocabularyTrendChart({ data }: { data: VocabularyDailyTrendPoint
         <YAxis stroke="#888888" fontSize={12} tickLine={false} axisLine={false} allowDecimals={false} />
         <Tooltip contentStyle={tooltipStyle} />
         <Legend verticalAlign="top" height={28} />
-        <Bar dataKey="reviewedWords" name="複習單字數" radius={[8, 8, 0, 0]} fill="#4B6B5E" />
-        <Bar dataKey="reviewCount" name="複習次數" radius={[8, 8, 0, 0]} fill="#BF9A41" />
+        <Bar dataKey="reviewedWords" name="複習單字數" radius={[8, 8, 0, 0]} fill="#376EA5" />
+        <Bar dataKey="reviewCount" name="複習次數" radius={[8, 8, 0, 0]} fill="#C13E43" />
       </BarChart>
     </ResponsiveContainer>
   )

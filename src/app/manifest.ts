@@ -7,8 +7,8 @@ export default function manifest(): MetadataRoute.Manifest {
     description: "追蹤你的學習時間、學習成果與複習任務。",
     start_url: "/dashboard",
     display: "standalone",
-    background_color: "#F5F3EA",
-    theme_color: "#4B6B5E",
+    background_color: "#F7F2E4",
+    theme_color: "#C13E43",
     orientation: "portrait",
     lang: "zh-Hant",
     icons: [
