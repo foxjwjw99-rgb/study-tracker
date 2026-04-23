@@ -19,7 +19,7 @@ export default async function Icon() {
           width: "100%",
           height: "100%",
           display: "flex",
-          background: "#6D54E8",
+          background: "#4B6B5E",
         }}
       >
         <img
