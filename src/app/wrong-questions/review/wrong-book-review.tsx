@@ -103,8 +103,8 @@ export function WrongBookReview({ items, subjectName }: Props) {
           </div>
 
           <div className="flex gap-2">
-            <Link href="/wrong-questions" className={cn(buttonVariants({ variant: "outline" }))}>
-              回錯題本
+            <Link href="/review" className={cn(buttonVariants({ variant: "outline" }))}>
+              回複習頁
             </Link>
             <Link href="/wrong-questions/review" className={cn(buttonVariants())}>
               再複習一輪
