@@ -1,37 +1,31 @@
 import Link from "next/link"
-import { getReviewTasks, getWrongQuestions, completeReviewTask } from "@/app/actions/review"
+import { getReviewTasks, completeReviewTask } from "@/app/actions/review"
+import { getWrongQuestionsWithFilters, getWrongQuestionStats } from "@/app/actions/wrong-questions"
 import { getSubjects } from "@/app/actions/subject"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { differenceInCalendarDays, format, startOfDay } from "date-fns"
 import { Button } from "@/components/ui/button"
-import { BookMarked, PlayCircle } from "lucide-react"
+import { BookOpen, PlayCircle } from "lucide-react"
 import { ManualReviewTaskForm } from "./manual-review-task-form"
 import { VocabularyReviewTaskControls } from "./vocabulary-review-task-controls"
-import type { ReviewTaskItem, WrongQuestionItem } from "@/types"
+import { WrongQuestionList } from "@/app/wrong-questions/wrong-question-list"
+import { ManualWrongQuestionForm } from "@/app/wrong-questions/manual-wrong-question-form"
+import type { ReviewTaskItem } from "@/types"
 
 export default async function ReviewPage() {
-  const subjects = await getSubjects()
-  const reviews = await getReviewTasks()
-  const wrongQs = await getWrongQuestions()
+  const [subjects, reviews, wrongItems, wrongStats] = await Promise.all([
+    getSubjects(),
+    getReviewTasks(),
+    getWrongQuestionsWithFilters({ limit: 200 }),
+    getWrongQuestionStats(),
+  ])
 
   const today = startOfDay(new Date())
-  const now = new Date()
 
   const overdueReviews = reviews.filter((task) => differenceInCalendarDays(today, new Date(task.review_date)) > 0)
   const dueTodayReviews = reviews.filter((task) => differenceInCalendarDays(today, new Date(task.review_date)) === 0)
   const overdueCount = overdueReviews.length
-
-  const unresolvedWrongCount = wrongQs.filter(
-    (q: WrongQuestionItem) => q.status !== "MASTERED" && q.status !== "ARCHIVED"
-  ).length
-  const dueWrongCount = wrongQs.filter(
-    (q: WrongQuestionItem) =>
-      q.status !== "MASTERED" &&
-      q.status !== "ARCHIVED" &&
-      q.next_review_date != null &&
-      new Date(q.next_review_date) <= now
-  ).length
 
   return (
     <div className="mx-auto max-w-6xl space-y-6 lg:space-y-8">
@@ -48,7 +42,7 @@ export default async function ReviewPage() {
       <div className="grid gap-3 sm:grid-cols-3">
         <SummaryCard label="待處理複習" value={`${reviews.length} 項`} detail="今天以前該完成的任務" />
         <SummaryCard label="已逾期" value={`${overdueCount} 項`} detail={overdueCount > 0 ? "這些最值得先清掉" : "沒有逾期，節奏不錯"} tone={overdueCount > 0 ? "warning" : "default"} />
-        <SummaryCard label="未掌握錯題" value={`${unresolvedWrongCount} 題`} detail={dueWrongCount > 0 ? `今天到期 ${dueWrongCount} 題` : "今天沒有到期錯題"} />
+        <SummaryCard label="未掌握錯題" value={`${wrongStats.unresolvedCount} 題`} detail={wrongStats.dueCount > 0 ? `今天到期 ${wrongStats.dueCount} 題` : "今天沒有到期錯題"} />
       </div>
 
       {subjects.length > 0 ? (
@@ -63,87 +57,105 @@ export default async function ReviewPage() {
         </Card>
       ) : null}
 
-      <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
+      <Card>
+        <CardHeader>
+          <CardTitle>今日複習任務</CardTitle>
+          <CardDescription>排定於今日或已逾期的任務。</CardDescription>
+        </CardHeader>
+        <CardContent>
+          {reviews.length === 0 ? (
+            <div className="rounded-2xl border border-dashed border-border bg-background/60 px-5 py-8 text-center">
+              <p className="text-sm font-medium text-foreground">目前沒有待複習任務！太棒了。</p>
+              <p className="mt-1 text-xs text-muted-foreground">所有複習都已完成，繼續保持。</p>
+            </div>
+          ) : (
+            <div className="space-y-5">
+              {overdueReviews.length > 0 ? (
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between gap-2">
+                    <div>
+                      <p className="text-sm font-semibold text-foreground">先清逾期複習</p>
+                      <p className="text-xs text-muted-foreground">這些最影響記憶保留，建議優先處理。</p>
+                    </div>
+                    <Badge variant="destructive">{overdueReviews.length} 項</Badge>
+                  </div>
+                  {overdueReviews.map((task: ReviewTaskItem) => {
+                    const overdueDays = differenceInCalendarDays(today, new Date(task.review_date))
+                    return (
+                      <ReviewTaskCard key={task.id} task={task} overdueDays={overdueDays} />
+                    )
+                  })}
+                </div>
+              ) : null}
+
+              {dueTodayReviews.length > 0 ? (
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between gap-2">
+                    <div>
+                      <p className="text-sm font-semibold text-foreground">今天到期</p>
+                      <p className="text-xs text-muted-foreground">逾期清完後，再把今天該做的處理掉。</p>
+                    </div>
+                    <Badge variant="secondary">{dueTodayReviews.length} 項</Badge>
+                  </div>
+                  {dueTodayReviews.map((task: ReviewTaskItem) => (
+                    <ReviewTaskCard key={task.id} task={task} overdueDays={0} />
+                  ))}
+                </div>
+              ) : null}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      <div className="space-y-6">
+        <div>
+          <h2 className="text-xl font-semibold tracking-tight">錯題本</h2>
+          <p className="text-sm text-muted-foreground">每題沿著 1 → 3 → 7 → 14 天複習鏈前進，走完才算掌握。</p>
+        </div>
+
+        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+          <StatCard label="今天到期" value={wrongStats.dueCount} tone={wrongStats.dueCount > 0 ? "warning" : "default"} />
+          <StatCard label="未掌握錯題" value={wrongStats.unresolvedCount} />
+          <StatCard label="最近 7 天新增" value={wrongStats.recentAddedCount} />
+          <StatCard label="最近 7 天已掌握" value={wrongStats.recentMasteredCount} />
+        </div>
+
+        {wrongStats.dueCount > 0 && (
+          <div className="flex items-center justify-between rounded-2xl border border-amber-500/20 bg-amber-500/5 px-4 py-3">
+            <p className="text-sm text-amber-800 dark:text-amber-200">
+              有 <span className="font-semibold">{wrongStats.dueCount}</span> 題今天到期，可以開始複習了。
+            </p>
+            <Link href="/wrong-questions/review" className="inline-flex items-center justify-center rounded-xl border border-transparent bg-primary px-2.5 py-1 text-[0.8rem] font-medium text-primary-foreground transition-all hover:bg-primary/90">
+              <PlayCircle className="mr-2 h-4 w-4" />
+              開始複習
+            </Link>
+          </div>
+        )}
+
+        {subjects.length > 0 && (
+          <Card>
+            <CardHeader>
+              <CardTitle>手動加入錯題</CardTitle>
+              <CardDescription>適合加入考卷、講義、自己算錯但不在題庫裡的題目。</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <ManualWrongQuestionForm subjects={subjects} />
+            </CardContent>
+          </Card>
+        )}
+
         <Card>
-          <CardHeader>
-            <CardTitle>今日複習任務</CardTitle>
-            <CardDescription>排定於今日或已逾期的任務。</CardDescription>
+          <CardHeader className="flex flex-row items-center justify-between">
+            <CardTitle className="flex items-center gap-2">
+              <BookOpen className="h-5 w-5" />
+              所有錯題
+            </CardTitle>
+            <Link href="/wrong-questions/review" className="inline-flex items-center justify-center rounded-xl border border-border/90 bg-background/80 px-2.5 py-1 text-[0.8rem] font-medium text-foreground transition-all hover:bg-muted">
+              複習到期錯題
+            </Link>
           </CardHeader>
           <CardContent>
-            {reviews.length === 0 ? (
-              <div className="rounded-2xl border border-dashed border-border bg-background/60 px-5 py-8 text-center">
-                <p className="text-sm font-medium text-foreground">目前沒有待複習任務！太棒了。</p>
-                <p className="mt-1 text-xs text-muted-foreground">所有複習都已完成，繼續保持。</p>
-              </div>
-            ) : (
-              <div className="space-y-5">
-                {overdueReviews.length > 0 ? (
-                  <div className="space-y-3">
-                    <div className="flex items-center justify-between gap-2">
-                      <div>
-                        <p className="text-sm font-semibold text-foreground">先清逾期複習</p>
-                        <p className="text-xs text-muted-foreground">這些最影響記憶保留，建議優先處理。</p>
-                      </div>
-                      <Badge variant="destructive">{overdueReviews.length} 項</Badge>
-                    </div>
-                    {overdueReviews.map((task: ReviewTaskItem) => {
-                      const overdueDays = differenceInCalendarDays(today, new Date(task.review_date))
-                      return (
-                        <ReviewTaskCard key={task.id} task={task} overdueDays={overdueDays} />
-                      )
-                    })}
-                  </div>
-                ) : null}
-
-                {dueTodayReviews.length > 0 ? (
-                  <div className="space-y-3">
-                    <div className="flex items-center justify-between gap-2">
-                      <div>
-                        <p className="text-sm font-semibold text-foreground">今天到期</p>
-                        <p className="text-xs text-muted-foreground">逾期清完後，再把今天該做的處理掉。</p>
-                      </div>
-                      <Badge variant="secondary">{dueTodayReviews.length} 項</Badge>
-                    </div>
-                    {dueTodayReviews.map((task: ReviewTaskItem) => (
-                      <ReviewTaskCard key={task.id} task={task} overdueDays={0} />
-                    ))}
-                  </div>
-                ) : null}
-              </div>
-            )}
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <BookMarked className="h-4 w-4" />
-              錯題本
-            </CardTitle>
-            <CardDescription>每題沿著 1 → 3 → 7 → 14 天複習鏈前進，走完才算掌握。</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="grid grid-cols-2 gap-3">
-              <div className="rounded-xl border border-border/70 bg-background/70 p-3 text-center">
-                <p className="text-xs text-muted-foreground">未掌握</p>
-                <p className="mt-1 text-2xl font-semibold">{unresolvedWrongCount}</p>
-              </div>
-              <div className={`rounded-xl border p-3 text-center ${dueWrongCount > 0 ? "border-destructive/20 bg-destructive/5" : "border-border/70 bg-background/70"}`}>
-                <p className="text-xs text-muted-foreground">今天到期</p>
-                <p className={`mt-1 text-2xl font-semibold ${dueWrongCount > 0 ? "text-destructive" : ""}`}>{dueWrongCount}</p>
-              </div>
-            </div>
-            <div className="flex flex-col gap-2 sm:flex-row">
-              <Link href="/wrong-questions" className="inline-flex items-center justify-center rounded-xl border border-border/90 bg-background/80 px-3 py-1.5 text-sm font-medium transition-all hover:bg-muted">
-                前往錯題本
-              </Link>
-              {dueWrongCount > 0 && (
-                <Link href="/wrong-questions/review" className="inline-flex items-center justify-center rounded-xl bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground transition-all hover:bg-primary/90">
-                  <PlayCircle className="mr-1.5 h-3.5 w-3.5" />
-                  開始複習（{dueWrongCount} 題）
-                </Link>
-              )}
-            </div>
+            <WrongQuestionList initialItems={wrongItems} subjects={subjects} />
           </CardContent>
         </Card>
       </div>
@@ -175,6 +187,25 @@ function SummaryCard({
         {value}
       </p>
       <p className="mt-2 text-sm text-muted-foreground">{detail}</p>
+    </div>
+  )
+}
+
+function StatCard({
+  label,
+  value,
+  tone = "default",
+}: {
+  label: string
+  value: number
+  tone?: "default" | "warning"
+}) {
+  return (
+    <div className="rounded-2xl border border-border/70 bg-background/70 p-4">
+      <p className="text-sm text-muted-foreground">{label}</p>
+      <p className={`mt-2 text-3xl font-semibold tracking-tight ${tone === "warning" ? "text-destructive" : "text-foreground"}`}>
+        {value}
+      </p>
     </div>
   )
 }
