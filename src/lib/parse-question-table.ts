@@ -14,7 +14,7 @@ type TableRow = {
   explanation?: string
 }
 
-const ANSWER_MAP: Record<string, number> = {
+export const ANSWER_MAP: Record<string, number> = {
   a: 0, b: 1, c: 2, d: 3,
   "1": 0, "2": 1, "3": 2, "4": 3,
 }
