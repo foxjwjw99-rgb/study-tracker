@@ -129,11 +129,9 @@ export function QuestionPractice({ questionBank, initialSubjectId }: QuestionPra
   }, [effectiveQuestionCount])
 
   const currentQuestion = session ? session.questions[session.currentIndex] : null
-  const previousQuestion = session && session.currentIndex > 0 ? session.questions[session.currentIndex - 1] : null
   const showGroupContext = Boolean(
     currentQuestion?.group_id &&
-    currentQuestion.group_context &&
-    currentQuestion.group_id !== previousQuestion?.group_id
+    (currentQuestion.group_context || currentQuestion.group_context_structured || currentQuestion.group_table_data)
   )
   const currentAnswer = currentQuestion
     ? session?.answers.find((answer) => answer.question_id === currentQuestion.id) ?? null
