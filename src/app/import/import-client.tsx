@@ -768,7 +768,7 @@ export function ImportClient({ studyGroups }: ImportClientProps) {
                               {isGroup
                                 ? `${item.questions.length} 題`
                                 : item.question_type === "fill_in_blank"
-                                  ? item.text_answer
+                                  ? (item.text_answer ?? (item.blanks?.length ? `[${item.blanks.length} 空格]` : "—"))
                                   : item.answer}
                             </TableCell>
                             <TableCell>

@@ -564,8 +564,11 @@ async function importSingleGroup(
 
     const groupChildTextKey = questionTextKey(subjectId, `${group.group_context}::${question.question}`)
     const plainTextKey = questionTextKey(subjectId, question.question)
+    // Only check within-batch deduplication for child questions. The group itself
+    // has already been deduplicated against the DB, so its children are new by
+    // association — checking plain question text against the DB would cause false
+    // duplicates when two distinct groups contain sub-questions with identical wording.
     if (
-      existing.questionTextKeys.has(plainTextKey) ||
       payloadState.questionTextKeys.has(groupChildTextKey) ||
       payloadState.questionTextKeys.has(plainTextKey)
     ) {

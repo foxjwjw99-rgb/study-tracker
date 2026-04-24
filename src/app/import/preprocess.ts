@@ -5,7 +5,7 @@ import {
   type ParseMathImportSuccess,
 } from "./parser"
 import type { ImportedQuestionImportItem } from "./schema"
-import { parseCsvToQuestionGroups, parseXlsxToQuestionGroups } from "@/lib/parse-question-table"
+import { parseCsvToQuestionGroups, parseXlsxToQuestionGroups, ANSWER_MAP } from "@/lib/parse-question-table"
 
 export type PreprocessResult = ParseImportSuccess | ParseMathImportSuccess | ParseImportFailure
 
@@ -59,16 +59,10 @@ function parseSingleQuestionCsv(rawText: string): ParseImportSuccess | ParseImpo
     const optC = get("option_c"); if (optC) options.push(optC)
     const optD = get("option_d"); if (optD) options.push(optD)
 
-    const rawAnswer = get("answer").toUpperCase()
-    let answerIdx: number
-    if (rawAnswer === "A") answerIdx = 0
-    else if (rawAnswer === "B") answerIdx = 1
-    else if (rawAnswer === "C") answerIdx = 2
-    else if (rawAnswer === "D") answerIdx = 3
-    else {
-      const n = parseInt(rawAnswer, 10)
-      if (isNaN(n)) return { error: `第 ${i} 行的 answer 格式不正確（應為 A/B/C/D 或 0/1/2/3）。` }
-      answerIdx = n
+    const rawAnswer = get("answer").toLowerCase()
+    const answerIdx = ANSWER_MAP[rawAnswer]
+    if (answerIdx === undefined) {
+      return { error: `第 ${i} 行的 answer 格式不正確（應為 A/B/C/D 或 1/2/3/4）。` }
     }
 
     if (answerIdx >= options.length) {

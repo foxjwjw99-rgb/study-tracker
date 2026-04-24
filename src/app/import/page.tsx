@@ -104,10 +104,10 @@ export default async function ImportPage() {
               <p><strong>單題 CSV</strong>（無 <code>group_context</code>）：</p>
               <pre className="overflow-x-auto"><code>{`subject, topic, question, option_a, option_b, option_c, option_d, answer, explanation`}</code></pre>
               <p><strong>題組 CSV / Excel</strong>（含 <code>group_context</code>）：</p>
-              <pre className="overflow-x-auto"><code>{`subject, topic, group_title, group_context, question, option_A, option_B, option_C, option_D, answer, explanation`}</code></pre>
+              <pre className="overflow-x-auto"><code>{`subject, topic, group_title, group_context, question, option_a, option_b, option_c, option_d, answer, explanation`}</code></pre>
               <ul>
                 <li>題組 CSV 中相同 <strong>subject + topic + group_context</strong> 的列會自動歸為同一題組。</li>
-                <li><strong>answer</strong> 可填 A/B/C/D 或 0/1/2/3（單題 CSV）、A/B/C/D 或 1/2/3/4（題組 CSV）；若無選項欄位則視為填空題。</li>
+                <li><strong>answer</strong> 可填 A/B/C/D 或 1/2/3/4（兩種 CSV 格式相同）；若無選項欄位則視為填空題。</li>
               </ul>
             </div>
           </details>
