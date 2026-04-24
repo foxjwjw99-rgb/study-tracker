@@ -91,8 +91,8 @@ export function MathGraph() {
   ])
   const [xMin, setXMin] = useState(-10)
   const [xMax, setXMax] = useState(10)
-  const [yMin, setYMin] = useState<number | "auto">(-5)
-  const [yMax, setYMax] = useState<number | "auto">(5)
+  const [yMin, setYMin] = useState(-5)
+  const [yMax, setYMax] = useState(5)
   const [rangeError, setRangeError] = useState<string | null>(null)
 
   const validFunctions = functions
@@ -136,8 +136,8 @@ export function MathGraph() {
     setXMax(max)
   }
 
-  const updateYRange = (min: number | "auto", max: number | "auto") => {
-    if (min !== "auto" && max !== "auto" && min >= max) {
+  const updateYRange = (min: number, max: number) => {
+    if (min >= max) {
       setRangeError("Y 最小值必須小於最大值")
       return
     }
@@ -146,7 +146,7 @@ export function MathGraph() {
     setYMax(max)
   }
 
-  const yDomain: [number | "auto", number | "auto"] = [yMin, yMax]
+  const yDomain: [number, number] = [yMin, yMax]
 
   return (
     <div className="space-y-6">
@@ -212,12 +212,12 @@ export function MathGraph() {
         />
         <RangeInput
           label="Y 最小值"
-          value={yMin === "auto" ? -5 : yMin}
+          value={yMin}
           onChange={(v) => updateYRange(v, yMax)}
         />
         <RangeInput
           label="Y 最大值"
-          value={yMax === "auto" ? 5 : yMax}
+          value={yMax}
           onChange={(v) => updateYRange(yMin, v)}
         />
       </div>
@@ -237,6 +237,7 @@ export function MathGraph() {
                 dataKey="x"
                 type="number"
                 domain={[xMin, xMax]}
+                allowDataOverflow
                 tickCount={9}
                 tick={{ fontSize: 11, fill: "var(--color-muted-foreground)" }}
                 tickLine={false}
@@ -244,7 +245,9 @@ export function MathGraph() {
                 tickFormatter={(v: number) => v.toString()}
               />
               <YAxis
+                type="number"
                 domain={yDomain}
+                allowDataOverflow
                 tick={{ fontSize: 11, fill: "var(--color-muted-foreground)" }}
                 tickLine={false}
                 axisLine={{ stroke: "var(--color-border)" }}

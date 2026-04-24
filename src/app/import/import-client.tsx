@@ -500,7 +500,7 @@ export function ImportClient({ studyGroups }: ImportClientProps) {
               <RefreshCcw className="mr-2 h-4 w-4" />
               清空
             </Button>
-            <Button type="button" onClick={handlePreview}>
+            <Button type="button" onClick={handlePreview} disabled={!inputText.trim()}>
               預覽並驗證
             </Button>
           </div>
