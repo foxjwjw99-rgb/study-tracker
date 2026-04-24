@@ -12,6 +12,16 @@ import type {
   VocabularyListProgressItem,
 } from "@/types"
 
+function sanitizeVocabularyMeaning(raw: string): string {
+  return raw
+    .replace(/^\s*\\cdot\}?\$?/, "")
+    .replace(/\\cdot\}?\$?\s*$/, "")
+    .replace(/^\s*\$+/, "")
+    .replace(/\$+\s*$/, "")
+    .replace(/\s+/g, " ")
+    .trim()
+}
+
 export function VocabularyInsights({
   data,
   showBackToVocabulary = false,
@@ -80,7 +90,7 @@ export function VocabularyInsights({
                     </div>
                     <div className="min-w-0">
                       <div className="font-semibold leading-tight">{word.word}</div>
-                      <div className="mt-1 text-sm text-muted-foreground break-words">{word.meaning}</div>
+                      <div className="mt-1 text-sm text-muted-foreground break-words">{sanitizeVocabularyMeaning(word.meaning)}</div>
                       <div className="mt-1 text-xs text-muted-foreground">{word.listName}</div>
                     </div>
                   </div>
