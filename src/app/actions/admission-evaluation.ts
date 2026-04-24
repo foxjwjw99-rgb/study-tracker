@@ -13,6 +13,8 @@ import type {
   AdmissionEvaluationV2Data,
   AdmissionLevel,
   ConfidenceLevel,
+  PriorityAction,
+  ScoreSimulation,
   SubjectEvaluationV2Item,
   TargetProgramItem,
 } from "@/types"
@@ -110,6 +112,8 @@ export async function getAdmissionEvaluationV2(
       scoreGainCandidates: [],
       snapshots: [],
       allTargetPrograms,
+      priorityActions: [],
+      scoreSimulations: [],
     }
   }
 
@@ -244,6 +248,24 @@ export async function getAdmissionEvaluationV2(
 
   // ── Per-subject evaluation ──
   const evaluatedSubjects: SubjectEvaluationV2Item[] = []
+  type SubjectContext = {
+    subjectId: string
+    subjectName: string
+    normWeight: number | null
+    mockExamScoreMaybe: number | null
+    recentPracticeScore: number
+    unitMasteryScore: number
+    coverageScore: number
+    coverageRate: number
+    stabilityScore: number
+    totalPenalty: number
+    overdueCount: number
+    wrongCount: number
+    mockExamCount: number
+    weakUnits: Array<{ unitId: string | null; unitName: string; weight: number; masteryPct: number | null }>
+    uncoveredHighWeightUnits: Array<{ unitId: string | null; unitName: string; weight: number; weightRatio: number }>
+  }
+  const subjectContexts: SubjectContext[] = []
 
   for (const subject of configuredSubjects) {
     const units = subject.exam_syllabus_units
@@ -297,11 +319,38 @@ export async function getAdmissionEvaluationV2(
       ? Math.floor((now.getTime() - lastActivity.getTime()) / (1000 * 60 * 60 * 24))
       : 999
 
-    const hasHighWeightWeakUnit = units.some(
-      (u) =>
-        u.weight / rawWeightSum >= 0.2 &&
-        (u.mastery_score == null || (u.mastery_score / 5) * 100 < 50),
-    )
+    const weakUnitEntries = rawWeightSum > 0
+      ? units
+          .filter(
+            (u) =>
+              u.weight / rawWeightSum >= 0.2 &&
+              (u.mastery_score == null || (u.mastery_score / 5) * 100 < 50),
+          )
+          .map((u) => ({
+            unitId: u.unit_id ?? null,
+            unitName: u.unit_name,
+            weight: u.weight,
+            masteryPct: u.mastery_score != null ? (u.mastery_score / 5) * 100 : null,
+          }))
+      : []
+    const hasHighWeightWeakUnit = weakUnitEntries.length > 0
+
+    const uncoveredHighWeightUnits = rawWeightSum > 0
+      ? units
+          .filter(
+            (u) =>
+              u.weight / rawWeightSum >= 0.15 &&
+              !unitAccuracyMap.has(
+                `${subject.id}:${buildSyllabusCoverageKey(u.unit_id ?? null, u.unit_name)}`,
+              ),
+          )
+          .map((u) => ({
+            unitId: u.unit_id ?? null,
+            unitName: u.unit_name,
+            weight: u.weight,
+            weightRatio: u.weight / rawWeightSum,
+          }))
+      : []
 
     const overdueReviewPenalty = Math.min(10, overdueCount * 1.5)
     const wrongQuestionsPenalty = Math.min(10, wrongCount * 1.2)
@@ -386,6 +435,56 @@ export async function getAdmissionEvaluationV2(
       mockExamCount,
       coverageRate,
     })
+
+    subjectContexts.push({
+      subjectId: subject.id,
+      subjectName: subject.name,
+      normWeight,
+      mockExamScoreMaybe: mockExamScore,
+      recentPracticeScore,
+      unitMasteryScore,
+      coverageScore,
+      coverageRate,
+      stabilityScore,
+      totalPenalty,
+      overdueCount,
+      wrongCount,
+      mockExamCount,
+      weakUnits: weakUnitEntries,
+      uncoveredHighWeightUnits,
+    })
+  }
+
+  // ── Helper: re-compute median with overrides (for simulations) ──
+  function simulateSubjectMedian(
+    ctx: SubjectContext,
+    overrides: {
+      unitMasteryScore?: number
+      coverageScore?: number
+      totalPenalty?: number
+    },
+  ): number {
+    const mastery = overrides.unitMasteryScore ?? ctx.unitMasteryScore
+    const coverage = overrides.coverageScore ?? ctx.coverageScore
+    const penalty = overrides.totalPenalty ?? ctx.totalPenalty
+    let raw: number
+    if (ctx.mockExamScoreMaybe != null) {
+      raw =
+        0.45 * ctx.mockExamScoreMaybe +
+        0.2 * ctx.recentPracticeScore +
+        0.15 * mastery +
+        0.1 * coverage +
+        0.1 * ctx.stabilityScore -
+        penalty
+    } else {
+      raw =
+        0.4 * ctx.recentPracticeScore +
+        0.25 * mastery +
+        0.2 * coverage +
+        0.15 * ctx.stabilityScore -
+        penalty
+    }
+    return clamp(round1(raw), 0, 100)
   }
 
   // ── Total score ──
@@ -464,6 +563,173 @@ export async function getAdmissionEvaluationV2(
     ? { ...topGain, unitName: null }
     : null
 
+  // ── Priority actions ──
+  // For each subject, derive concrete actionable items with estimated total-score gain.
+  const rawActions: PriorityAction[] = []
+  for (const ctx of subjectContexts) {
+    const weightFactor = ctx.normWeight ?? 1 / Math.max(subjectContexts.length, 1)
+    const evalItem = evaluatedSubjects.find((s) => s.subjectId === ctx.subjectId)
+    if (!evalItem) continue
+
+    // wrong_questions
+    if (evalItem.penaltyBreakdown.wrongQuestions > 0) {
+      const gain = round1(evalItem.penaltyBreakdown.wrongQuestions * weightFactor)
+      rawActions.push({
+        id: `wrong:${ctx.subjectId}`,
+        subjectId: ctx.subjectId,
+        subjectName: ctx.subjectName,
+        kind: "wrong_questions",
+        title: `清除${ctx.subjectName}的 ${ctx.wrongCount} 題錯題`,
+        description: `錯題扣 ${evalItem.penaltyBreakdown.wrongQuestions} 分，處理完可立刻回血`,
+        estimatedPointGain: gain,
+        href: `/wrong-questions?subjectId=${ctx.subjectId}`,
+        ctaLabel: "前往錯題本",
+      })
+    }
+
+    // overdue_reviews
+    if (evalItem.penaltyBreakdown.overdueReview > 0) {
+      const gain = round1(evalItem.penaltyBreakdown.overdueReview * weightFactor)
+      rawActions.push({
+        id: `overdue:${ctx.subjectId}`,
+        subjectId: ctx.subjectId,
+        subjectName: ctx.subjectName,
+        kind: "overdue_reviews",
+        title: `完成${ctx.subjectName}的 ${ctx.overdueCount} 個待複習`,
+        description: `待複習扣 ${evalItem.penaltyBreakdown.overdueReview} 分，短時間內可回補`,
+        estimatedPointGain: gain,
+        href: `/review?subjectId=${ctx.subjectId}`,
+        ctaLabel: "開始複習",
+      })
+    }
+
+    // weak_unit — take up to top 2 by weight
+    const topWeakUnits = [...ctx.weakUnits]
+      .sort((a, b) => b.weight - a.weight)
+      .slice(0, 2)
+    for (const u of topWeakUnits) {
+      const gain = round1(5 * weightFactor)
+      const masteryText = u.masteryPct != null ? `掌握 ${Math.round(u.masteryPct)}%` : "尚未自評"
+      rawActions.push({
+        id: `weak:${ctx.subjectId}:${u.unitId ?? u.unitName}`,
+        subjectId: ctx.subjectId,
+        subjectName: ctx.subjectName,
+        kind: "weak_unit",
+        title: `補${ctx.subjectName}「${u.unitName}」`,
+        description: `高權重單元（${masteryText}），拉起來可解除 -5 分懲罰`,
+        estimatedPointGain: gain,
+        href: `#subject-${ctx.subjectId}`,
+        ctaLabel: "查看科目",
+      })
+    }
+
+    // uncovered_unit — take up to top 2 by weight
+    const topUncovered = [...ctx.uncoveredHighWeightUnits]
+      .sort((a, b) => b.weight - a.weight)
+      .slice(0, 2)
+    for (const u of topUncovered) {
+      const coverageDelta = u.weightRatio * 100
+      const coverageWeightInFormula = ctx.mockExamScoreMaybe != null ? 0.1 : 0.2
+      const subjectGain = coverageDelta * coverageWeightInFormula
+      const gain = round1(subjectGain * weightFactor)
+      if (gain <= 0) continue
+      rawActions.push({
+        id: `uncov:${ctx.subjectId}:${u.unitId ?? u.unitName}`,
+        subjectId: ctx.subjectId,
+        subjectName: ctx.subjectName,
+        kind: "uncovered_unit",
+        title: `開始練${ctx.subjectName}「${u.unitName}」`,
+        description: `佔比 ${Math.round(u.weightRatio * 100)}% 但從未練過，補上可拉高範圍覆蓋`,
+        estimatedPointGain: gain,
+        href: `/practice?subjectId=${ctx.subjectId}`,
+        ctaLabel: "開始練習",
+      })
+    }
+
+    // mock_exam
+    if (ctx.mockExamCount < 2) {
+      const gain = round1(3 * weightFactor)
+      rawActions.push({
+        id: `mock:${ctx.subjectId}`,
+        subjectId: ctx.subjectId,
+        subjectName: ctx.subjectName,
+        kind: "mock_exam",
+        title: `再做一次${ctx.subjectName}模考`,
+        description:
+          ctx.mockExamCount === 0
+            ? "目前 0 次模考，預測準度低，做一次即可大幅提升信心"
+            : `目前只有 ${ctx.mockExamCount} 次模考，再做一次穩定度會上升`,
+        estimatedPointGain: gain,
+        href: `#subject-${ctx.subjectId}`,
+        ctaLabel: "查看科目",
+      })
+    }
+  }
+
+  // Sort by gain desc; cap at 5; cap 2 per subject
+  const perSubjectCount = new Map<string, number>()
+  const priorityActions: PriorityAction[] = []
+  for (const action of rawActions.sort((a, b) => b.estimatedPointGain - a.estimatedPointGain)) {
+    const count = perSubjectCount.get(action.subjectId) ?? 0
+    if (count >= 2) continue
+    priorityActions.push(action)
+    perSubjectCount.set(action.subjectId, count + 1)
+    if (priorityActions.length >= 5) break
+  }
+
+  // ── Score simulations ──
+  const scoreSimulations: ScoreSimulation[] = subjectContexts.map((ctx) => {
+    const currentMedian = round1(simulateSubjectMedian(ctx, {}))
+    const scenarios: ScoreSimulation["scenarios"] = []
+
+    if (ctx.totalPenalty > 0) {
+      const projected = simulateSubjectMedian(ctx, { totalPenalty: 0 })
+      const delta = round1(projected - currentMedian)
+      if (delta > 0) {
+        scenarios.push({
+          label: "若清除所有懲罰項",
+          projectedMedian: projected,
+          delta,
+          basis: "clear_penalty",
+        })
+      }
+    }
+
+    if (ctx.unitMasteryScore < 80) {
+      const boosted = clamp(ctx.unitMasteryScore + 20, 0, 100)
+      const projected = simulateSubjectMedian(ctx, { unitMasteryScore: boosted })
+      const delta = round1(projected - currentMedian)
+      if (delta > 0) {
+        scenarios.push({
+          label: `若單元掌握度 +20 分（${Math.round(ctx.unitMasteryScore)} → ${Math.round(boosted)}）`,
+          projectedMedian: projected,
+          delta,
+          basis: "mastery_boost",
+        })
+      }
+    }
+
+    if (ctx.coverageRate < 0.9) {
+      const projected = simulateSubjectMedian(ctx, { coverageScore: 90 })
+      const delta = round1(projected - currentMedian)
+      if (delta > 0) {
+        scenarios.push({
+          label: `若範圍覆蓋率拉到 90%（目前 ${Math.round(ctx.coverageRate * 100)}%）`,
+          projectedMedian: projected,
+          delta,
+          basis: "coverage_boost",
+        })
+      }
+    }
+
+    return {
+      subjectId: ctx.subjectId,
+      subjectName: ctx.subjectName,
+      currentMedian,
+      scenarios,
+    }
+  })
+
   const snapshots = snapshotsRaw.map((s) => ({
     snapshotDate: s.snapshot_date,
     estimatedTotalConservative: s.estimated_total_conservative,
@@ -484,6 +750,8 @@ export async function getAdmissionEvaluationV2(
     scoreGainCandidates,
     snapshots,
     allTargetPrograms,
+    priorityActions,
+    scoreSimulations,
   }
 }
 

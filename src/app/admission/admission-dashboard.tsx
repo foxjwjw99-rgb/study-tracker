@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useTransition } from "react"
+import { useEffect, useState, useTransition } from "react"
 import { useRouter } from "next/navigation"
 import {
   TrendingUp,
@@ -30,6 +30,8 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { TargetProgramManager } from "./target-program-manager"
+import { PriorityActionsCard } from "./priority-actions-card"
+import { ScoreSimulationCard } from "./score-simulation-card"
 import {
   savePredictionSnapshot,
   getAdmissionEvaluationV2,
@@ -136,6 +138,25 @@ export function AdmissionDashboard({ initialData }: Props) {
       return next
     })
   }
+
+  useEffect(() => {
+    function expandFromHash() {
+      if (typeof window === "undefined") return
+      const hash = window.location.hash
+      const match = hash.match(/^#subject-(.+)$/)
+      if (!match) return
+      const subjectId = match[1]
+      setExpandedSubjects((prev) => {
+        if (prev.has(subjectId)) return prev
+        const next = new Set(prev)
+        next.add(subjectId)
+        return next
+      })
+    }
+    expandFromHash()
+    window.addEventListener("hashchange", expandFromHash)
+    return () => window.removeEventListener("hashchange", expandFromHash)
+  }, [])
 
   function handleSaveSnapshot() {
     if (!selectedProgramId) {
@@ -317,6 +338,12 @@ export function AdmissionDashboard({ initialData }: Props) {
             </CardContent>
           </Card>
 
+          {/* ── Section 1.5: Priority actions ── */}
+          <PriorityActionsCard actions={data.priorityActions} />
+
+          {/* ── Section 1.6: Score simulations ── */}
+          <ScoreSimulationCard simulations={data.scoreSimulations} />
+
           {/* ── Section 2: Snapshot trend chart ── */}
           {snapshotChartData.length > 1 && data.targetProgram && (
             <Card>
@@ -405,7 +432,7 @@ export function AdmissionDashboard({ initialData }: Props) {
               {data.subjects.map((sub) => {
                 const isExpanded = expandedSubjects.has(sub.subjectId)
                 return (
-                  <Card key={sub.subjectId}>
+                  <Card key={sub.subjectId} id={`subject-${sub.subjectId}`} className="scroll-mt-24">
                     <CardHeader
                       className="cursor-pointer pb-2 pt-4"
                       role="button"

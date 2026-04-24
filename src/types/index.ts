@@ -741,6 +741,41 @@ export type AdmissionEvaluationV2Data = {
     admissionLevel: AdmissionLevel
   }>
   allTargetPrograms: TargetProgramItem[]
+  priorityActions: PriorityAction[]
+  scoreSimulations: ScoreSimulation[]
+}
+
+export type PriorityActionKind =
+  | "wrong_questions"
+  | "overdue_reviews"
+  | "weak_unit"
+  | "uncovered_unit"
+  | "mock_exam"
+
+export type PriorityAction = {
+  id: string
+  subjectId: string
+  subjectName: string
+  kind: PriorityActionKind
+  title: string
+  description: string
+  estimatedPointGain: number
+  href: string | null
+  ctaLabel: string | null
+}
+
+export type ScoreSimulationBasis = "clear_penalty" | "mastery_boost" | "coverage_boost"
+
+export type ScoreSimulation = {
+  subjectId: string
+  subjectName: string
+  currentMedian: number
+  scenarios: Array<{
+    label: string
+    projectedMedian: number
+    delta: number
+    basis: ScoreSimulationBasis
+  }>
 }
 
 // --- end Admission Evaluation v2 ---
