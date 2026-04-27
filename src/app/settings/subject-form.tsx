@@ -31,7 +31,7 @@ export function SubjectForm() {
       toast.success("科目已新增！")
       formRef.current?.reset()
       router.refresh()
-    } catch (e) {
+    } catch {
       toast.error("新增科目失敗。")
     }
   }

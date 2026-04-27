@@ -1,19 +1,5 @@
 import type { ImportedQuestionGroup } from "@/app/import/schema"
 
-type TableRow = {
-  subject: string
-  topic: string
-  group_title?: string
-  group_context: string
-  question: string
-  option_a?: string
-  option_b?: string
-  option_c?: string
-  option_d?: string
-  answer: string
-  explanation?: string
-}
-
 export const ANSWER_MAP: Record<string, number> = {
   a: 0, b: 1, c: 2, d: 3,
   "1": 0, "2": 1, "3": 2, "4": 3,

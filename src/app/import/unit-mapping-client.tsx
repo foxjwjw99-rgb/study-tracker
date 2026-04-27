@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useMemo } from "react"
+import { useState } from "react"
 import { Loader2, CheckCircle2, AlertCircle } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -22,10 +22,9 @@ import {
 
 type Props = {
   subjects: Array<{ id: string; name: string }>
-  subjectUnits: Array<{ id: string; subjectId: string; name: string }>
 }
 
-export function UnitMappingClient({ subjects, subjectUnits }: Props) {
+export function UnitMappingClient({ subjects }: Props) {
   const [selectedSubjectId, setSelectedSubjectId] = useState(subjects[0]?.id || "")
   const [mode, setMode] = useState<'groups' | 'questions'>('groups')
   const [previewData, setPreviewData] = useState<MapPreviewResult[]>([])
@@ -33,11 +32,6 @@ export function UnitMappingClient({ subjects, subjectUnits }: Props) {
   const [overrides, setOverrides] = useState<Record<string, string>>({})
   const [selectedMappings, setSelectedMappings] = useState<Set<string>>(new Set())
   const [isConfirming, setIsConfirming] = useState(false)
-
-  const availableUnits = useMemo(
-    () => subjectUnits.filter((u) => u.subjectId === selectedSubjectId),
-    [selectedSubjectId, subjectUnits]
-  )
 
   const handlePreview = async () => {
     if (!selectedSubjectId) {

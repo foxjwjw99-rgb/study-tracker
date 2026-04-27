@@ -1,5 +1,4 @@
 import { getDueWrongQuestions, getWrongQuestionById } from "@/app/actions/wrong-questions"
-import { getSubjects } from "@/app/actions/subject"
 import { WrongBookReview } from "./wrong-book-review"
 
 export default async function WrongQuestionsReviewPage({
@@ -9,14 +8,9 @@ export default async function WrongQuestionsReviewPage({
 }) {
   const questionId = searchParams.questionId
 
-  const [subjects, dueItems] = await Promise.all([
-    getSubjects(),
-    questionId
-      ? getWrongQuestionById(questionId).then((q) => (q ? [q] : []))
-      : getDueWrongQuestions(),
-  ])
-
-  const subjectName = subjects.length === 1 ? subjects[0].name : undefined
+  const dueItems = questionId
+    ? await getWrongQuestionById(questionId).then((q) => (q ? [q] : []))
+    : await getDueWrongQuestions()
 
   return (
     <div className="mx-auto max-w-2xl space-y-6">
@@ -30,7 +24,7 @@ export default async function WrongQuestionsReviewPage({
         </p>
       </div>
 
-      <WrongBookReview items={dueItems} subjectName={subjectName} />
+      <WrongBookReview items={dueItems} />
     </div>
   )
 }

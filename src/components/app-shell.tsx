@@ -25,15 +25,6 @@ type AppShellProps = {
   currentUser: CurrentUserSummary
 }
 
-function UserAvatar({ name }: { name: string }) {
-  const initial = name.trim().charAt(0).toUpperCase()
-  return (
-    <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-primary to-primary/60 text-sm font-bold text-primary-foreground shadow-sm">
-      {initial}
-    </div>
-  )
-}
-
 export function AppShell({ children, currentUser }: AppShellProps) {
   const pathname = usePathname()
   const [isMenuOpen, setIsMenuOpen] = useState(false)

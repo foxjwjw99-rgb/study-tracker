@@ -4,7 +4,7 @@ import Image from "next/image"
 import Link from "next/link"
 import { useEffect, useMemo, useState } from "react"
 import { useRouter } from "next/navigation"
-import { Check, CheckCircle2, CircleHelp, Clock3, PlayCircle, RotateCcw, Target, X } from "lucide-react"
+import { Check, CircleHelp, Clock3, PlayCircle, RotateCcw, Target, X } from "lucide-react"
 import { toast } from "sonner"
 
 import {

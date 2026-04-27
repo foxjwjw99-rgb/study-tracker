@@ -17,7 +17,6 @@ import type { WrongQuestionWithQuestion } from "@/app/actions/wrong-questions"
 
 type Props = {
   items: WrongQuestionWithQuestion[]
-  subjectName?: string
 }
 
 type ReviewState = {
@@ -42,7 +41,7 @@ function safeParseOptions(raw: string): string[] {
   return []
 }
 
-export function WrongBookReview({ items, subjectName }: Props) {
+export function WrongBookReview({ items }: Props) {
   const [state, setState] = useState<ReviewState>({
     index: 0,
     selectedAnswer: null,

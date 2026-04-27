@@ -54,7 +54,7 @@ export function PracticeLogForm({ subjects }: { subjects: Subject[] }) {
       })
       toast.success("練習紀錄已儲存！")
       formRef.current?.reset()
-    } catch (e) {
+    } catch {
       toast.error("儲存練習紀錄失敗。")
     }
   }

@@ -40,27 +40,6 @@ const UNIT_WEEKLY_TARGET_MINUTES = 120
 const DAILY_STUDY_GOAL_MINUTES = 240
 
 type SubjectSummary = { id: string; name: string }
-type AreaMetric = {
-  key: string
-  subjectId: string
-  subjectName: string
-  label: string
-  unitId: string | null
-  studyMinutes7d: number
-  practiceCount14d: number
-  practiceAccuracy14d: number | null
-  dueReviews: number
-  wrongCount: number
-  hasActivity: boolean
-  hasQuestionBank: boolean
-  score: number
-  note: string
-  studyScore: number
-  accuracyScore: number
-  memoryScore: number
-  coverageScore: number
-  penaltyReason: string | null
-}
 
 type AreaSeed = {
   subject_id: string

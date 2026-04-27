@@ -27,13 +27,13 @@ export function ExamDateForm({ initialDate }: { initialDate: Date | null }) {
   const [date, setDate] = useState<Date | undefined>(initialDate || undefined)
   const router = useRouter()
 
-  async function handleAction(formData: FormData) {
+  async function handleAction() {
     if (!date) return
     try {
       await updateExamDate(date)
       toast.success("考試日期更新成功！")
       router.refresh()
-    } catch (e) {
+    } catch {
       toast.error("更新考試日期失敗。")
     }
   }

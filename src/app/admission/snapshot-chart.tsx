@@ -1,5 +1,6 @@
 "use client"
 
+import { memo } from "react"
 import {
   Area,
   AreaChart,
@@ -23,7 +24,7 @@ type SnapshotChartProps = {
   lastYearLine: number
 }
 
-export default function SnapshotChart({ data, lastYearLine }: SnapshotChartProps) {
+function SnapshotChart({ data, lastYearLine }: SnapshotChartProps) {
   return (
     <ResponsiveContainer width="100%" height={160} debounce={50}>
       <AreaChart data={data} margin={{ top: 4, right: 4, left: -20, bottom: 0 }}>
@@ -89,3 +90,5 @@ export default function SnapshotChart({ data, lastYearLine }: SnapshotChartProps
     </ResponsiveContainer>
   )
 }
+
+export default memo(SnapshotChart)

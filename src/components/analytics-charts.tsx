@@ -1,5 +1,6 @@
 "use client"
 
+import { memo } from "react"
 import {
   Bar,
   BarChart,
@@ -35,7 +36,7 @@ const STATUS_COLORS: Record<string, string> = {
   FAMILIAR: "#376EA5",
 }
 
-export function AccuracyChart({ data }: { data: AccuracyTrendPoint[] }) {
+export const AccuracyChart = memo(function AccuracyChart({ data }: { data: AccuracyTrendPoint[] }) {
   return (
     <ResponsiveContainer width="100%" height="100%" debounce={50}>
       <LineChart data={data} margin={{ top: 5, right: 16, left: -16, bottom: 5 }}>
@@ -65,9 +66,9 @@ export function AccuracyChart({ data }: { data: AccuracyTrendPoint[] }) {
       </LineChart>
     </ResponsiveContainer>
   )
-}
+})
 
-export function VocabularyStatusChart({ data }: { data: VocabularyStatusDistributionItem[] }) {
+export const VocabularyStatusChart = memo(function VocabularyStatusChart({ data }: { data: VocabularyStatusDistributionItem[] }) {
   return (
     <ResponsiveContainer width="100%" height="100%" debounce={50}>
       <PieChart>
@@ -84,9 +85,9 @@ export function VocabularyStatusChart({ data }: { data: VocabularyStatusDistribu
       </PieChart>
     </ResponsiveContainer>
   )
-}
+})
 
-export function VocabularyTrendChart({ data }: { data: VocabularyDailyTrendPoint[] }) {
+export const VocabularyTrendChart = memo(function VocabularyTrendChart({ data }: { data: VocabularyDailyTrendPoint[] }) {
   return (
     <ResponsiveContainer width="100%" height="100%" debounce={50}>
       <BarChart data={data} margin={{ top: 5, right: 16, left: -16, bottom: 5 }}>
@@ -100,4 +101,4 @@ export function VocabularyTrendChart({ data }: { data: VocabularyDailyTrendPoint
       </BarChart>
     </ResponsiveContainer>
   )
-}
+})

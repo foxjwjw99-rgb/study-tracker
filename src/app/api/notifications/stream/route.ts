@@ -24,11 +24,8 @@ export async function GET(req: NextRequest) {
   const existingHeartbeat = heartbeatIntervals.get(userId)
   if (existingHeartbeat) clearInterval(existingHeartbeat)
 
-  let controller: ReadableStreamDefaultController<string>
-
   const stream = new ReadableStream<string>({
     start(ctrl) {
-      controller = ctrl
       clients.set(userId, ctrl)
 
       sendEvent(ctrl, { type: "connected" })
