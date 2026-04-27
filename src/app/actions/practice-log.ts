@@ -42,8 +42,7 @@ export async function getQuestionsForManagement(
   const user = await getCurrentUserOrThrow()
   const normalizedSubjectName = await resolveSubjectName(user.id, subjectNameOrId)
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const questions: any[] = await (prisma.question as any).findMany({
+  const questions = await prisma.question.findMany({
     where: {
       user_id: user.id,
       subject: { name: normalizedSubjectName },

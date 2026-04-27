@@ -112,10 +112,9 @@ export async function parseXlsxToQuestionGroups(buffer: ArrayBuffer): Promise<Im
   if (!sheetName) return []
 
   const sheet = workbook.Sheets[sheetName]
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const rawRows: any[] = (XLSX.utils as any).sheet_to_json(sheet, { defval: "" })
+  const rawRows = XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet, { defval: "" })
 
-  const rows: Record<string, string>[] = rawRows.map((raw: Record<string, unknown>) => {
+  const rows: Record<string, string>[] = rawRows.map((raw) => {
     const normalized: Record<string, string> = {}
     for (const [key, value] of Object.entries(raw)) {
       normalized[normalizeHeader(String(key))] = String(value ?? "")

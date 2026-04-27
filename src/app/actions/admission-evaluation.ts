@@ -155,7 +155,7 @@ export async function getAdmissionEvaluationV2(
     // Overdue review tasks per subject
     prisma.reviewTask.groupBy({
       by: ["subject_id"],
-      where: { user_id: user.id, completed: false, review_date: { lt: now } },
+      where: { user_id: user.id, completed: false, review_date: { lt: now }, subject_id: { not: null } },
       _count: { id: true },
     }),
     // Unresolved wrong questions per subject
@@ -223,7 +223,7 @@ export async function getAdmissionEvaluationV2(
 
   const overdueMap = new Map<string, number>()
   for (const r of overdueReviewCounts) {
-    overdueMap.set(r.subject_id, r._count.id)
+    if (r.subject_id) overdueMap.set(r.subject_id, r._count.id)
   }
 
   const wrongMap = new Map<string, number>()
