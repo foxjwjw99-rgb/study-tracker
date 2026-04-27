@@ -995,8 +995,9 @@ function CompletionScreen({
   const correctCount = session.correctCount
   const hardCount = session.hardCount
   const accuracyPct = totalReviewed > 0 ? Math.round((correctCount / totalReviewed) * 100) : 0
+  const [completedAt] = useState(() => Date.now())
   const elapsedMin =
-    sessionStartedAt !== null ? Math.round((Date.now() - sessionStartedAt) / 60000) : 0
+    sessionStartedAt !== null ? Math.round((completedAt - sessionStartedAt) / 60000) : 0
 
   return (
     <div className="fixed inset-0 z-[100] flex flex-col items-center justify-center bg-background px-5">

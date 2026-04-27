@@ -460,6 +460,7 @@ export function StudyLogForm({
 
     const liveRemainingSeconds =
       isRunning && endAtRef.current
+        // eslint-disable-next-line react-hooks/purity -- inside async event handler, not render
         ? Math.max(0, Math.round((endAtRef.current - Date.now()) / 1000))
         : remainingSeconds
     const liveFocusSeconds = getActualFocusSeconds({
@@ -504,6 +505,7 @@ export function StudyLogForm({
 
   function startTimer() {
     maybeRequestNotificationPermission()
+    // eslint-disable-next-line react-hooks/purity -- event handler, not render
     const nextEndAt = Date.now() + remainingSeconds * 1000
     endAtRef.current = nextEndAt
     setIsRunning(true)

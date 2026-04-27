@@ -64,6 +64,8 @@ export function useNotifications() {
     [showBrowserNotification, playSound, updateBadge]
   )
 
+  const connectRef = useRef<() => void>(() => {})
+
   const connect = useCallback(() => {
     if (esRef.current) {
       esRef.current.close()
@@ -95,10 +97,14 @@ export function useNotifications() {
       retryDelayRef.current = Math.min(delay * 2, 30000)
 
       retryTimeoutRef.current = setTimeout(() => {
-        connect()
+        connectRef.current()
       }, delay)
     }
   }, [handleNotification])
+
+  useEffect(() => {
+    connectRef.current = connect
+  }, [connect])
 
   useEffect(() => {
     connect()

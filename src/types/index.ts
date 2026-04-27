@@ -2,7 +2,7 @@ import type {
   Prisma,
   Subject as PrismaSubject,
   User as PrismaUser,
-} from "../../node_modules/.prisma/client"
+} from "@prisma/client"
 
 export type Subject = Pick<PrismaSubject, "id" | "name" | "target_score" | "exam_weight">
 
