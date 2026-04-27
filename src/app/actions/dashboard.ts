@@ -92,15 +92,10 @@ export async function getDashboardData(): Promise<DashboardData> {
     vocabularyReviewedThisWeek,
     practiceLogExists,
     questionAreasRaw,
-    studyAreaAllRaw,
-    practiceAreaAllRaw,
-    reviewAreaAllRaw,
-    wrongAreaAllRaw,
-    practice14dRaw,
-    reviewDueRaw,
-    wrongOpenRaw,
-    studyAllRaw,
-    practiceAllRaw,
+    studyLogsAll,
+    practiceLogsAll,
+    reviewTasksAll,
+    wrongQuestionsAll,
     vocabularyReviewLastByListRaw,
   ] = await Promise.all([
     prisma.subject.findMany({ where: { user_id: user.id }, orderBy: { created_at: "asc" } }),
@@ -160,26 +155,43 @@ export async function getDashboardData(): Promise<DashboardData> {
     prisma.vocabularyReviewLog.count({ where: { user_id: user.id, created_at: { gte: startOf7DaysAgo, lte: endOfToday } } }),
     prisma.practiceLog.findFirst({ where: { user_id: user.id }, select: { id: true } }),
     prisma.question.findMany({ where: { user_id: user.id }, select: { subject_id: true, topic: true, unit_id: true, unit: { select: { name: true } } } }),
-    prisma.studyLog.findMany({ where: { user_id: user.id }, select: { subject_id: true, topic: true, unit_id: true, unit: { select: { name: true } } } }),
-    prisma.practiceLog.findMany({ where: { user_id: user.id }, select: { subject_id: true, topic: true, unit_id: true, unit: { select: { name: true } } } }),
-    prisma.reviewTask.findMany({ where: { user_id: user.id, subject_id: { not: null } }, select: { subject_id: true, topic: true, unit_id: true, unit: { select: { name: true } } } }),
-    prisma.wrongQuestion.findMany({ where: { user_id: user.id }, select: { subject_id: true, topic: true, unit_id: true, unit: { select: { name: true } } } }),
+    // Merged: was studyAreaAllRaw + studyAllRaw — single fetch, derive subsets in memory
+    prisma.studyLog.findMany({
+      where: { user_id: user.id },
+      select: { subject_id: true, topic: true, unit_id: true, unit: { select: { name: true } }, study_date: true },
+    }),
+    // Merged: was practiceAreaAllRaw + practiceAllRaw + practice14dRaw
     prisma.practiceLog.findMany({
-      where: { user_id: user.id, practice_date: { gte: startOf14DaysAgo, lte: endOfToday } },
-      select: { subject_id: true, topic: true, unit_id: true, unit: { select: { name: true } }, total_questions: true, correct_questions: true },
+      where: { user_id: user.id },
+      select: { subject_id: true, topic: true, unit_id: true, unit: { select: { name: true } }, practice_date: true, total_questions: true, correct_questions: true },
     }),
+    // Merged: was reviewAreaAllRaw + reviewDueRaw
     prisma.reviewTask.findMany({
-      where: { user_id: user.id, completed: false, review_date: { lte: endOfToday }, subject_id: { not: null } },
-      select: { subject_id: true, topic: true, unit_id: true, unit: { select: { name: true } } },
+      where: { user_id: user.id, subject_id: { not: null } },
+      select: { subject_id: true, topic: true, unit_id: true, unit: { select: { name: true } }, review_date: true, completed: true },
     }),
+    // Merged: was wrongAreaAllRaw + wrongOpenRaw
     prisma.wrongQuestion.findMany({
-      where: { user_id: user.id, status: { not: "MASTERED" } },
-      select: { subject_id: true, topic: true, unit_id: true, unit: { select: { name: true } } },
+      where: { user_id: user.id },
+      select: { subject_id: true, topic: true, unit_id: true, unit: { select: { name: true } }, status: true },
     }),
-    prisma.studyLog.findMany({ where: { user_id: user.id }, select: { subject_id: true, study_date: true } }),
-    prisma.practiceLog.findMany({ where: { user_id: user.id }, select: { subject_id: true, practice_date: true } }),
     prisma.vocabularyReviewLog.findMany({ where: { user_id: user.id }, select: { list_id: true, created_at: true } }),
   ])
+
+  // Derive previously-separate datasets from the merged queries (no extra DB round-trips).
+  const studyAreaAllRaw = studyLogsAll
+  const studyAllRaw = studyLogsAll
+  const practiceAreaAllRaw = practiceLogsAll
+  const practiceAllRaw = practiceLogsAll
+  const practice14dRaw = practiceLogsAll.filter(
+    (item) => item.practice_date >= startOf14DaysAgo && item.practice_date <= endOfToday,
+  )
+  const reviewAreaAllRaw = reviewTasksAll
+  const reviewDueRaw = reviewTasksAll.filter(
+    (item) => !item.completed && item.review_date <= endOfToday,
+  )
+  const wrongAreaAllRaw = wrongQuestionsAll
+  const wrongOpenRaw = wrongQuestionsAll.filter((item) => item.status !== "MASTERED")
 
   const [studyLogs14dBySubject, lastWeekAgg, admissionEvalSafe] = await Promise.all([
     prisma.studyLog.groupBy({

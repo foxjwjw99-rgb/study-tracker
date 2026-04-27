@@ -57,11 +57,25 @@ export async function getAdmissionEvaluationV2(
 ): Promise<AdmissionEvaluationV2Data> {
   const user = await getCurrentUserOrThrow()
 
-  // ── All target programs ──
-  const targetProgramsRaw = await prisma.targetProgram.findMany({
-    where: { user_id: user.id },
-    orderBy: { created_at: "asc" },
-  })
+  // ── Parallel: target programs + subjects (independent) ──
+  const [targetProgramsRaw, subjects] = await Promise.all([
+    prisma.targetProgram.findMany({
+      where: { user_id: user.id },
+      orderBy: { created_at: "asc" },
+    }),
+    prisma.subject.findMany({
+      where: { user_id: user.id },
+      select: {
+        id: true,
+        name: true,
+        exam_weight: true,
+        exam_syllabus_units: {
+          select: { unit_name: true, unit_id: true, weight: true, mastery_score: true },
+          orderBy: { unit_name: "asc" },
+        },
+      },
+    }),
+  ])
 
   const allTargetPrograms: TargetProgramItem[] = targetProgramsRaw.map((p) => ({
     id: p.id,
@@ -82,20 +96,6 @@ export async function getAdmissionEvaluationV2(
   if (!targetProgram && allTargetPrograms.length > 0) {
     targetProgram = allTargetPrograms[0]
   }
-
-  // ── Subjects with syllabus units ──
-  const subjects = await prisma.subject.findMany({
-    where: { user_id: user.id },
-    select: {
-      id: true,
-      name: true,
-      exam_weight: true,
-      exam_syllabus_units: {
-        select: { unit_name: true, unit_id: true, weight: true, mastery_score: true },
-        orderBy: { unit_name: "asc" },
-      },
-    },
-  })
 
   const configuredSubjects = subjects.filter((s) => s.exam_syllabus_units.length > 0)
 
