@@ -1,6 +1,7 @@
 "use client"
 
 import { useEffect, useState, useTransition } from "react"
+import dynamic from "next/dynamic"
 import { useRouter } from "next/navigation"
 import {
   TrendingUp,
@@ -15,18 +16,13 @@ import {
   Zap,
 } from "lucide-react"
 import { toast } from "sonner"
-import {
-  AreaChart,
-  Area,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  ReferenceLine,
-  ResponsiveContainer,
-} from "recharts"
 
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
+
+const SnapshotChart = dynamic(() => import("./snapshot-chart"), {
+  ssr: false,
+  loading: () => <div className="h-40 animate-pulse rounded-md bg-muted" />,
+})
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { TargetProgramManager } from "./target-program-manager"
@@ -352,73 +348,7 @@ export function AdmissionDashboard({ initialData }: Props) {
                 <CardDescription>最近 {snapshotChartData.length} 次快照</CardDescription>
               </CardHeader>
               <CardContent>
-                <ResponsiveContainer width="100%" height={160} debounce={50}>
-                  <AreaChart data={snapshotChartData} margin={{ top: 4, right: 4, left: -20, bottom: 0 }}>
-                    <defs>
-                      <linearGradient id="medianGrad" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="5%" stopColor="hsl(var(--primary))" stopOpacity={0.15} />
-                        <stop offset="95%" stopColor="hsl(var(--primary))" stopOpacity={0} />
-                      </linearGradient>
-                    </defs>
-                    <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
-                    <XAxis
-                      dataKey="date"
-                      tick={{ fontSize: 11 }}
-                      tickLine={false}
-                      axisLine={false}
-                    />
-                    <YAxis
-                      domain={[
-                        (min: number) => Math.max(0, Math.floor(min - 5)),
-                        (max: number) => Math.min(100, Math.ceil(max + 5)),
-                      ]}
-                      tick={{ fontSize: 11 }}
-                      tickLine={false}
-                      axisLine={false}
-                    />
-                    <Tooltip
-                      contentStyle={{ fontSize: 12, borderRadius: 8 }}
-                      formatter={(value, name) => {
-                        const labels: Record<string, string> = { median: "中位", conservative: "保守", optimistic: "樂觀" }
-                        return [value, labels[String(name)] ?? name]
-                      }}
-                    />
-                    <Area
-                      type="monotone"
-                      dataKey="conservative"
-                      stroke="hsl(var(--muted-foreground))"
-                      strokeWidth={1}
-                      strokeDasharray="4 2"
-                      fill="transparent"
-                      dot={false}
-                    />
-                    <Area
-                      type="monotone"
-                      dataKey="median"
-                      stroke="hsl(var(--primary))"
-                      strokeWidth={2}
-                      fill="url(#medianGrad)"
-                      dot={{ r: 3, fill: "hsl(var(--primary))" }}
-                    />
-                    <Area
-                      type="monotone"
-                      dataKey="optimistic"
-                      stroke="hsl(var(--muted-foreground))"
-                      strokeWidth={1}
-                      strokeDasharray="4 2"
-                      fill="transparent"
-                      dot={false}
-                    />
-                    {data.targetProgram.lastYearLine > 0 && (
-                      <ReferenceLine
-                        y={data.targetProgram.lastYearLine}
-                        stroke="hsl(var(--destructive))"
-                        strokeDasharray="3 3"
-                        label={{ value: "上榜線", position: "right", fontSize: 10 }}
-                      />
-                    )}
-                  </AreaChart>
-                </ResponsiveContainer>
+                <SnapshotChart data={snapshotChartData} lastYearLine={data.targetProgram.lastYearLine} />
               </CardContent>
             </Card>
           )}
