@@ -2,6 +2,7 @@ import Link from "next/link"
 import {
   ArrowRight,
   BookOpen,
+  CalendarDays,
   Clock3,
   Target,
   TrendingDown,
@@ -123,7 +124,7 @@ export default async function DashboardPage() {
 
   return (
     <div className="mx-auto flex max-w-7xl flex-col gap-6">
-      <section className="stagger-children grid gap-4 md:grid-cols-3">
+      <section className="stagger-children grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <TodayStudyCard
           todaysStudyMinutes={data.todaysStudyMinutes}
           goalMinutes={data.dailyStudyGoalMinutes}
@@ -133,6 +134,7 @@ export default async function DashboardPage() {
           lastWeekMinutes={data.lastWeekMinutes}
           trendData={data.trendData}
         />
+        <ExamCountdownCard daysUntilExam={data.daysUntilExam} />
         <AdmissionCard summary={data.admissionSummary} />
       </section>
 
@@ -292,6 +294,64 @@ function WeeklyTotalCard({
           </div>
           <p className="text-xs text-muted-foreground">{deltaLabel}</p>
         </div>
+      </CardContent>
+    </Card>
+  )
+}
+
+function ExamCountdownCard({ daysUntilExam }: { daysUntilExam: number | null }) {
+  if (daysUntilExam === null) {
+    return (
+      <Card>
+        <CardContent className="flex h-full flex-col justify-between gap-4 px-5 py-5">
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <p className="text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">
+                考試倒數
+              </p>
+              <p className="mt-3 text-base font-medium text-foreground">尚未設定</p>
+              <p className="mt-1 text-sm text-muted-foreground">設定考試日後開始倒數。</p>
+            </div>
+            <div className="rounded-xl bg-primary/12 p-2.5 text-primary">
+              <CalendarDays className="h-4 w-4" />
+            </div>
+          </div>
+          <Link
+            href="/settings"
+            className="inline-flex h-9 w-full items-center justify-center gap-1.5 rounded-xl border border-border/90 bg-background/80 px-4 text-sm font-medium transition-all duration-200 hover:border-primary/30 hover:bg-muted hover:text-foreground"
+          >
+            去設定考試日期
+            <ArrowRight className="h-4 w-4" />
+          </Link>
+        </CardContent>
+      </Card>
+    )
+  }
+
+  const isPassed = daysUntilExam < 0
+  const isClose = daysUntilExam <= 14
+  const helper = isPassed ? "考試已結束" : isClose ? "進入衝刺期" : "穩定推進中"
+
+  return (
+    <Card>
+      <CardContent className="space-y-4 px-5 py-5">
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <p className="text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">
+              考試倒數
+            </p>
+            <p className="mt-3 text-4xl font-semibold tracking-tight text-foreground tabular-nums">
+              {isPassed ? "已過" : <><AnimatedNumber value={daysUntilExam} /> <span className="text-2xl">天</span></>}
+            </p>
+          </div>
+          <div className={cn(
+            "rounded-xl p-2.5",
+            isPassed ? "bg-muted text-muted-foreground" : isClose ? "bg-amber-500/12 text-amber-600" : "bg-primary/12 text-primary"
+          )}>
+            <CalendarDays className="h-4 w-4" />
+          </div>
+        </div>
+        <p className="text-xs text-muted-foreground">{helper}</p>
       </CardContent>
     </Card>
   )
